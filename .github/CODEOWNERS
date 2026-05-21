@@ -1,0 +1,6 @@
+# Workflow changes require explicit owner approval — defense against
+# malicious PR or compromised contributor altering CI to exfiltrate secrets.
+.github/workflows/  @inkgun9794
+
+# Worker code touches AI/TTS keys and Firestore writes
+worker/  @inkgun9794

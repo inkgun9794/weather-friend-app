@@ -1,0 +1,87 @@
+name: Generate Hourly Briefing
+
+on:
+  schedule:
+    # 매시간 :50 (UTC). cron이 +15분의 시각을 target으로 자동 계산하므로 timezone 무관.
+    - cron: '50 * * * *'
+  workflow_dispatch:
+    inputs:
+      target_hour:
+        description: 'Target hour 0-23 (KST). 비워두면 자동 계산.'
+        required: false
+        type: string
+      cities:
+        description: 'Cities (comma-separated). 기본: seoul'
+        required: false
+        type: string
+        default: 'seoul'
+
+permissions:
+  id-token: write   # OIDC for GCP WIF
+  contents: write   # docs/ commit & push for Pages
+
+concurrency:
+  # 동일 시간대 중복 실행 방지 (workflow_dispatch와 cron이 겹칠 때)
+  group: generate-briefing
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # TODO: 모든 action을 commit SHA로 핀(pin) — Dependabot이 자동 PR 생성하면 SHA로 전환
+      # 현재는 빠른 셋업을 위해 메이저 버전 태그 사용
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: 'worker/uv.lock'
+
+      - name: Setup Python
+        run: uv python install 3.12
+        working-directory: worker
+
+      - name: Install dependencies
+        run: uv sync --frozen
+        working-directory: worker
+
+      - name: Authenticate to GCP (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Generate briefing
+        working-directory: worker
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TYPECAST_API_KEY: ${{ secrets.TYPECAST_API_KEY }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          if [ -n "${{ inputs.target_hour }}" ]; then
+            uv run python main.py \
+              --cities "${{ inputs.cities || 'seoul' }}" \
+              --target-hour "${{ inputs.target_hour }}" \
+              --docs-root ../docs
+          else
+            uv run python main.py \
+              --cities "${{ inputs.cities || 'seoul' }}" \
+              --docs-root ../docs
+          fi
+
+      - name: Commit & push audio files (for GitHub Pages)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/
+          if git diff --staged --quiet; then
+            echo "No audio file changes (likely a HOURLY slot — no audio generated)."
+          else
+            git commit -m "chore(audio): briefing $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          fi

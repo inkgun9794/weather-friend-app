@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # GitHub Actions 자동 업데이트 + SHA 핀
+  # 보안 권장사항: 메이저 버전 태그 대신 commit SHA로 핀 운영
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'ci'
+
+  # Python 의존성 (worker)
+  - package-ecosystem: 'uv'
+    directory: '/worker'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'deps'
