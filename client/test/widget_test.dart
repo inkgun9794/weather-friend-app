@@ -18,6 +18,9 @@ void main() {
       ProviderScope(
         overrides: [
           onboardingCompleteProvider.overrideWith(_FakeOnboardingComplete.new),
+          // pumpAndSettle이 hang하지 않게 stream을 한 번만 emit.
+          kstDateProvider.overrideWith((ref) => Stream.value('2026-05-23')),
+          kstHourProvider.overrideWith((ref) => Stream.value(12)),
           todayBriefingsProvider.overrideWith(
             (ref) => Future.value(<int, Briefing>{}),
           ),
@@ -27,6 +30,8 @@ void main() {
           tomorrowHourlyWeatherProvider.overrideWith(
             (ref) => Future.value(<int, HourlyWeather>{}),
           ),
+          todayDailySummaryProvider.overrideWith((ref) => Future.value(null)),
+          tomorrowDailySummaryProvider.overrideWith((ref) => Future.value(null)),
         ],
         child: const WeatherFriendApp(),
       ),

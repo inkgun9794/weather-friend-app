@@ -21,11 +21,38 @@ class HourlyWeather {
   final int precipitationProb;
 }
 
+class DailySummary {
+  const DailySummary({
+    required this.date,
+    required this.maxC,
+    required this.minC,
+    required this.condition,
+    required this.precipitationProbMax,
+  });
+  final String date;
+  final double maxC;
+  final double minC;
+  final String condition;
+  final int precipitationProbMax;
+
+  /// "흐림 · 24° / 18°" 같은 한 줄 요약.
+  String shortLine() {
+    return '$condition · ${maxC.round()}° / ${minC.round()}°';
+  }
+}
+
 class TwoDayWeather {
-  const TwoDayWeather({required this.today, required this.tomorrow});
+  const TwoDayWeather({
+    required this.today,
+    required this.tomorrow,
+    required this.todaySummary,
+    required this.tomorrowSummary,
+  });
 
   final Map<int, HourlyWeather> today;
   final Map<int, HourlyWeather> tomorrow;
+  final DailySummary? todaySummary;
+  final DailySummary? tomorrowSummary;
 }
 
 // WMO weather code → 한국어. worker/adapters/weather_open_meteo.py와 정합.
@@ -78,6 +105,7 @@ class OpenMeteoClient {
       'latitude': lat.toString(),
       'longitude': lng.toString(),
       'hourly': 'temperature_2m,precipitation_probability,weather_code',
+      'daily': 'temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max',
       'timezone': 'Asia/Seoul',
       'forecast_days': '2',
     });
@@ -101,7 +129,36 @@ class OpenMeteoClient {
     for (var h = 0; h < 24 && (24 + h) < temps.length; h++) {
       tomorrow[h] = _snapshot(h, temps[24 + h], probs[24 + h], codes[24 + h]);
     }
-    return TwoDayWeather(today: today, tomorrow: tomorrow);
+
+    final daily = data['daily'] as Map<String, dynamic>?;
+    DailySummary? todaySummary;
+    DailySummary? tomorrowSummary;
+    if (daily != null) {
+      final dates = (daily['time'] as List?) ?? const [];
+      final maxs = (daily['temperature_2m_max'] as List?) ?? const [];
+      final mins = (daily['temperature_2m_min'] as List?) ?? const [];
+      final dCodes = (daily['weather_code'] as List?) ?? const [];
+      final dProbs = (daily['precipitation_probability_max'] as List?) ?? const [];
+      DailySummary? dayAt(int i) {
+        if (i >= dates.length) return null;
+        return DailySummary(
+          date: dates[i].toString(),
+          maxC: (maxs[i] as num).toDouble(),
+          minC: (mins[i] as num).toDouble(),
+          condition: _weatherCodeKo[(dCodes[i] as num).toInt()] ?? '알 수 없음',
+          precipitationProbMax: ((dProbs[i] as num?) ?? 0).toInt(),
+        );
+      }
+      todaySummary = dayAt(0);
+      tomorrowSummary = dayAt(1);
+    }
+
+    return TwoDayWeather(
+      today: today,
+      tomorrow: tomorrow,
+      todaySummary: todaySummary,
+      tomorrowSummary: tomorrowSummary,
+    );
   }
 
   HourlyWeather _snapshot(int hour, Object? temp, Object? prob, Object? code) {
@@ -131,7 +188,6 @@ final openMeteoClientProvider = Provider<OpenMeteoClient>((ref) {
   return OpenMeteoClient(ref.watch(httpClientProvider));
 });
 
-/// 단일 Open-Meteo 호출의 raw 결과 — 두 day provider가 같이 watch해서 cache 공유.
 final twoDayWeatherProvider = FutureProvider<TwoDayWeather>((ref) async {
   final client = ref.watch(openMeteoClientProvider);
   return client.fetchTwoDays();
@@ -143,4 +199,12 @@ final todayHourlyWeatherProvider = FutureProvider<Map<int, HourlyWeather>>((ref)
 
 final tomorrowHourlyWeatherProvider = FutureProvider<Map<int, HourlyWeather>>((ref) async {
   return (await ref.watch(twoDayWeatherProvider.future)).tomorrow;
+});
+
+final todayDailySummaryProvider = FutureProvider<DailySummary?>((ref) async {
+  return (await ref.watch(twoDayWeatherProvider.future)).todaySummary;
+});
+
+final tomorrowDailySummaryProvider = FutureProvider<DailySummary?>((ref) async {
+  return (await ref.watch(twoDayWeatherProvider.future)).tomorrowSummary;
 });

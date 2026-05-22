@@ -19,7 +19,11 @@ class BriefingScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncBriefings = ref.watch(todayBriefingsProvider);
-    final currentHour = currentHourKst();
+    final hourAsync = ref.watch(kstHourProvider);
+    final currentHour = switch (hourAsync) {
+      AsyncData(:final value) => value,
+      _ => currentHourKst(),
+    };
     final sky = skyFor(currentHour);
 
     return Scaffold(
@@ -89,6 +93,8 @@ class BriefingScreen extends ConsumerWidget {
                       builder: (context, ref, _) {
                         final todayAsync = ref.watch(todayHourlyWeatherProvider);
                         final tomorrowAsync = ref.watch(tomorrowHourlyWeatherProvider);
+                        final todaySummaryAsync = ref.watch(todayDailySummaryProvider);
+                        final tomorrowSummaryAsync = ref.watch(tomorrowDailySummaryProvider);
                         final today = switch (todayAsync) {
                           AsyncData(:final value) => value,
                           _ => const <int, HourlyWeather>{},
@@ -97,10 +103,19 @@ class BriefingScreen extends ConsumerWidget {
                           AsyncData(:final value) => value,
                           _ => const <int, HourlyWeather>{},
                         };
+                        final todaySummary = switch (todaySummaryAsync) {
+                          AsyncData(:final value) => value,
+                          _ => null,
+                        };
+                        final tomorrowSummary = switch (tomorrowSummaryAsync) {
+                          AsyncData(:final value) => value,
+                          _ => null,
+                        };
                         return Column(
                           children: [
                             _TimelineSection(
                               label: '오늘 날씨',
+                              summary: todaySummary?.shortLine(),
                               briefings: briefings,
                               hourlyWeather: today,
                               currentHour: currentHour,
@@ -108,6 +123,7 @@ class BriefingScreen extends ConsumerWidget {
                             ),
                             _TimelineSection(
                               label: '내일 날씨',
+                              summary: tomorrowSummary?.shortLine(),
                               briefings: const <int, Briefing>{},
                               hourlyWeather: tomorrow,
                               currentHour: -1,
@@ -532,6 +548,7 @@ class _ConversationLink extends StatelessWidget {
 class _TimelineSection extends StatelessWidget {
   const _TimelineSection({
     required this.label,
+    required this.summary,
     required this.briefings,
     required this.hourlyWeather,
     required this.currentHour,
@@ -539,6 +556,7 @@ class _TimelineSection extends StatelessWidget {
   });
 
   final String label;
+  final String? summary; // "흐림 · 24° / 18°" 같은 한 줄 요약
   final Map<int, Briefing> briefings;
   final Map<int, HourlyWeather> hourlyWeather;
   final int currentHour; // 'now' 강조용 (오늘 섹션만 적용). 내일에선 -1로 비활성.
@@ -551,13 +569,34 @@ class _TimelineSection extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.1,
-            ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.1,
+                ),
+              ),
+              if (summary != null) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    summary!,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.inkMute,
+                      letterSpacing: -0.1,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
         SizedBox(
