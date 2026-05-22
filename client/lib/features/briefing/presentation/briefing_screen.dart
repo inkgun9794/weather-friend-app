@@ -127,14 +127,20 @@ Briefing? _nearestPast(Map<int, Briefing> briefings, int hour) {
 }
 
 /// 메인 Hero에 띄울 brief 목록 (시간순).
-/// - 5시 카드: 5시 도래 후 항상 (음성 + 아침 안부)
-/// - 21시 카드: 21시 도래 후 추가 (음성 + 잘자 인사)
+/// 메인 Hero에 노출되는 알람 카드 하나.
+/// - 5시~20시: 5시 카드 (음성 + 아침 안부)
+/// - 21시~익일 4시: 21시 카드 (음성 + 잘자) — 5시 카드 자리를 교체
 /// 9~20시 hourly는 메인이 아니라 대화 화면에서 누적.
+/// kst.todayKstIso()가 0~4시엔 어제 사이클을 반환하므로 어제 21시 카드가 자연스럽게 보임.
 List<Briefing> _mainHeroBriefings(Map<int, Briefing> briefings, int hour) {
-  return [
-    if (hour >= 5 && briefings[5] != null) briefings[5]!,
-    if (hour >= 21 && briefings[21] != null) briefings[21]!,
-  ];
+  final isEveningWindow = hour >= 21 || hour < 5;
+  if (isEveningWindow && briefings[21] != null) {
+    return [briefings[21]!];
+  }
+  if (hour >= 5 && briefings[5] != null) {
+    return [briefings[5]!];
+  }
+  return [];
 }
 
 String _todayLabel() {
