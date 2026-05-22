@@ -68,12 +68,22 @@ async def _amain(
         for target_hour in target_hours:
             logging.info("=" * 60)
             logging.info("Starting: %s @ %02d시", city, target_hour)
-            result = await generate_for_city_hour(
-                city=city,
-                target_hour=target_hour,
-                docs_root=docs_root,
-                project_id=project_id,
-            )
+            try:
+                result = await generate_for_city_hour(
+                    city=city,
+                    target_hour=target_hour,
+                    docs_root=docs_root,
+                    project_id=project_id,
+                )
+            except Exception as e:
+                # 한 시간 슬롯 실패가 fill-today 전체를 중단시키지 않게 격리.
+                # 다음 cron 또는 재실행이 따라잡음 (idempotent).
+                logging.error(
+                    "✗ %s @ %02d시 — fatal: %r (continuing to next hour)",
+                    city, target_hour, e,
+                )
+                total_fail += 4  # 4 캐릭터 전부 실패로 간주
+                continue
             total_ok += result["ok"]
             total_fail += result["fail"]
             total_skip += result.get("skip", 0)

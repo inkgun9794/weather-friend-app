@@ -5,9 +5,18 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+
 import httpx
 
 from domain.briefing import DayForecast, WeatherSnapshot
+
+log = logging.getLogger(__name__)
+
+_TIMEOUT_SEC = 60.0
+_MAX_RETRIES = 3
+_RETRY_BASE_DELAY_SEC = 2.0  # 2 → 4 → 8
 
 # MVP: 서울만. 도시 추가 시 좌표만 등록하면 됨.
 CITY_COORDS: dict[str, tuple[float, float]] = {
@@ -48,34 +57,53 @@ def _condition_text(code: int) -> str:
 
 
 async def fetch_two_day_forecast(city: str) -> tuple[DayForecast, DayForecast]:
-    """오늘 + 내일 forecast를 반환. (today, tomorrow)"""
+    """오늘 + 내일 forecast를 반환. (today, tomorrow). Timeout/5xx 재시도 포함."""
     if city not in CITY_COORDS:
         raise ValueError(f"Unsupported city: {city}")
 
     lat, lng = CITY_COORDS[city]
+    last_exc: Exception | None = None
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(
-            "https://api.open-meteo.com/v1/forecast",
-            params={
-                "latitude": lat,
-                "longitude": lng,
-                "hourly": (
-                    "temperature_2m,apparent_temperature,precipitation_probability,"
-                    "wind_speed_10m,relative_humidity_2m,weather_code"
-                ),
-                "daily": (
-                    "temperature_2m_max,temperature_2m_min,weather_code,"
-                    "precipitation_probability_max"
-                ),
-                "timezone": "Asia/Seoul",
-                "forecast_days": 2,
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    for attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=_TIMEOUT_SEC) as client:
+                resp = await client.get(
+                    "https://api.open-meteo.com/v1/forecast",
+                    params={
+                        "latitude": lat,
+                        "longitude": lng,
+                        "hourly": (
+                            "temperature_2m,apparent_temperature,precipitation_probability,"
+                            "wind_speed_10m,relative_humidity_2m,weather_code"
+                        ),
+                        "daily": (
+                            "temperature_2m_max,temperature_2m_min,weather_code,"
+                            "precipitation_probability_max"
+                        ),
+                        "timezone": "Asia/Seoul",
+                        "forecast_days": 2,
+                    },
+                )
+                resp.raise_for_status()
+                return _parse(resp.json(), city)
+        except (httpx.TimeoutException, httpx.HTTPStatusError, httpx.NetworkError) as e:
+            transient = isinstance(e, (httpx.TimeoutException, httpx.NetworkError)) or (
+                isinstance(e, httpx.HTTPStatusError)
+                and e.response.status_code in (500, 502, 503, 504)
+            )
+            if transient and attempt < _MAX_RETRIES:
+                wait = _RETRY_BASE_DELAY_SEC * (2 ** (attempt - 1))
+                log.warning(
+                    "Open-Meteo %s (attempt %d/%d) — retry in %.0fs",
+                    type(e).__name__, attempt, _MAX_RETRIES, wait,
+                )
+                await asyncio.sleep(wait)
+                last_exc = e
+                continue
+            raise
 
-    return _parse(data, city)
+    assert last_exc is not None
+    raise last_exc
 
 
 def _parse(data: dict, city: str) -> tuple[DayForecast, DayForecast]:
