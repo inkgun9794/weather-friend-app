@@ -6,17 +6,26 @@
 - Body: { text, voice_id, model, output: { audio_format } }
 - Response: binary audio bytes (WAV 또는 MP3)
 - voice_id 형식: "tc_" + 24자 hex (예: "tc_672c5f5ce59fac2a48faeaee")
+
+429/5xx 자동 재시도 포함.
 """
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 from dataclasses import dataclass
 
 import httpx
 
+log = logging.getLogger(__name__)
+
 _BASE_URL = "https://api.typecast.ai"
 _DEFAULT_MODEL = "ssfm-v30"
+
+_MAX_RETRIES = 4
+_RETRY_BASE_DELAY_SEC = 3.0  # 3 → 6 → 12 → 24
 
 
 @dataclass(frozen=True)
@@ -57,26 +66,46 @@ class TypecastClient:
     ) -> SynthesisResult:
         """텍스트 → 음성. 실패 시 httpx.HTTPStatusError 전파."""
         api_key = self._resolve_api_key()
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                f"{_BASE_URL}/v1/text-to-speech",
-                headers={
-                    "X-API-KEY": api_key,
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "text": text,
-                    "voice_id": voice_id,
-                    "model": model,
-                    "output": {
-                        "audio_format": output_format,
-                    },
-                },
-            )
-            resp.raise_for_status()
 
-        return SynthesisResult(
-            audio_bytes=resp.content,
-            content_type=resp.headers.get("content-type", f"audio/{output_format}"),
-            extension=output_format,
-        )
+        for attempt in range(1, _MAX_RETRIES + 1):
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.post(
+                        f"{_BASE_URL}/v1/text-to-speech",
+                        headers={
+                            "X-API-KEY": api_key,
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "text": text,
+                            "voice_id": voice_id,
+                            "model": model,
+                            "output": {
+                                "audio_format": output_format,
+                            },
+                        },
+                    )
+                    resp.raise_for_status()
+
+                return SynthesisResult(
+                    audio_bytes=resp.content,
+                    content_type=resp.headers.get(
+                        "content-type", f"audio/{output_format}"
+                    ),
+                    extension=output_format,
+                )
+            except httpx.HTTPStatusError as e:
+                # 429 (rate limit), 5xx (서버 일시) 재시도
+                code = e.response.status_code
+                if code in (429, 500, 502, 503, 504) and attempt < _MAX_RETRIES:
+                    wait = _RETRY_BASE_DELAY_SEC * (2 ** (attempt - 1))
+                    log.warning(
+                        "Typecast %d (attempt %d/%d) — retry in %.0fs",
+                        code, attempt, _MAX_RETRIES, wait,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                raise
+
+        # 도달 불가
+        raise RuntimeError("Typecast retry loop exhausted")

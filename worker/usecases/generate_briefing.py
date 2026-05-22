@@ -29,6 +29,8 @@ log = logging.getLogger(__name__)
 
 # Gemini 무료 한도(15 RPM) 보호용 동시 호출 제한
 GEMINI_CONCURRENCY = 8
+# Typecast Free 플랜 RPM이 낮아서 더 보수적으로
+TYPECAST_CONCURRENCY = 2
 
 
 async def _generate_one(
@@ -41,6 +43,7 @@ async def _generate_one(
     gemini: GeminiScriptGenerator,
     gemini_sem: asyncio.Semaphore,
     typecast: TypecastClient,
+    typecast_sem: asyncio.Semaphore,
     publisher: PagesPublisher,
     store: FirestoreMetadataStore,
 ) -> None:
@@ -63,7 +66,8 @@ async def _generate_one(
     audio_url: str | None = None
     if is_audio_slot(hour) and character.voice_actor_id:
         tts_text = voice_script or message_script
-        synth = await typecast.synthesize(tts_text, character.voice_actor_id)
+        async with typecast_sem:
+            synth = await typecast.synthesize(tts_text, character.voice_actor_id)
         audio_url = publisher.save_audio(
             city=city,
             date=today.date,
@@ -124,6 +128,7 @@ async def generate_for_city_hour(
     gemini = GeminiScriptGenerator()
     gemini_sem = asyncio.Semaphore(GEMINI_CONCURRENCY)
     typecast = TypecastClient()
+    typecast_sem = asyncio.Semaphore(TYPECAST_CONCURRENCY)
     publisher = PagesPublisher(docs_root)
     store = FirestoreMetadataStore(project_id)
 
@@ -138,6 +143,7 @@ async def generate_for_city_hour(
                 gemini=gemini,
                 gemini_sem=gemini_sem,
                 typecast=typecast,
+                typecast_sem=typecast_sem,
                 publisher=publisher,
                 store=store,
             )
