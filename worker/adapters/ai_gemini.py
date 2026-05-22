@@ -56,9 +56,17 @@ def _parse_dual_output(raw: str) -> tuple[str, str | None]:
         return raw.strip(), None
     return message, (voice or None)
 
-# gemini-2.5-flash는 무료 RPD 20밖에 안 됨. lite로 가야 우리 96/일 워크로드 가능.
-# 짧은 한국어 페르소나 텍스트 생성엔 lite도 품질 충분.
-_MODEL = "gemini-2.5-flash-lite"
+# 알람 슬롯(5/21시)은 음성+텍스트 두 버전을 만들고, 사용자가 푸시로 받는 첫인상이라
+# quality 우선 — 한 세대 위 lite를 씀. 나머지 hourly는 짧은 한 줄이라 비용 우선.
+# 둘 다 paid Tier 1. 호출당 약 $0.0007 (alarm) vs $0.0002 (hourly).
+_MODEL_ALARM = "gemini-3.1-flash-lite"
+_MODEL_HOURLY = "gemini-2.5-flash-lite"
+
+
+def _model_for(briefing_type: BriefingType) -> str:
+    if briefing_type in (BriefingType.MORNING, BriefingType.EVENING):
+        return _MODEL_ALARM
+    return _MODEL_HOURLY
 
 
 def _weather_brief(
@@ -139,7 +147,7 @@ class GeminiScriptGenerator:
         for attempt in range(1, _MAX_RETRIES + 1):
             try:
                 response = await self._client.aio.models.generate_content(
-                    model=_MODEL,
+                    model=_model_for(briefing_type),
                     contents=contents,
                     config=config,
                 )
