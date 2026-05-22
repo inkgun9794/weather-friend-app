@@ -87,7 +87,7 @@ https://inkgun9794.github.io/weather-friend-app/briefings/{city}/{date}/{hour:02
 | `jiyoung` | 다정한 지영 | 따뜻하고 챙기는 누나 | `tc_68537c9420b646f2176890ba` (Seojin) |
 | `sohee` | 시크한 소희 | 시크하지만 챙기는 누나 | `tc_67c90ad544cf859417f2fc3a` (Yejin) |
 | `jihoon` | 듬직한 지훈 | 차분 + 수치 정확한 오빠 | `tc_61f0859907085fc68561c9a1` (Jihoon) |
-| `siwon` | 발랄한 시원 | 인터넷어투 텐션 동생 | `tc_62849c0bb958a8ed96096c1c` (Siwon) |
+| `siwon` | 활발한 시원 | 활발하고 외향적인 동생 (인터넷어투 X) | `tc_61f0859907085fc68561c9a1` (Jihoon) |
 
 상세 페르소나는 `worker/domain/character.py`.
 
