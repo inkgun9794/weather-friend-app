@@ -82,6 +82,9 @@ jobs:
           fi
 
       - name: Commit & push audio files (for GitHub Pages)
+        # 일부 hour가 fail해도 (예: Gemini 503) 성공한 hour의 mp3는 publish해야 함.
+        # 기본 if: success()라면 generate step exit 1일 때 skip되어 mp3가 게시 안 됨.
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
