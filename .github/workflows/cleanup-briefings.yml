@@ -1,0 +1,56 @@
+name: Cleanup briefings (Firestore)
+
+# Manually-triggered reset for development. Deletes ALL documents in the
+# briefings/ collection. Requires typing "yes" to run, so it can't be
+# fired by accident.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "yes" to confirm full deletion of briefings/ collection'
+        required: true
+        type: string
+
+permissions:
+  id-token: write   # OIDC for GCP WIF
+
+concurrency:
+  group: cleanup-briefings
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: ${{ inputs.confirm == 'yes' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: 'worker/uv.lock'
+
+      - name: Setup Python
+        run: uv python install 3.12
+        working-directory: worker
+
+      - name: Install dependencies
+        run: uv sync --frozen
+        working-directory: worker
+
+      - name: Authenticate to GCP (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Run cleanup
+        working-directory: worker
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: uv run python cleanup.py
