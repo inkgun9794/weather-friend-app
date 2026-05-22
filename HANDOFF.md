@@ -84,8 +84,8 @@ https://inkgun9794.github.io/weather-friend-app/briefings/{city}/{date}/{hour:02
 
 | ID | 이름 | 톤 | Typecast voice |
 |---|---|---|---|
-| `jiyoung` | 다정한 지영 | 따뜻하고 챙기는 누나 | `tc_68537c9420b646f2176890ba` (Seojin) |
-| `sohee` | 시크한 소희 | 시크하지만 챙기는 누나 | `tc_67c90ad544cf859417f2fc3a` (Yejin) |
+| `jiyoung` | 다정한 지영 | 따뜻하고 챙기는 누나 | `tc_66ab0e26ec23f325b7ad51df` (Yeseul) |
+| `sohee` | 시크한 소희 | 시크하지만 챙기는 누나 | `tc_6568164fe05ddffee8b0e271` (Siyeon) |
 | `jihoon` | 듬직한 지훈 | 차분 + 수치 정확한 오빠 | `tc_61f0859907085fc68561c9a1` (Jihoon) |
 | `siwon` | 활발한 시원 | 활발하고 외향적인 동생 (인터넷어투 X) | `tc_61f0859907085fc68561c9a1` (Jihoon) |
 

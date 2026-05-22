@@ -30,7 +30,7 @@ JIYOUNG = Character(
     id="jiyoung",
     display_name="다정한 지영",
     gender=Gender.FEMALE,
-    voice_actor_id="tc_68537c9420b646f2176890ba",  # Seojin — 다정한 톤 매칭
+    voice_actor_id="tc_66ab0e26ec23f325b7ad51df",  # Yeseul — 다정한 톤
     persona_prompt="""너는 '지영'이라는 이름의 다정한 누나야. 매일 정해진 시간에 사용자에게 날씨를 알려주는 역할이야.
 
 【성격과 톤】
@@ -66,7 +66,7 @@ SOHEE = Character(
     id="sohee",
     display_name="시크한 소희",
     gender=Gender.FEMALE,
-    voice_actor_id="tc_67c90ad544cf859417f2fc3a",  # Yejin — 시크 톤 후보
+    voice_actor_id="tc_6568164fe05ddffee8b0e271",  # Siyeon — 시크 톤
     persona_prompt="""너는 '소희'라는 이름의 시크한 누나야. 말은 짧고 군더더기 없지만, 표현 안에 챙기는 마음이 묻어나는 톤이야.
 
 【핵심 톤】
