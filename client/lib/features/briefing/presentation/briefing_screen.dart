@@ -57,23 +57,11 @@ class BriefingScreen extends ConsumerWidget {
                       currentHour: currentHour,
                     ),
                   ),
-                  SliverToBoxAdapter(
-                    child: _ConversationLink(sky: sky),
-                  ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 22, 20, 6),
-                    sliver: SliverToBoxAdapter(
-                      child: Text(
-                        _todayLabel(),
-                        style: TextStyle(
-                          color: sky.ink,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
+                  // "이전 메시지 보기" 버튼 — 오늘 사이클에 메시지가 하나라도 있을 때만.
+                  if (briefings.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: _ConversationLink(sky: sky),
                     ),
-                  ),
                   SliverToBoxAdapter(
                     child: Consumer(
                       builder: (context, ref, _) {
@@ -100,6 +88,7 @@ class BriefingScreen extends ConsumerWidget {
                         return Column(
                           children: [
                             _TimelineSection(
+                              dateLabel: _todayLabel(),
                               label: '오늘 날씨',
                               summary: todaySummary?.shortLine(),
                               sky: sky,
@@ -109,6 +98,7 @@ class BriefingScreen extends ConsumerWidget {
                               dimNonCurrent: true,
                             ),
                             _TimelineSection(
+                              dateLabel: _tomorrowLabel(),
                               label: '내일 날씨',
                               summary: tomorrowSummary?.shortLine(),
                               sky: sky,
@@ -175,10 +165,14 @@ List<Briefing> _mainHeroBriefings(Map<int, Briefing> briefings, int hour) {
   return [];
 }
 
-String _todayLabel() {
+String _todayLabel() => _formatDate(nowKst());
+
+String _tomorrowLabel() =>
+    _formatDate(nowKst().add(const Duration(days: 1)));
+
+String _formatDate(DateTime d) {
   const days = ['월', '화', '수', '목', '금', '토', '일'];
-  final n = nowKst();
-  return '${n.month}월 ${n.day}일 ${days[n.weekday - 1]}요일';
+  return '${d.month}월 ${d.day}일 ${days[d.weekday - 1]}요일';
 }
 
 String _hourLabel(int hour) {
@@ -259,7 +253,7 @@ class _GlassCircleButton extends StatelessWidget {
   }
 }
 
-class _BigTemp extends StatelessWidget {
+class _BigTemp extends ConsumerWidget {
   const _BigTemp({
     required this.sky,
     required this.briefings,
@@ -271,11 +265,18 @@ class _BigTemp extends StatelessWidget {
   final int currentHour;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Briefing(메시지 있는 hour) 우선, 없으면 Open-Meteo hourly 데이터로 fallback.
     final b = briefings[currentHour] ?? _nearestPast(briefings, currentHour);
-    final temp = b?.weatherSnapshot.temperatureC.round();
+    final hourlyAsync = ref.watch(todayHourlyWeatherProvider);
+    final hourly = switch (hourlyAsync) {
+      AsyncData(:final value) => value[currentHour],
+      _ => null,
+    };
+    final temp = b?.weatherSnapshot.temperatureC.round()
+        ?? hourly?.temperatureC.round();
     final feels = b?.weatherSnapshot.feelsLikeC.round();
-    final cond = b?.weatherSnapshot.condition ?? '—';
+    final cond = b?.weatherSnapshot.condition ?? hourly?.condition ?? '—';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
@@ -535,6 +536,7 @@ class _ConversationLink extends StatelessWidget {
 
 class _TimelineSection extends StatefulWidget {
   const _TimelineSection({
+    required this.dateLabel,
     required this.label,
     required this.summary,
     required this.sky,
@@ -544,6 +546,7 @@ class _TimelineSection extends StatefulWidget {
     required this.dimNonCurrent,
   });
 
+  final String dateLabel; // 예: '5월 23일 토요일'
   final String label;
   final String? summary;
   final SkyPalette sky;
@@ -593,7 +596,19 @@ class _TimelineSectionState extends State<_TimelineSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 2),
+          child: Text(
+            widget.dateLabel,
+            style: TextStyle(
+              color: widget.sky.inkSoft,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.1,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
