@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/core/utils/kst.dart';
+import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
 import 'package:weather_friend/features/briefing/domain/briefing.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
@@ -524,7 +525,7 @@ class _TimelineChips extends StatelessWidget {
   }
 }
 
-class _HourChip extends StatelessWidget {
+class _HourChip extends ConsumerWidget {
   const _HourChip({
     required this.hour,
     required this.briefing,
@@ -538,16 +539,23 @@ class _HourChip extends StatelessWidget {
   final bool isPast;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final sky = skyFor(hour);
     final hasAudio = briefing?.audioUrl != null;
     final charId = briefing != null
         ? Character.parseId(briefing!.characterId)
         : null;
-    final cond = briefing != null
-        ? _conditionFromString(briefing!.weatherSnapshot.condition)
+    // Briefing 데이터(메시지 있는 hour) 우선, 없으면 Open-Meteo 직접 호출 결과로 fallback
+    final hourly = switch (ref.watch(todayHourlyWeatherProvider)) {
+      AsyncData(:final value) => value[hour],
+      _ => null,
+    };
+    final conditionStr = briefing?.weatherSnapshot.condition ?? hourly?.condition;
+    final cond = conditionStr != null
+        ? _conditionFromString(conditionStr)
         : WeatherCondition.clear;
-    final temp = briefing?.weatherSnapshot.temperatureC.round();
+    final temp = briefing?.weatherSnapshot.temperatureC.round()
+        ?? hourly?.temperatureC.round();
 
     return Opacity(
       opacity: isPast ? 0.7 : 1.0,
