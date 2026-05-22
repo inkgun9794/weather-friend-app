@@ -126,14 +126,22 @@ async def generate_for_city_hour(
     docs_root: Path,
     project_id: str,
     skip_existing: bool = True,
+    forecast: tuple[DayForecast, DayForecast] | None = None,
 ) -> dict[str, int]:
-    """특정 도시 × 특정 시간 × 4 캐릭터 = 4 브리핑 생성. 성공/실패 카운트 반환."""
+    """특정 도시 × 특정 시간 × 4 캐릭터 = 4 브리핑 생성. 성공/실패 카운트 반환.
+
+    fill-today처럼 같은 도시의 여러 hour를 처리할 때는 caller가 forecast를
+    한 번 fetch해서 inject하면 Open-Meteo 호출 수를 1/N로 줄일 수 있음.
+    """
     if not 0 <= target_hour <= 23:
         raise ValueError(f"target_hour must be 0-23, got {target_hour}")
 
-    log.info("Fetching forecast for %s @ %02d시 ...", city, target_hour)
-    today, tomorrow = await fetch_two_day_forecast(city)
-    log.info("✓ forecast: today=%s / tomorrow=%s", today.overall_condition, tomorrow.overall_condition)
+    if forecast is None:
+        log.info("Fetching forecast for %s @ %02d시 ...", city, target_hour)
+        today, tomorrow = await fetch_two_day_forecast(city)
+        log.info("✓ forecast: today=%s / tomorrow=%s", today.overall_condition, tomorrow.overall_condition)
+    else:
+        today, tomorrow = forecast
 
     gemini = GeminiScriptGenerator()
     gemini_sem = asyncio.Semaphore(GEMINI_CONCURRENCY)
