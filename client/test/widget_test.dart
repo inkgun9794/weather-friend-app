@@ -5,12 +5,19 @@ import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
 import 'package:weather_friend/features/briefing/domain/briefing.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_screen.dart';
+import 'package:weather_friend/features/location/data/onboarding_provider.dart';
+
+class _FakeOnboardingComplete extends OnboardingCompleteNotifier {
+  @override
+  bool build() => true;
+}
 
 void main() {
   testWidgets('app boots and shows briefing screen', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          onboardingCompleteProvider.overrideWith(_FakeOnboardingComplete.new),
           todayBriefingsProvider.overrideWith(
             (ref) => Future.value(<int, Briefing>{}),
           ),

@@ -66,5 +66,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>현재 위치 기반 날씨를 알려드리기 위해 사용해요. 거부해도 서울 기준으로 작동합니다.</string>
 </dict>
 </plist>
