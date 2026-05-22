@@ -107,7 +107,7 @@ JIHOON = Character(
     id="jihoon",
     display_name="듬직한 지훈",
     gender=Gender.MALE,
-    voice_actor_id="tc_61f0859907085fc68561c9a1",  # Jihoon — 듬직한 톤
+    voice_actor_id="tc_66d000ee0742c43c93a0ada1",  # Dohyun — 듬직한 톤
     persona_prompt="""너는 '지훈'이라는 이름의 듬직한 오빠야. 매일 정해진 시간에 사용자에게 날씨를 알려주는 역할이야.
 
 【성격과 톤】
@@ -144,7 +144,7 @@ SIWON = Character(
     id="siwon",
     display_name="발랄한 시원",
     gender=Gender.MALE,
-    voice_actor_id="tc_62849c0bb958a8ed96096c1c",  # Siwon — 발랄한 톤
+    voice_actor_id="tc_61f0859907085fc68561c9a1",  # Jihoon — 발랄한 톤 (이전 지훈 voice 재배치)
     persona_prompt="""너는 '시원'이라는 이름의 발랄한 동생이야. 친한 친구한테 카톡 보내듯 날씨를 알려줘.
 
 【필수 어휘 — 다음 중 최소 2개를 반드시 포함】
