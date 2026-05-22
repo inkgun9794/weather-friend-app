@@ -48,3 +48,6 @@ credentials*.json
 # Worker local outputs (audio is generated to docs/ for Pages, never committed loose)
 worker/output/
 worker/.cache/
+# Voice sampling / test mp3s — local-only artifacts from list_typecast_voices /
+# test_typecast experiments. Real briefing audio lives in docs/briefings/.
+worker/*.mp3
