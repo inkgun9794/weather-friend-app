@@ -21,6 +21,13 @@ class HourlyWeather {
   final int precipitationProb;
 }
 
+class TwoDayWeather {
+  const TwoDayWeather({required this.today, required this.tomorrow});
+
+  final Map<int, HourlyWeather> today;
+  final Map<int, HourlyWeather> tomorrow;
+}
+
 // WMO weather code → 한국어. worker/adapters/weather_open_meteo.py와 정합.
 const _weatherCodeKo = <int, String>{
   0: '맑음',
@@ -58,7 +65,9 @@ class OpenMeteoClient {
 
   final http.Client _http;
 
-  Future<Map<int, HourlyWeather>> fetchTodayHourly({String city = 'seoul'}) async {
+  /// 오늘 + 내일 48시간 hourly를 한 번에 받음. Open-Meteo는 forecast_days=2를
+  /// 단일 GET으로 처리해서 API 한 번이면 끝.
+  Future<TwoDayWeather> fetchTwoDays({String city = 'seoul'}) async {
     final coords = _cityCoords[city];
     if (coords == null) {
       throw ArgumentError('Unsupported city: $city');
@@ -70,7 +79,7 @@ class OpenMeteoClient {
       'longitude': lng.toString(),
       'hourly': 'temperature_2m,precipitation_probability,weather_code',
       'timezone': 'Asia/Seoul',
-      'forecast_days': '1',
+      'forecast_days': '2',
     });
 
     final resp = await _http.get(uri).timeout(const Duration(seconds: 30));
@@ -84,16 +93,24 @@ class OpenMeteoClient {
     final probs = (hourly['precipitation_probability'] as List);
     final codes = (hourly['weather_code'] as List);
 
-    final result = <int, HourlyWeather>{};
+    final today = <int, HourlyWeather>{};
+    final tomorrow = <int, HourlyWeather>{};
     for (var h = 0; h < 24 && h < temps.length; h++) {
-      result[h] = HourlyWeather(
-        hour: h,
-        temperatureC: (temps[h] as num).toDouble(),
-        condition: _weatherCodeKo[(codes[h] as num).toInt()] ?? '알 수 없음',
-        precipitationProb: ((probs[h] as num?) ?? 0).toInt(),
-      );
+      today[h] = _snapshot(h, temps[h], probs[h], codes[h]);
     }
-    return result;
+    for (var h = 0; h < 24 && (24 + h) < temps.length; h++) {
+      tomorrow[h] = _snapshot(h, temps[24 + h], probs[24 + h], codes[24 + h]);
+    }
+    return TwoDayWeather(today: today, tomorrow: tomorrow);
+  }
+
+  HourlyWeather _snapshot(int hour, Object? temp, Object? prob, Object? code) {
+    return HourlyWeather(
+      hour: hour,
+      temperatureC: (temp as num).toDouble(),
+      condition: _weatherCodeKo[(code as num).toInt()] ?? '알 수 없음',
+      precipitationProb: ((prob as num?) ?? 0).toInt(),
+    );
   }
 }
 
@@ -114,7 +131,16 @@ final openMeteoClientProvider = Provider<OpenMeteoClient>((ref) {
   return OpenMeteoClient(ref.watch(httpClientProvider));
 });
 
-final todayHourlyWeatherProvider = FutureProvider<Map<int, HourlyWeather>>((ref) async {
+/// 단일 Open-Meteo 호출의 raw 결과 — 두 day provider가 같이 watch해서 cache 공유.
+final twoDayWeatherProvider = FutureProvider<TwoDayWeather>((ref) async {
   final client = ref.watch(openMeteoClientProvider);
-  return client.fetchTodayHourly();
+  return client.fetchTwoDays();
+});
+
+final todayHourlyWeatherProvider = FutureProvider<Map<int, HourlyWeather>>((ref) async {
+  return (await ref.watch(twoDayWeatherProvider.future)).today;
+});
+
+final tomorrowHourlyWeatherProvider = FutureProvider<Map<int, HourlyWeather>>((ref) async {
+  return (await ref.watch(twoDayWeatherProvider.future)).tomorrow;
 });

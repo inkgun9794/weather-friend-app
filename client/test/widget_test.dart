@@ -17,6 +17,9 @@ void main() {
           todayHourlyWeatherProvider.overrideWith(
             (ref) => Future.value(<int, HourlyWeather>{}),
           ),
+          tomorrowHourlyWeatherProvider.overrideWith(
+            (ref) => Future.value(<int, HourlyWeather>{}),
+          ),
         ],
         child: const WeatherFriendApp(),
       ),

@@ -85,9 +85,37 @@ class BriefingScreen extends ConsumerWidget {
                     ),
                   ),
                   SliverToBoxAdapter(
-                    child: _TimelineChips(
-                      briefings: briefings,
-                      currentHour: currentHour,
+                    child: Consumer(
+                      builder: (context, ref, _) {
+                        final todayAsync = ref.watch(todayHourlyWeatherProvider);
+                        final tomorrowAsync = ref.watch(tomorrowHourlyWeatherProvider);
+                        final today = switch (todayAsync) {
+                          AsyncData(:final value) => value,
+                          _ => const <int, HourlyWeather>{},
+                        };
+                        final tomorrow = switch (tomorrowAsync) {
+                          AsyncData(:final value) => value,
+                          _ => const <int, HourlyWeather>{},
+                        };
+                        return Column(
+                          children: [
+                            _TimelineSection(
+                              label: '오늘 날씨',
+                              briefings: briefings,
+                              hourlyWeather: today,
+                              currentHour: currentHour,
+                              dimNonCurrent: true,
+                            ),
+                            _TimelineSection(
+                              label: '내일 날씨',
+                              briefings: const <int, Briefing>{},
+                              hourlyWeather: tomorrow,
+                              currentHour: -1,
+                              dimNonCurrent: false,
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                   const SliverPadding(padding: EdgeInsets.only(bottom: 28)),
@@ -505,57 +533,81 @@ class _ConversationLink extends StatelessWidget {
   }
 }
 
-class _TimelineChips extends StatelessWidget {
-  const _TimelineChips({required this.briefings, required this.currentHour});
+class _TimelineSection extends StatelessWidget {
+  const _TimelineSection({
+    required this.label,
+    required this.briefings,
+    required this.hourlyWeather,
+    required this.currentHour,
+    required this.dimNonCurrent,
+  });
 
+  final String label;
   final Map<int, Briefing> briefings;
-  final int currentHour;
+  final Map<int, HourlyWeather> hourlyWeather;
+  final int currentHour; // 'now' 강조용 (오늘 섹션만 적용). 내일에선 -1로 비활성.
+  final bool dimNonCurrent; // 오늘 섹션에서 currentHour 이전 칩 흐림 처리
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 130,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: 24,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (context, hour) => _HourChip(
-          hour: hour,
-          briefing: briefings[hour],
-          isNow: hour == currentHour,
-          isPast: hour < currentHour,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.1,
+            ),
+          ),
         ),
-      ),
+        SizedBox(
+          height: 130,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: 24,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, hour) => _HourChip(
+              hour: hour,
+              briefing: briefings[hour],
+              hourly: hourlyWeather[hour],
+              isNow: hour == currentHour,
+              isPast: dimNonCurrent && hour < currentHour,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _HourChip extends ConsumerWidget {
+class _HourChip extends StatelessWidget {
   const _HourChip({
     required this.hour,
     required this.briefing,
+    required this.hourly,
     required this.isNow,
     required this.isPast,
   });
 
   final int hour;
   final Briefing? briefing;
+  final HourlyWeather? hourly;
   final bool isNow;
   final bool isPast;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final sky = skyFor(hour);
     final hasAudio = briefing?.audioUrl != null;
     final charId = briefing != null
         ? Character.parseId(briefing!.characterId)
         : null;
-    // Briefing 데이터(메시지 있는 hour) 우선, 없으면 Open-Meteo 직접 호출 결과로 fallback
-    final hourly = switch (ref.watch(todayHourlyWeatherProvider)) {
-      AsyncData(:final value) => value[hour],
-      _ => null,
-    };
+    // Briefing 데이터(메시지 있는 hour) 우선, 없으면 Open-Meteo hourly로 fallback
     final conditionStr = briefing?.weatherSnapshot.condition ?? hourly?.condition;
     final cond = conditionStr != null
         ? _conditionFromString(conditionStr)
