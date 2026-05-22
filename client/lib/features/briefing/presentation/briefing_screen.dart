@@ -405,7 +405,7 @@ class _HeroBriefingCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '${character.displayName.split(' ').first} · 오전 ${briefing.hour}:00 전송',
+                          '${character.displayName.split(' ').first} · ${_hourLabel(briefing.hour)}:00 전송',
                           style: TextStyle(
                             color: AppColors.inkMute,
                             fontSize: 11,
