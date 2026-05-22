@@ -3,44 +3,86 @@ import 'package:flutter/material.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
 import 'package:weather_friend/shared/widgets/char_avatar.dart';
 
-/// 캐릭터 일러스트를 GitHub Pages에서 로드.
+/// 캐릭터 프사 — 원형 썸네일. 탭하면 큰 사진으로 확대된다.
 ///
-/// URL: https://inkgun9794.github.io/weather-friend-app/characters/{id}/{outfit}.png
-///
-/// 일러스트가 아직 없거나 네트워크 실패 시 기존 CharAvatar(SVG)로 fallback —
-/// 한 캐릭터씩 점진적으로 채워가도 화면이 깨지지 않음.
-///
-/// 지금은 outfit='portrait' 단일 템플릿. 추후 옷차림(summer/cold 등) 다양화 시
-/// outfit 인자만 바꿔서 같은 URL 패턴으로 확장 가능.
+/// 이미지 source: https://inkgun9794.github.io/weather-friend-app/characters/{id}/{outfit}.png
+/// 사용자가 docs/characters/ 폴더에 png를 올리면 자동 반영. 없으면 CharAvatar(SVG)로 fallback.
 class CharacterPortrait extends StatelessWidget {
   const CharacterPortrait({
     required this.charId,
     this.outfit = 'portrait',
-    this.size = 200,
+    this.size = 48,
+    this.enableTapToExpand = true,
     super.key,
   });
 
   final CharacterId charId;
   final String outfit;
   final double size;
+  final bool enableTapToExpand;
 
   static const _baseUrl =
       'https://inkgun9794.github.io/weather-friend-app/characters';
 
   String get _url => '$_baseUrl/${charId.name}/$outfit.png';
 
+  String get _heroTag => 'character-portrait-${charId.name}';
+
+  Widget _fallback(double s) =>
+      CharAvatar(charId: charId, size: s, ring: false);
+
+  Widget _image(double s) => CachedNetworkImage(
+    imageUrl: _url,
+    width: s,
+    height: s,
+    fit: BoxFit.cover,
+    placeholder: (_, _) => _fallback(s),
+    errorWidget: (_, _, _) => _fallback(s),
+  );
+
+  void _showExpanded(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.85),
+      barrierDismissible: true,
+      builder: (ctx) {
+        final screen = MediaQuery.of(ctx).size;
+        final big = (screen.shortestSide * 0.8).clamp(240.0, 360.0);
+        return GestureDetector(
+          onTap: () => Navigator.of(ctx).pop(),
+          behavior: HitTestBehavior.opaque,
+          child: Center(
+            child: Hero(
+              tag: _heroTag,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: _image(big),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return CachedNetworkImage(
-      imageUrl: _url,
-      width: size,
-      height: size,
-      fit: BoxFit.contain,
-      placeholder: (ctx, _) => Center(
-        child: CharAvatar(charId: charId, size: size * 0.7, ring: true),
+    final thumb = Hero(
+      tag: _heroTag,
+      child: ClipOval(
+        child: SizedBox(width: size, height: size, child: _image(size)),
       ),
-      errorWidget: (ctx, _, _) => Center(
-        child: CharAvatar(charId: charId, size: size * 0.7, ring: true),
+    );
+
+    if (!enableTapToExpand) return thumb;
+    return Material(
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: () => _showExpanded(context),
+        child: thumb,
       ),
     );
   }

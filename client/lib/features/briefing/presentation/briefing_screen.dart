@@ -10,7 +10,6 @@ import 'package:weather_friend/features/briefing/domain/briefing.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
 import 'package:weather_friend/shared/widgets/audio_bubble.dart';
-import 'package:weather_friend/shared/widgets/char_avatar.dart';
 import 'package:weather_friend/shared/widgets/character_portrait.dart';
 import 'package:weather_friend/shared/widgets/weather_bg.dart';
 
@@ -46,17 +45,6 @@ class BriefingScreen extends ConsumerWidget {
                       sky: sky,
                       briefings: briefings,
                       currentHour: currentHour,
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: CharacterPortrait(
-                          charId: ref.watch(selectedCharacterProvider),
-                          size: 220,
-                        ),
-                      ),
                     ),
                   ),
                   SliverToBoxAdapter(
@@ -425,11 +413,7 @@ class _HeroBriefingCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  CharAvatar(
-                    charId: charId,
-                    size: 36,
-                    variant: CharAvatarVariant.photo,
-                  ),
+                  CharacterPortrait(charId: charId, size: 36),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
