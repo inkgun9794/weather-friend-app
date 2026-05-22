@@ -12,9 +12,9 @@ from enum import Enum
 
 
 class BriefingType(str, Enum):
-    MORNING = "morning"   # 05/06시 - 알람 슬롯 (음성 ✓)
-    EVENING = "evening"   # 21/22시 - 알람 슬롯 (음성 ✓)
-    HOURLY = "hourly"     # 나머지 시간 - 텍스트 only (음성 X)
+    MORNING = "morning"   # 05시 - 푸시 + 음성
+    EVENING = "evening"   # 21시 - 푸시 + 음성
+    HOURLY = "hourly"     # 나머지 22시간 - 텍스트만 (푸시 X, 앱 열어서 확인)
 
 
 # 음성 슬롯(MORNING/EVENING)에 추가되는 출력 형식 지시.
@@ -109,9 +109,9 @@ class DayForecast:
 
 def briefing_type_for_hour(hour: int) -> BriefingType:
     """시간 → 브리핑 타입 매핑. config.ALARM_HOURS와 일관성 유지."""
-    if hour in (5, 6):
+    if hour == 5:
         return BriefingType.MORNING
-    if hour in (21, 22):
+    if hour == 21:
         return BriefingType.EVENING
     return BriefingType.HOURLY
 

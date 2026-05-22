@@ -44,7 +44,7 @@ Firestore에 메타 저장
 | Pages base URL | `https://inkgun9794.github.io/weather-friend-app/` |
 | Worker cron | `'50 * * * *'` (매시간 :50 UTC) |
 | Gemini model | `gemini-2.5-flash-lite` |
-| TTS | Typecast Free (30K credits/월) |
+| TTS | Typecast Free (30K credits/월) — 음성은 5시·21시만 (하루 8 합성 = 4 캐릭터 × 2 슬롯) |
 
 ### Firestore 스키마
 
@@ -91,11 +91,11 @@ https://inkgun9794.github.io/weather-friend-app/briefings/{city}/{date}/{hour:02
 
 상세 페르소나는 `worker/domain/character.py`.
 
-### 2. 알람 시간 4가지 옵션
+### 2. 알림 시간 — 고정 5시·21시
 
-- **아침**: 05시 또는 06시 (둘 중 사용자 선택)
-- **저녁**: 21시 또는 22시 (KST = 9PM / 10PM, 둘 중 선택)
-- 그 외 20시간은 텍스트만 (앱 열면 보임)
+- **푸시 알림 + 음성**: 오전 5시, 오후 9시 (KST). 사용자가 선택하지 않음.
+- 그 외 22시간은 worker가 Firestore에 텍스트 메타만 쓰고, 사용자는 *앱을 열어서* 확인 (푸시 X).
+- 의도: 우리 앱은 알람(깨우는 기계)이 아니라 알림(notification) 정도라 시간 선택 옵션 자체가 의미 없음.
 
 ### 3. 메시지 vs 음성 스크립트 분리
 
@@ -185,11 +185,11 @@ lib/
   - GPS 권한 + 위치 조회
   - 한국 본토 bounding box 안인지 체크
   - 해외 감지 시 캐릭터별 fallback 메시지 재생
-- [ ] **Schedule feature**:
-  - 아침 알람 시간 선택 (5 or 6)
-  - 저녁 알람 시간 선택 (21 or 22)
-  - `flutter_local_notifications`로 알람 예약
-  - `workmanager`로 알람 직전 prefetch (다음 슬롯 미리 다운)
+- [ ] **Schedule feature** (단순화):
+  - 시간 선택 UI **없음** (5시·21시 고정)
+  - 알림 받기 on/off 토글만
+  - `flutter_local_notifications`로 5시·21시 푸시 예약 (KST)
+  - `workmanager`로 알림 직전 prefetch (해당 슬롯 미리 다운)
 - [ ] **Onboarding**: 위치 권한 → 알림 권한 → 캐릭터 선택 → 알람 시간 → 완료
 - [ ] **Settings**: 알림 토글, 캐릭터 변경 진입점, 앱 정보
 
