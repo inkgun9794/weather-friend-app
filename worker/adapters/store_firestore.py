@@ -45,6 +45,19 @@ class FirestoreMetadataStore:
         }
         await doc_ref.set(payload)
 
+    async def exists(
+        self,
+        *,
+        city: str,
+        date: str,
+        hour: int,
+        character_id: str,
+    ) -> bool:
+        """Idempotent backfill용 — 해당 슬롯이 이미 저장됐는지."""
+        doc_id = f"{city}_{date}_{hour:02d}_{character_id}"
+        snap = await self._db.collection("briefings").document(doc_id).get()
+        return snap.exists
+
     async def close(self) -> None:
         # firestore.AsyncClient는 명시적 close가 권장됨
         self._db.close()

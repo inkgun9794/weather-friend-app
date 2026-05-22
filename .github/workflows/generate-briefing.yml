@@ -64,13 +64,17 @@ jobs:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: |
           if [ -n "${{ inputs.target_hour }}" ]; then
+            # Manual single-hour run
             uv run python main.py \
               --cities "${{ inputs.cities || 'seoul' }}" \
               --target-hour "${{ inputs.target_hour }}" \
               --docs-root ../docs
           else
+            # Default: backfill any empty slots from 00시 to now (KST).
+            # Idempotent — already-saved slots are skipped.
             uv run python main.py \
               --cities "${{ inputs.cities || 'seoul' }}" \
+              --fill-today \
               --docs-root ../docs
           fi
 

@@ -46,7 +46,15 @@ async def _generate_one(
     typecast_sem: asyncio.Semaphore,
     publisher: PagesPublisher,
     store: FirestoreMetadataStore,
-) -> None:
+    skip_existing: bool = True,
+) -> bool:
+    """슬롯 1개 생성. 이미 존재하면 skip하고 False 반환."""
+    if skip_existing and await store.exists(
+        city=city, date=today.date, hour=hour, character_id=character.id
+    ):
+        log.info("⊘ %s %02d시 %s — already exists, skip", city, hour, character.id)
+        return False
+
     btype = briefing_type_for_hour(hour)
 
     # 1) 스크립트 생성 (Gemini) — 세마포어로 동시 호출 제한
@@ -108,6 +116,7 @@ async def _generate_one(
         btype.value,
         " +audio" if audio_url else "",
     )
+    return True
 
 
 async def generate_for_city_hour(
@@ -116,6 +125,7 @@ async def generate_for_city_hour(
     target_hour: int,
     docs_root: Path,
     project_id: str,
+    skip_existing: bool = True,
 ) -> dict[str, int]:
     """특정 도시 × 특정 시간 × 4 캐릭터 = 4 브리핑 생성. 성공/실패 카운트 반환."""
     if not 0 <= target_hour <= 23:
@@ -146,16 +156,23 @@ async def generate_for_city_hour(
                 typecast_sem=typecast_sem,
                 publisher=publisher,
                 store=store,
+                skip_existing=skip_existing,
             )
             for char in CHARACTERS
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        ok = sum(1 for r in results if not isinstance(r, BaseException))
-        fail = len(results) - ok
+        created = sum(1 for r in results if r is True)
+        skipped = sum(1 for r in results if r is False)
+        failed = sum(1 for r in results if isinstance(r, BaseException))
         for r in results:
             if isinstance(r, BaseException):
                 log.error("  ✗ failure: %r", r)
-        return {"ok": ok, "fail": fail, "total": len(results)}
+        return {
+            "ok": created,
+            "fail": failed,
+            "skip": skipped,
+            "total": len(results),
+        }
     finally:
         await store.close()

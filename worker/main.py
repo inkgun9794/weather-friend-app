@@ -55,31 +55,42 @@ def _next_target_hour() -> int:
     return (datetime.now(KST) + timedelta(minutes=15)).hour
 
 
-async def _amain(cities: list[str], target_hour: int, docs_root: Path, project_id: str) -> int:
+async def _amain(
+    cities: list[str],
+    target_hours: list[int],
+    docs_root: Path,
+    project_id: str,
+) -> int:
     total_ok = 0
     total_fail = 0
+    total_skip = 0
     for city in cities:
-        logging.info("=" * 60)
-        logging.info("Starting: %s @ %02d시", city, target_hour)
-        result = await generate_for_city_hour(
-            city=city,
-            target_hour=target_hour,
-            docs_root=docs_root,
-            project_id=project_id,
-        )
-        total_ok += result["ok"]
-        total_fail += result["fail"]
-        logging.info(
-            "Done: %s @ %02d시 — ok=%d fail=%d / %d",
-            city,
-            target_hour,
-            result["ok"],
-            result["fail"],
-            result["total"],
-        )
+        for target_hour in target_hours:
+            logging.info("=" * 60)
+            logging.info("Starting: %s @ %02d시", city, target_hour)
+            result = await generate_for_city_hour(
+                city=city,
+                target_hour=target_hour,
+                docs_root=docs_root,
+                project_id=project_id,
+            )
+            total_ok += result["ok"]
+            total_fail += result["fail"]
+            total_skip += result.get("skip", 0)
+            logging.info(
+                "Done: %s @ %02d시 — ok=%d skip=%d fail=%d / %d",
+                city,
+                target_hour,
+                result["ok"],
+                result.get("skip", 0),
+                result["fail"],
+                result["total"],
+            )
 
     logging.info("=" * 60)
-    logging.info("Summary: ok=%d fail=%d", total_ok, total_fail)
+    logging.info(
+        "Summary: ok=%d skip=%d fail=%d", total_ok, total_skip, total_fail
+    )
     return 0 if total_fail == 0 else 1
 
 
@@ -99,6 +110,15 @@ def main() -> None:
         help="Target hour 0-23 (KST). Default: next hour (now + 15min).",
     )
     parser.add_argument(
+        "--fill-today",
+        action="store_true",
+        help=(
+            "Fill all empty slots from 00시 to current KST hour. "
+            "Idempotent — already-saved slots are skipped. "
+            "Overrides --target-hour."
+        ),
+    )
+    parser.add_argument(
         "--docs-root",
         default="../docs",
         help="GitHub Pages source root (default: ../docs)",
@@ -112,10 +132,19 @@ def main() -> None:
 
     cities = [c.strip() for c in args.cities.split(",") if c.strip()]
     docs_root = Path(args.docs_root).resolve()
-    target_hour = args.target_hour if args.target_hour is not None else _next_target_hour()
+
+    if args.fill_today:
+        now_hour = datetime.now(KST).hour
+        target_hours = list(range(now_hour + 1))
+    elif args.target_hour is not None:
+        target_hours = [args.target_hour]
+    else:
+        target_hours = [_next_target_hour()]
 
     _setup_env_defaults(args.project_id)
-    sys.exit(asyncio.run(_amain(cities, target_hour, docs_root, args.project_id)))
+    sys.exit(
+        asyncio.run(_amain(cities, target_hours, docs_root, args.project_id))
+    )
 
 
 if __name__ == "__main__":
