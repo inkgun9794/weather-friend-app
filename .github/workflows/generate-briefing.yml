@@ -28,7 +28,7 @@ concurrency:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       # TODO: 모든 action을 commit SHA로 핀(pin) — Dependabot이 자동 PR 생성하면 SHA로 전환
