@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 class AppTheme {
   AppTheme._();
 
+  static const fontFamily = 'Pretendard';
+
   static const _seed = Color(0xFF7CB9E8);
 
   static ThemeData light() => _build(Brightness.light);
@@ -17,6 +19,7 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: colorScheme,
       brightness: brightness,
+      fontFamily: fontFamily,
     );
   }
 }
