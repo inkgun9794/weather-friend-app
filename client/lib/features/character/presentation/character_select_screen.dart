@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
-import 'package:weather_friend/shared/widgets/char_avatar.dart';
+import 'package:weather_friend/shared/widgets/character_portrait.dart';
 
 class CharacterSelectScreen extends ConsumerWidget {
   const CharacterSelectScreen({super.key});
@@ -70,7 +70,11 @@ class _CharacterCard extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CharAvatar(charId: character.id, size: 84, ring: isSelected),
+              CharacterPortrait(
+                charId: character.id,
+                size: 84,
+                enableTapToExpand: false,
+              ),
               const SizedBox(height: 12),
               Text(
                 character.displayName,
