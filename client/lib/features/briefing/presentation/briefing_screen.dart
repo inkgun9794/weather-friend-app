@@ -95,6 +95,7 @@ class BriefingScreen extends ConsumerWidget {
                               briefings: briefings,
                               hourlyWeather: today,
                               currentHour: currentHour,
+                              scrollHour: currentHour,
                               dimNonCurrent: true,
                             ),
                             _TimelineSection(
@@ -105,6 +106,7 @@ class BriefingScreen extends ConsumerWidget {
                               briefings: const <int, Briefing>{},
                               hourlyWeather: tomorrow,
                               currentHour: -1,
+                              scrollHour: currentHour,
                               dimNonCurrent: false,
                             ),
                           ],
@@ -218,7 +220,7 @@ class _TopBar extends StatelessWidget {
           ),
           _GlassCircleButton(
             onTap: () => context.push('/settings'),
-            child: Icon(Icons.notifications_outlined, color: sky.ink, size: 15),
+            child: Icon(Icons.menu_rounded, color: sky.ink, size: 18),
           ),
         ],
       ),
@@ -543,16 +545,18 @@ class _TimelineSection extends StatefulWidget {
     required this.briefings,
     required this.hourlyWeather,
     required this.currentHour,
+    required this.scrollHour,
     required this.dimNonCurrent,
   });
 
-  final String dateLabel; // 예: '5월 23일 토요일'
+  final String dateLabel;
   final String label;
   final String? summary;
   final SkyPalette sky;
   final Map<int, Briefing> briefings;
   final Map<int, HourlyWeather> hourlyWeather;
-  final int currentHour;
+  final int currentHour; // 칩 'now' 강조용. 내일 섹션은 -1로 비활성.
+  final int scrollHour;  // 초기 스크롤 위치. 오늘/내일 모두 현재 hour로 맞춤.
   final bool dimNonCurrent;
 
   @override
@@ -576,7 +580,7 @@ class _TimelineSectionState extends State<_TimelineSection> {
   void _jumpToCurrent() {
     if (_didInitialJump || !_controller.hasClients) return;
     final screenW = MediaQuery.of(context).size.width;
-    final hour = widget.dimNonCurrent ? widget.currentHour : 0;
+    final hour = widget.scrollHour.clamp(0, 23);
     // 칩이 화면 중앙에 오도록.
     final raw = _listLeftPad + hour * _chipPitch - (screenW - _chipPitch) / 2;
     final maxScroll = _controller.position.maxScrollExtent;
