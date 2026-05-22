@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geocoding/geocoding.dart' as geocoding;
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
@@ -9,6 +10,7 @@ import 'package:weather_friend/features/briefing/presentation/briefing_providers
 import 'package:weather_friend/features/character/domain/character.dart';
 import 'package:weather_friend/features/location/data/onboarding_provider.dart';
 import 'package:weather_friend/shared/widgets/char_avatar.dart';
+import 'package:weather_friend/shared/widgets/character_portrait.dart';
 import 'package:weather_friend/shared/widgets/weather_bg.dart';
 
 /// 온보딩 — 4 step: Welcome → Location → Notification → Character.
@@ -269,10 +271,19 @@ class _WelcomeStep extends StatelessWidget {
                 for (var i = 0; i < CharacterId.values.length; i++)
                   Positioned(
                     left: i * 30.0,
-                    child: CharAvatar(
-                      charId: CharacterId.values[i],
-                      size: 44,
-                      ring: true,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: oklch(1, 0, 0, 0.85),
+                          width: 2,
+                        ),
+                      ),
+                      child: CharacterPortrait(
+                        charId: CharacterId.values[i],
+                        size: 44,
+                        enableTapToExpand: false,
+                      ),
                     ),
                   ),
               ],
@@ -304,7 +315,46 @@ class _LocationStep extends ConsumerStatefulWidget {
 class _LocationStepState extends ConsumerState<_LocationStep> {
   bool _requested = false;
   bool _requesting = false;
-  final String _resultCity = '서울 · 광진구';
+  String _resultCity = '서울';
+
+  @override
+  void initState() {
+    super.initState();
+    // 이미 권한 있으면 자동으로 위치 fetch (사용자가 다시 들어왔을 때)
+    _tryResolveSilently();
+  }
+
+  Future<void> _tryResolveSilently() async {
+    try {
+      final perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.always ||
+          perm == LocationPermission.whileInUse) {
+        final city = await _resolveCityLabel();
+        if (mounted) setState(() => _resultCity = city);
+      }
+    } catch (_) {/* keep default */}
+  }
+
+  Future<String> _resolveCityLabel() async {
+    final pos = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.low,
+        timeLimit: Duration(seconds: 8),
+      ),
+    );
+    final marks =
+        await geocoding.placemarkFromCoordinates(pos.latitude, pos.longitude);
+    if (marks.isEmpty) return '서울';
+    final m = marks.first;
+    // 한국 주소 우선: 서울특별시 → 서울, 광진구 → 그대로
+    final region = (m.administrativeArea ?? '')
+        .replaceAll(RegExp(r'(특별시|광역시|특별자치(시|도)|도)$'), '');
+    final sub = m.subLocality?.trim().isNotEmpty == true
+        ? m.subLocality!.trim()
+        : (m.locality ?? '').trim();
+    final parts = [region, sub].where((s) => s.isNotEmpty).toList();
+    return parts.isEmpty ? '서울' : parts.join(' · ');
+  }
 
   Future<void> _request() async {
     setState(() => _requesting = true);
@@ -313,12 +363,19 @@ class _LocationStepState extends ConsumerState<_LocationStep> {
       if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
       }
-      // 권한 결과에 무관하게 다음. 거부면 서울 default.
-    } catch (_) {/* swallow */}
-    setState(() {
-      _requesting = false;
-      _requested = true;
-    });
+      final granted = perm == LocationPermission.always ||
+          perm == LocationPermission.whileInUse;
+      if (granted) {
+        final city = await _resolveCityLabel();
+        if (mounted) setState(() => _resultCity = city);
+      }
+    } catch (_) {/* keep default — 서울 fallback */}
+    if (mounted) {
+      setState(() {
+        _requesting = false;
+        _requested = true;
+      });
+    }
   }
 
   @override
@@ -438,33 +495,6 @@ class _LocationStepState extends ConsumerState<_LocationStep> {
                     ),
                   ],
                 ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          // note
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: oklch(1, 0, 0, 0.7),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: oklch(0, 0, 0, 0.04)),
-            ),
-            child: RichText(
-              text: TextSpan(
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.inkSoft,
-                  height: 1.55,
-                  letterSpacing: -0.125,
-                ),
-                children: [
-                  TextSpan(
-                    text: '해외에 계실 땐 ',
-                    style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.ink),
-                  ),
-                  const TextSpan(text: '캐릭터가 직접 "여행 잘 다녀와" 하고 인사할 거예요.'),
-                ],
               ),
             ),
           ),
@@ -885,7 +915,11 @@ class _OnboardCharCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CharAvatar(charId: character.id, size: 52),
+                  CharacterPortrait(
+                    charId: character.id,
+                    size: 52,
+                    enableTapToExpand: false,
+                  ),
                   const SizedBox(height: 10),
                   Text(
                     _tag(character.id),
