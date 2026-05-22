@@ -128,12 +128,12 @@ Briefing? _nearestPast(Map<int, Briefing> briefings, int hour) {
 
 /// 메인 Hero에 띄울 brief 목록 (시간순).
 /// - 5시 카드: 5시 도래 후 항상 (음성 + 아침 안부)
-/// - 9시 카드: 9시 도래 후 추가 (텍스트, '오늘 시작')
-/// 10~20시 hourly와 21시 저녁 인사는 메인이 아니라 대화 화면에서 누적.
+/// - 21시 카드: 21시 도래 후 추가 (음성 + 잘자 인사)
+/// 9~20시 hourly는 메인이 아니라 대화 화면에서 누적.
 List<Briefing> _mainHeroBriefings(Map<int, Briefing> briefings, int hour) {
   return [
     if (hour >= 5 && briefings[5] != null) briefings[5]!,
-    if (hour >= 9 && briefings[9] != null) briefings[9]!,
+    if (hour >= 21 && briefings[21] != null) briefings[21]!,
   ];
 }
 
