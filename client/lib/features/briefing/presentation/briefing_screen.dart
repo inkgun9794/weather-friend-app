@@ -61,30 +61,16 @@ class BriefingScreen extends ConsumerWidget {
                     child: _ConversationLink(sky: sky),
                   ),
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
+                    padding: const EdgeInsets.fromLTRB(20, 22, 20, 6),
                     sliver: SliverToBoxAdapter(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            '오늘의 24시간',
-                            style: TextStyle(
-                              color: sky.ink,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                              letterSpacing: -0.1,
-                            ),
-                          ),
-                          Text(
-                            _todayLabel(),
-                            style: TextStyle(
-                              color: sky.inkSoft,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 11,
-                              letterSpacing: -0.1,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        _todayLabel(),
+                        style: TextStyle(
+                          color: sky.ink,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          letterSpacing: -0.2,
+                        ),
                       ),
                     ),
                   ),
@@ -116,6 +102,7 @@ class BriefingScreen extends ConsumerWidget {
                             _TimelineSection(
                               label: '오늘 날씨',
                               summary: todaySummary?.shortLine(),
+                              sky: sky,
                               briefings: briefings,
                               hourlyWeather: today,
                               currentHour: currentHour,
@@ -124,6 +111,7 @@ class BriefingScreen extends ConsumerWidget {
                             _TimelineSection(
                               label: '내일 날씨',
                               summary: tomorrowSummary?.shortLine(),
+                              sky: sky,
                               briefings: const <int, Briefing>{},
                               hourlyWeather: tomorrow,
                               currentHour: -1,
@@ -545,10 +533,11 @@ class _ConversationLink extends StatelessWidget {
   }
 }
 
-class _TimelineSection extends StatelessWidget {
+class _TimelineSection extends StatefulWidget {
   const _TimelineSection({
     required this.label,
     required this.summary,
+    required this.sky,
     required this.briefings,
     required this.hourlyWeather,
     required this.currentHour,
@@ -556,11 +545,47 @@ class _TimelineSection extends StatelessWidget {
   });
 
   final String label;
-  final String? summary; // "흐림 · 24° / 18°" 같은 한 줄 요약
+  final String? summary;
+  final SkyPalette sky;
   final Map<int, Briefing> briefings;
   final Map<int, HourlyWeather> hourlyWeather;
-  final int currentHour; // 'now' 강조용 (오늘 섹션만 적용). 내일에선 -1로 비활성.
-  final bool dimNonCurrent; // 오늘 섹션에서 currentHour 이전 칩 흐림 처리
+  final int currentHour;
+  final bool dimNonCurrent;
+
+  @override
+  State<_TimelineSection> createState() => _TimelineSectionState();
+}
+
+class _TimelineSectionState extends State<_TimelineSection> {
+  // _HourChip width(86) + separator(8) = 94px / chip
+  static const double _chipPitch = 94.0;
+  static const double _listLeftPad = 20.0;
+
+  final ScrollController _controller = ScrollController();
+  bool _didInitialJump = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToCurrent());
+  }
+
+  void _jumpToCurrent() {
+    if (_didInitialJump || !_controller.hasClients) return;
+    final screenW = MediaQuery.of(context).size.width;
+    final hour = widget.dimNonCurrent ? widget.currentHour : 0;
+    // 칩이 화면 중앙에 오도록.
+    final raw = _listLeftPad + hour * _chipPitch - (screenW - _chipPitch) / 2;
+    final maxScroll = _controller.position.maxScrollExtent;
+    _controller.jumpTo(raw.clamp(0.0, maxScroll));
+    _didInitialJump = true;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -574,22 +599,23 @@ class _TimelineSection extends StatelessWidget {
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
-                label,
-                style: const TextStyle(
+                widget.label,
+                style: TextStyle(
+                  color: widget.sky.ink,
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   letterSpacing: -0.1,
                 ),
               ),
-              if (summary != null) ...[
+              if (widget.summary != null) ...[
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    summary!,
+                    widget.summary!,
                     style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w500,
-                      color: AppColors.inkMute,
+                      color: widget.sky.inkSoft,
                       letterSpacing: -0.1,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -602,16 +628,17 @@ class _TimelineSection extends StatelessWidget {
         SizedBox(
           height: 130,
           child: ListView.separated(
+            controller: _controller,
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(horizontal: _listLeftPad),
             itemCount: 24,
             separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, hour) => _HourChip(
               hour: hour,
-              briefing: briefings[hour],
-              hourly: hourlyWeather[hour],
-              isNow: hour == currentHour,
-              isPast: dimNonCurrent && hour < currentHour,
+              briefing: widget.briefings[hour],
+              hourly: widget.hourlyWeather[hour],
+              isNow: hour == widget.currentHour,
+              isPast: widget.dimNonCurrent && hour < widget.currentHour,
             ),
           ),
         ),
