@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "90954587893",
+    "project_id": "weather-friend-92281",
+    "storage_bucket": "weather-friend-92281.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:90954587893:android:0338f4657405b530a8afbc",
+        "android_client_info": {
+          "package_name": "com.weatherfriend.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCv_8gA5Lx3ZuYyW2dmT15Hd6TzFPVJ7Iw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
