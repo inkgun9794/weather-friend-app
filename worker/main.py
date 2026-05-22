@@ -158,10 +158,11 @@ def main() -> None:
     docs_root = Path(args.docs_root).resolve()
 
     if args.fill_today:
-        now_hour = datetime.now(KST).hour
-        # 사용자가 깨어있는 시간대만 생성: 5시(morning) + 9~21시(hourly+evening).
-        # 새벽/이른 아침 (0~4, 6~8) 슬롯은 어차피 안 보니까 호출 낭비.
-        target_hours = [h for h in ALL_HOURS if h <= now_hour]
+        # cron 시점 + 15분의 hour까지 처리 — :45 즈음 cron이 다음 hour를 미리 만들도록.
+        # 5시·21시 정각 푸시가 도래할 때 슬롯이 이미 준비돼있어야 하기 때문.
+        # idempotent라 이미 만든 hour는 skip — 매 15분 cron이 4번 시도해도 호출 1번.
+        upper = _next_target_hour()
+        target_hours = [h for h in ALL_HOURS if h <= upper]
     elif args.target_hour is not None:
         target_hours = [args.target_hour]
     else:

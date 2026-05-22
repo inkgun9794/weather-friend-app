@@ -2,8 +2,11 @@ name: Generate Hourly Briefing
 
 on:
   schedule:
-    # 매시간 :50 (UTC). cron이 +15분의 시각을 target으로 자동 계산하므로 timezone 무관.
-    - cron: '50 * * * *'
+    # 매 15분 (UTC) — GitHub Actions public repo의 cron은 평균 6%만 실행되어 (high
+    # load 시 dropped), 자주 시도해서 누락을 빨리 따라잡음. `:45` 즈음 cron이 다음
+    # hour 슬롯을 미리 생성하도록 main.py의 fill-today가 _next_target_hour()까지 처리.
+    # fill-today는 idempotent라 중복 cron이 발사되어도 Gemini 호출은 시간당 1번만.
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       target_hour:
