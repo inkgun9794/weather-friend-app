@@ -24,7 +24,8 @@ import zoneinfo
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from config import CITIES
+from adapters.weather_open_meteo import fetch_two_day_forecast
+from config import ALL_HOURS, CITIES
 from usecases.generate_briefing import generate_for_city_hour
 
 KST = zoneinfo.ZoneInfo("Asia/Seoul")
@@ -65,6 +66,18 @@ async def _amain(
     total_fail = 0
     total_skip = 0
     for city in cities:
+        # Open-Meteo는 도시당 한 번만 — fill-today에서 hour마다 같은 forecast를
+        # 24번 fetch하던 게 진짜 비효율이었음. 5배 빠르고 ConnectTimeout 노출도 1/24.
+        try:
+            logging.info("Fetching forecast for %s (once for all hours) ...", city)
+            forecast = await fetch_two_day_forecast(city)
+            today, tomorrow = forecast
+            logging.info("✓ forecast: today=%s / tomorrow=%s", today.overall_condition, tomorrow.overall_condition)
+        except Exception as e:
+            logging.error("✗ %s — forecast fetch failed: %r (skipping city)", city, e)
+            total_fail += 4 * len(target_hours)
+            continue
+
         for target_hour in target_hours:
             logging.info("=" * 60)
             logging.info("Starting: %s @ %02d시", city, target_hour)
@@ -74,6 +87,7 @@ async def _amain(
                     target_hour=target_hour,
                     docs_root=docs_root,
                     project_id=project_id,
+                    forecast=forecast,
                 )
             except Exception as e:
                 # 한 시간 슬롯 실패가 fill-today 전체를 중단시키지 않게 격리.
@@ -145,7 +159,9 @@ def main() -> None:
 
     if args.fill_today:
         now_hour = datetime.now(KST).hour
-        target_hours = list(range(now_hour + 1))
+        # 사용자가 깨어있는 시간대만 생성: 5시(morning) + 9~21시(hourly+evening).
+        # 새벽/이른 아침 (0~4, 6~8) 슬롯은 어차피 안 보니까 호출 낭비.
+        target_hours = [h for h in ALL_HOURS if h <= now_hour]
     elif args.target_hour is not None:
         target_hours = [args.target_hour]
     else:

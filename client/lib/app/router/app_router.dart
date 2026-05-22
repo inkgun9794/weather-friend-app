@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_screen.dart';
+import 'package:weather_friend/features/briefing/presentation/conversation_screen.dart';
 import 'package:weather_friend/features/character/presentation/character_select_screen.dart';
 import 'package:weather_friend/features/location/presentation/onboarding_screen.dart';
 import 'package:weather_friend/features/schedule/presentation/schedule_screen.dart';
@@ -13,6 +14,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/',
         builder: (_, _) => const BriefingScreen(),
+      ),
+      GoRoute(
+        path: '/conversation',
+        builder: (_, _) => const ConversationScreen(),
       ),
       GoRoute(
         path: '/onboarding',
