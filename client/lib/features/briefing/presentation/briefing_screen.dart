@@ -125,14 +125,15 @@ Briefing? _nearestPast(Map<int, Briefing> briefings, int hour) {
   return null;
 }
 
-/// 메인 Hero 카드에 띄울 brief 1개.
-/// - 5시~8시: 5시 카드 (음성+아침 안부)
-/// - 9시 이후 ~ 다음날 5시 직전: 9시 카드 (활동 시작 메시지, 텍스트만)
-/// 10~21시의 hourly와 21시 저녁 인사는 메인이 아니라 대화 화면에서 누적.
-Briefing? _mainHeroBriefing(Map<int, Briefing> briefings, int hour) {
-  if (hour < 5) return null; // 사이클 시작 전 (이론상 일어나지 않음 — kst.dart가 어제 사이클로 매핑)
-  if (hour < 9) return briefings[5];
-  return briefings[9] ?? briefings[5]; // 9시 데이터 도착 전 잠깐의 공백은 5시로 메움
+/// 메인 Hero에 띄울 brief 목록 (시간순).
+/// - 5시 카드: 5시 도래 후 항상 (음성 + 아침 안부)
+/// - 9시 카드: 9시 도래 후 추가 (텍스트, '오늘 시작')
+/// 10~20시 hourly와 21시 저녁 인사는 메인이 아니라 대화 화면에서 누적.
+List<Briefing> _mainHeroBriefings(Map<int, Briefing> briefings, int hour) {
+  return [
+    if (hour >= 5 && briefings[5] != null) briefings[5]!,
+    if (hour >= 9 && briefings[9] != null) briefings[9]!,
+  ];
 }
 
 String _todayLabel() {
@@ -324,109 +325,127 @@ class _HeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hero = _mainHeroBriefing(briefings, currentHour);
-    if (hero == null) {
+    final heroes = _mainHeroBriefings(briefings, currentHour);
+    if (heroes.isEmpty) {
       return const SizedBox.shrink();
     }
-    final charId = Character.parseId(hero.characterId);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      child: Column(
+        children: [
+          for (var i = 0; i < heroes.length; i++) ...[
+            if (i > 0) const SizedBox(height: 10),
+            _HeroBriefingCard(briefing: heroes[i]),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroBriefingCard extends StatelessWidget {
+  const _HeroBriefingCard({required this.briefing});
+
+  final Briefing briefing;
+
+  @override
+  Widget build(BuildContext context) {
+    final charId = Character.parseId(briefing.characterId);
     if (charId == null) return const SizedBox.shrink();
     final v = visualFor(charId);
     final character = Character.byId(charId);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.88),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.12),
-                  blurRadius: 30,
-                  offset: const Offset(0, 14),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CharAvatar(
-                      charId: charId,
-                      size: 36,
-                      variant: CharAvatarVariant.photo,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            character.displayName.split(' ').last,
-                            style: TextStyle(
-                              color: AppColors.ink,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.1,
-                            ),
-                          ),
-                          Text(
-                            '${character.displayName.split(' ').first} · 오전 ${hero.hour}:00 전송',
-                            style: TextStyle(
-                              color: AppColors.inkMute,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: -0.1,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: v.colorSoft,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        _alarmLabel(hero.hour),
-                        style: TextStyle(
-                          color: v.colorDeep,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.1,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  hero.transcript,
-                  style: TextStyle(
-                    color: AppColors.ink,
-                    fontSize: 14.5,
-                    height: 1.55,
-                    fontWeight: FontWeight.w400,
-                    letterSpacing: -0.1,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.88),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 30,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CharAvatar(
+                    charId: charId,
+                    size: 36,
+                    variant: CharAvatarVariant.photo,
                   ),
-                ),
-                if (hero.audioUrl != null) ...[
-                  const SizedBox(height: 14),
-                  AudioBubble(charId: charId, audioUrl: hero.audioUrl!),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          character.displayName.split(' ').last,
+                          style: TextStyle(
+                            color: AppColors.ink,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                        Text(
+                          '${character.displayName.split(' ').first} · 오전 ${briefing.hour}:00 전송',
+                          style: TextStyle(
+                            color: AppColors.inkMute,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: v.colorSoft,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      _alarmLabel(briefing.hour),
+                      style: TextStyle(
+                        color: v.colorDeep,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                  ),
                 ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                briefing.transcript,
+                style: TextStyle(
+                  color: AppColors.ink,
+                  fontSize: 14.5,
+                  height: 1.55,
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: -0.1,
+                ),
+              ),
+              if (briefing.audioUrl != null) ...[
+                const SizedBox(height: 14),
+                AudioBubble(charId: charId, audioUrl: briefing.audioUrl!),
               ],
-            ),
+            ],
           ),
         ),
       ),
