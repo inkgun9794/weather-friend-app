@@ -11,6 +11,7 @@ import 'package:weather_friend/features/briefing/presentation/briefing_providers
 import 'package:weather_friend/features/character/domain/character.dart';
 import 'package:weather_friend/shared/widgets/audio_bubble.dart';
 import 'package:weather_friend/shared/widgets/char_avatar.dart';
+import 'package:weather_friend/shared/widgets/character_portrait.dart';
 import 'package:weather_friend/shared/widgets/weather_bg.dart';
 
 class BriefingScreen extends ConsumerWidget {
@@ -45,6 +46,17 @@ class BriefingScreen extends ConsumerWidget {
                       sky: sky,
                       briefings: briefings,
                       currentHour: currentHour,
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: CharacterPortrait(
+                          charId: ref.watch(selectedCharacterProvider),
+                          size: 220,
+                        ),
+                      ),
                     ),
                   ),
                   SliverToBoxAdapter(
