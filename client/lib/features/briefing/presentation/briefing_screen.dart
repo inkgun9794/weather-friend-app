@@ -9,6 +9,7 @@ import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
 import 'package:weather_friend/features/briefing/domain/briefing.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
+import 'package:weather_friend/features/location/data/selected_city_provider.dart';
 import 'package:weather_friend/shared/widgets/audio_bubble.dart';
 import 'package:weather_friend/shared/widgets/character_portrait.dart';
 import 'package:weather_friend/shared/widgets/weather_bg.dart';
@@ -191,13 +192,14 @@ String _alarmLabel(int hour) {
   return '';
 }
 
-class _TopBar extends StatelessWidget {
+class _TopBar extends ConsumerWidget {
   const _TopBar({required this.sky});
 
   final SkyPalette sky;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final city = ref.watch(selectedCityProvider);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
       child: Row(
@@ -208,7 +210,7 @@ class _TopBar extends StatelessWidget {
               Icon(Icons.location_on, color: sky.ink, size: 14),
               const SizedBox(width: 6),
               Text(
-                '서울',
+                city,
                 style: TextStyle(
                   color: sky.ink,
                   fontSize: 13,

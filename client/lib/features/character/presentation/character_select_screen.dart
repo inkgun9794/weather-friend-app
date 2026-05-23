@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
+import 'package:weather_friend/shared/widgets/character_intro_button.dart';
 import 'package:weather_friend/shared/widgets/character_portrait.dart';
 
 class CharacterSelectScreen extends ConsumerWidget {
@@ -67,35 +68,48 @@ class _CharacterCard extends StatelessWidget {
               width: 2,
             ),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Stack(
             children: [
-              CharacterPortrait(
-                charId: character.id,
-                size: 84,
-                enableTapToExpand: false,
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CharacterPortrait(
+                    charId: character.id,
+                    size: 84,
+                    enableTapToExpand: false,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    character.displayName,
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _toneLabel(character.id),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  AnimatedOpacity(
+                    duration: const Duration(milliseconds: 150),
+                    opacity: isSelected ? 1.0 : 0.0,
+                    child: Icon(
+                      Icons.check_circle,
+                      color: theme.colorScheme.primary,
+                      size: 20,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                character.displayName,
-                style: theme.textTheme.titleMedium,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                _toneLabel(character.id),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              AnimatedOpacity(
-                duration: const Duration(milliseconds: 150),
-                opacity: isSelected ? 1.0 : 0.0,
-                child: Icon(
-                  Icons.check_circle,
-                  color: theme.colorScheme.primary,
-                  size: 20,
+              // 미리듣기 스피커 — 카드 우상단
+              Positioned(
+                top: 0,
+                right: 0,
+                child: CharacterIntroButton(
+                  charId: character.id,
+                  size: 22,
                 ),
               ),
             ],

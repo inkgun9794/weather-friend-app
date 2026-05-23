@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart' as geocoding;
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
+import 'package:weather_friend/core/services/notification_service.dart';
 import 'package:weather_friend/core/utils/oklch.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
 import 'package:weather_friend/features/location/data/onboarding_provider.dart';
-import 'package:weather_friend/shared/widgets/char_avatar.dart';
+import 'package:weather_friend/features/location/data/selected_city_provider.dart';
+import 'package:weather_friend/shared/widgets/character_intro_button.dart';
 import 'package:weather_friend/shared/widgets/character_portrait.dart';
 import 'package:weather_friend/shared/widgets/weather_bg.dart';
 
@@ -330,7 +331,9 @@ class _LocationStepState extends ConsumerState<_LocationStep> {
       if (perm == LocationPermission.always ||
           perm == LocationPermission.whileInUse) {
         final city = await _resolveCityLabel();
-        if (mounted) setState(() => _resultCity = city);
+        if (!mounted) return;
+        setState(() => _resultCity = city);
+        await ref.read(selectedCityProvider.notifier).set(city);
       }
     } catch (_) {/* keep default */}
   }
@@ -358,6 +361,7 @@ class _LocationStepState extends ConsumerState<_LocationStep> {
 
   Future<void> _request() async {
     setState(() => _requesting = true);
+    String? resolved;
     try {
       var perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied) {
@@ -366,16 +370,20 @@ class _LocationStepState extends ConsumerState<_LocationStep> {
       final granted = perm == LocationPermission.always ||
           perm == LocationPermission.whileInUse;
       if (granted) {
-        final city = await _resolveCityLabel();
-        if (mounted) setState(() => _resultCity = city);
+        resolved = await _resolveCityLabel();
       }
-    } catch (_) {/* keep default — 서울 fallback */}
-    if (mounted) {
-      setState(() {
-        _requesting = false;
-        _requested = true;
-      });
-    }
+    } catch (_) {/* fall through to 서울 fallback */}
+
+    // 거부/실패 시엔 '서울' 폴백을 명시적으로 저장 — 사용자에게도 _resultCity로 표시됨.
+    final finalCity = resolved ?? '서울';
+    await ref.read(selectedCityProvider.notifier).set(finalCity);
+
+    if (!mounted) return;
+    setState(() {
+      _resultCity = finalCity;
+      _requesting = false;
+      _requested = true;
+    });
   }
 
   @override
@@ -402,7 +410,8 @@ class _LocationStepState extends ConsumerState<_LocationStep> {
           SizedBox(
             width: 280,
             child: Text(
-              '위치를 한 번만 알려주시면, 가장 가까운 도시의 날씨를 매일 가져올게요.',
+              '위치를 한 번만 알려주시면, 가장 가까운 도시의 날씨를 매일 가져올게요. '
+              '거부하시면 서울 날씨를 기본으로 보여드려요.',
               style: TextStyle(
                 fontSize: 14,
                 color: AppColors.inkSoft,
@@ -542,35 +551,36 @@ class _MapRingsPainter extends CustomPainter {
 }
 
 // ─────────────────────────────────────────────────── Step 2. Notification
-class _NotificationStep extends StatefulWidget {
+class _NotificationStep extends ConsumerStatefulWidget {
   const _NotificationStep({required this.onNext});
 
   final VoidCallback onNext;
 
   @override
-  State<_NotificationStep> createState() => _NotificationStepState();
+  ConsumerState<_NotificationStep> createState() => _NotificationStepState();
 }
 
-class _NotificationStepState extends State<_NotificationStep> {
+class _NotificationStepState extends ConsumerState<_NotificationStep> {
   bool? _granted;
   bool _requesting = false;
 
   Future<void> _request() async {
     setState(() => _requesting = true);
     try {
-      final plugin = FlutterLocalNotificationsPlugin();
-      final iOS = plugin.resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin>();
-      final android = plugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
-      final ok = await iOS?.requestPermissions(alert: true, badge: true, sound: true) ??
-          await android?.requestNotificationsPermission() ??
-          false;
+      final service = ref.read(notificationServiceProvider);
+      final ok = await service.requestPermissions();
+      if (ok) {
+        // 권한 받자마자 fallback 문구로 일단 예약. 실제 transcript는
+        // NotificationCoordinator가 foreground 진입 시 덮어쓴다.
+        await service.scheduleDailyBriefings();
+      }
+      if (!mounted) return;
       setState(() {
         _granted = ok;
         _requesting = false;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() {
         _granted = false;
         _requesting = false;
@@ -589,7 +599,7 @@ class _NotificationStepState extends State<_NotificationStep> {
         children: [
           const SizedBox(height: 8),
           Text(
-            '알람 받으셔야\n친구가 알려줘요.',
+            '알림을 받으셔야\n날사친이 알려줄 수 있어요.',
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w700,
@@ -633,31 +643,6 @@ class _NotificationStepState extends State<_NotificationStep> {
                       ),
                     ),
                   ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          // bottom note
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: oklch(1, 0, 0, 0.7),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: oklch(0, 0, 0, 0.04)),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.notifications_active_outlined,
-                    size: 18, color: oklch(0.55, 0.10, 240)),
-                const SizedBox(width: 10),
-                Text(
-                  '아침·저녁 하루 2번 · 광고 0회',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: AppColors.inkSoft,
-                    letterSpacing: -0.125,
-                  ),
-                ),
               ],
             ),
           ),
@@ -730,7 +715,11 @@ class _NotifPreview extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CharAvatar(charId: charId, size: 36),
+          CharacterPortrait(
+            charId: charId,
+            size: 36,
+            enableTapToExpand: false,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -966,20 +955,32 @@ class _OnboardCharCard extends StatelessWidget {
                   ),
                 ],
               ),
+              // 미리듣기 스피커 — 카드 우상단 (항상 노출)
+              Positioned(
+                top: 0,
+                right: 0,
+                child: CharacterIntroButton(
+                  charId: character.id,
+                  size: 20,
+                  color: v.colorDeep,
+                ),
+              ),
+              // 선택 표시 — 포트레이트 우하단 corner badge로 이동
               if (isSelected)
                 Positioned(
-                  top: 0,
-                  right: 0,
+                  top: 36,
+                  left: 36,
                   child: Container(
                     width: 22,
                     height: 22,
                     decoration: BoxDecoration(
                       color: v.color,
                       shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
                     ),
                     child: const Icon(
                       Icons.check,
-                      size: 13,
+                      size: 11,
                       color: Colors.white,
                     ),
                   ),
