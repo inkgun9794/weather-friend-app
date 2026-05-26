@@ -1,0 +1,62 @@
+name: Refresh KMA cache (ultra-short only)
+
+# 초단기예보만 매 10분 갱신. 카드용 6시간 예측 데이터.
+# 단기/중기는 별도 워크플로 (refresh-kma-base.yml) 가 매 30분 갱신.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      cities:
+        description: 'Cities (comma-separated). 기본: seoul'
+        required: false
+        type: string
+        default: 'seoul'
+
+permissions:
+  id-token: write   # OIDC for GCP WIF
+
+concurrency:
+  group: refresh-kma-grid
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: 'worker/uv.lock'
+
+      - name: Setup Python
+        run: uv python install 3.12
+        working-directory: worker
+
+      - name: Install dependencies
+        run: uv sync --frozen
+        working-directory: worker
+
+      - name: Authenticate to GCP (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - name: Refresh KMA cache (ultra)
+        working-directory: worker
+        env:
+          KMA_OPENAPI_KEY: ${{ secrets.KMA_OPENAPI_KEY }}
+          KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          uv run python refresh_kma.py \
+            --mode ultra \
+            --cities "${{ inputs.cities || 'seoul' }}"
