@@ -4,7 +4,7 @@ import 'package:geocoding/geocoding.dart' as geocoding;
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
-import 'package:weather_friend/core/services/notification_service.dart';
+import 'package:weather_friend/core/services/fcm_service.dart';
 import 'package:weather_friend/core/utils/oklch.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
@@ -567,13 +567,9 @@ class _NotificationStepState extends ConsumerState<_NotificationStep> {
   Future<void> _request() async {
     setState(() => _requesting = true);
     try {
-      final service = ref.read(notificationServiceProvider);
-      final ok = await service.requestPermissions();
-      if (ok) {
-        // 권한 받자마자 fallback 문구로 일단 예약. 실제 transcript는
-        // NotificationCoordinator가 foreground 진입 시 덮어쓴다.
-        await service.scheduleDailyBriefings();
-      }
+      // FCM 권한 요청 — iOS APNs 등록도 함께 처리. 토픽 구독은
+      // 온보딩 완료 시 NotificationCoordinator가 자동으로 동기화.
+      final ok = await ref.read(fcmServiceProvider).requestPermissions();
       if (!mounted) return;
       setState(() {
         _granted = ok;

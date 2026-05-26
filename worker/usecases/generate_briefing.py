@@ -14,6 +14,7 @@ from pathlib import Path
 
 from adapters.ai_gemini import GeminiScriptGenerator
 from adapters.pages_publisher import PagesPublisher
+from adapters.push_fcm import FcmPushClient
 from adapters.store_firestore import BriefingMetadata, FirestoreMetadataStore
 from adapters.tts_typecast import TypecastClient
 from adapters.weather_open_meteo import fetch_two_day_forecast
@@ -46,6 +47,7 @@ async def _generate_one(
     typecast_sem: asyncio.Semaphore,
     publisher: PagesPublisher,
     store: FirestoreMetadataStore,
+    fcm: FcmPushClient | None,
     skip_existing: bool = True,
 ) -> bool:
     """슬롯 1개 생성. 이미 존재하면 skip하고 False 반환."""
@@ -116,6 +118,25 @@ async def _generate_one(
         btype.value,
         " +audio" if audio_url else "",
     )
+
+    # 4) FCM push — 알람 슬롯 + 오디오 생성 성공 시에만.
+    #    푸시 실패가 브리핑 저장을 무효화하면 안 됨 (이미 Firestore에 저장됐고
+    #    다음 cron 재시도는 idempotent하게 skip할 것).
+    if fcm is not None and audio_url and btype in (BriefingType.MORNING, BriefingType.EVENING):
+        try:
+            await fcm.send_briefing(
+                city=city,
+                hour=hour,
+                character_id=character.id,
+                character_display_name=character.display_name,
+                transcript=message_script,
+            )
+        except Exception as e:
+            log.error(
+                "✗ FCM push failed for %s %02d시 %s: %r",
+                city, hour, character.id, e,
+            )
+
     return True
 
 
@@ -150,6 +171,11 @@ async def generate_for_city_hour(
     publisher = PagesPublisher(docs_root)
     store = FirestoreMetadataStore(project_id)
 
+    # FCM은 알람 슬롯에서만 필요 — hourly 슬롯에는 비용 안 들이고 None 전달.
+    fcm: FcmPushClient | None = (
+        FcmPushClient() if is_audio_slot(target_hour) else None
+    )
+
     try:
         tasks = [
             _generate_one(
@@ -164,6 +190,7 @@ async def generate_for_city_hour(
                 typecast_sem=typecast_sem,
                 publisher=publisher,
                 store=store,
+                fcm=fcm,
                 skip_existing=skip_existing,
             )
             for char in CHARACTERS

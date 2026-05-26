@@ -5,34 +5,53 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
-/// 알림 슬롯. 기기 로컬 시간 기준 고정 스케줄.
+const _channelId = 'daily_briefing';
+const _channelName = '하루 브리핑';
+const _channelDescription = '오전 5시 · 오후 9시 알림';
+
+/// 하루 알람 슬롯 — 로컬 알림 ID·발사 시각·fallback 본문.
+///
+/// iOS 우회 경로(APNs Auth Key 발급 전)에서 사용. FCM이 활성화되면
+/// Android와 iOS 모두 토픽 푸시로 전환되어 이 enum은 채널 식별용으로만 의미.
+///
+/// minute=5인 이유: GitHub Actions cron은 매 15분이고 가끔 dropped될 수
+/// 있어서 5분 마진을 두면 워커가 audio 생성을 완료할 시간이 확보됨.
 enum BriefingSlot {
-  morning(id: 1, hour: 5, fallbackTitle: '아침 브리핑', fallbackBody: '오늘 날씨 브리핑이 준비됐어요'),
-  evening(id: 2, hour: 21, fallbackTitle: '저녁 브리핑', fallbackBody: '오늘 하루 어땠어요? 내일 날씨 보러 가요');
+  morning(
+    id: 1,
+    hour: 5,
+    minute: 5,
+    fallbackTitle: '아침 브리핑',
+    fallbackBody: '오늘 날씨 브리핑이 준비됐어요',
+  ),
+  evening(
+    id: 2,
+    hour: 21,
+    minute: 5,
+    fallbackTitle: '저녁 브리핑',
+    fallbackBody: '오늘 하루 어땠어요? 내일 날씨 보러 가요',
+  );
 
   const BriefingSlot({
     required this.id,
     required this.hour,
+    required this.minute,
     required this.fallbackTitle,
     required this.fallbackBody,
   });
 
   final int id;
   final int hour;
+  final int minute;
   final String fallbackTitle;
   final String fallbackBody;
 }
 
-const _channelId = 'daily_briefing';
-const _channelName = '하루 브리핑';
-const _channelDescription = '오전 5시 · 오후 9시 알림';
-
-/// 로컬 알림 예약/취소/권한 관리.
+/// 알림 채널/플러그인 초기화 + 로컬 알림 발사.
 ///
-/// 사용 패턴:
-/// 1. 앱 시작 시 [init] 호출 (timezone DB 로드 + 기기 로컬 타임존 설정)
-/// 2. 온보딩 알림 단계에서 [requestPermissions]
-/// 3. 브리핑 데이터가 준비될 때마다 [scheduleDailyBriefings] 로 본문 갱신 + 재예약
+/// 두 가지 용도:
+///   1. FCM 푸시가 표시될 Android 채널 사전 생성 + 테스트 알림.
+///   2. iOS 우회 경로 — APNs Auth Key 없을 때 readiness 기반 일회성 스케줄링.
 class NotificationService {
   NotificationService();
 
@@ -47,14 +66,12 @@ class NotificationService {
       final localName = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(localName));
     } catch (e) {
-      // 기기 타임존을 못 얻으면 UTC fallback. 알림은 동작하지만 시각이 어긋날 수 있음.
       debugPrint('NotificationService: timezone lookup failed: $e');
     }
 
     const settings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       iOS: DarwinInitializationSettings(
-        // 권한은 별도 단계에서 명시적으로 요청 — init 시점엔 묻지 않음.
         requestAlertPermission: false,
         requestBadgePermission: false,
         requestSoundPermission: false,
@@ -62,7 +79,6 @@ class NotificationService {
     );
     await _plugin.initialize(settings: settings);
 
-    // Android 채널 생성 (idempotent)
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     await android?.createNotificationChannel(
@@ -77,7 +93,9 @@ class NotificationService {
     _initialized = true;
   }
 
-  /// 알림 권한 요청. true = 허용됨.
+  /// iOS는 권한 요청을 FlutterLocalNotifications 경로로도 받을 수 있어야 함
+  /// (FcmService 없이 NotificationService만 쓰는 우회 경로일 때).
+  /// 내부적으로 OS 권한은 동일.
   Future<bool> requestPermissions() async {
     final iOS = _plugin.resolvePlatformSpecificImplementation<
         IOSFlutterLocalNotificationsPlugin>();
@@ -97,7 +115,6 @@ class NotificationService {
     return false;
   }
 
-  /// 현재 권한 상태 (요청 없이).
   Future<bool> hasPermission() async {
     final iOS = _plugin.resolvePlatformSpecificImplementation<
         IOSFlutterLocalNotificationsPlugin>();
@@ -113,29 +130,22 @@ class NotificationService {
     return false;
   }
 
-  /// 두 슬롯(아침/저녁)을 본문과 함께 재예약.
+  /// 매일 [slot] 시각에 반복 발사되는 로컬 알림을 예약(덮어쓰기).
   ///
-  /// [bodies] 가 null이거나 비어 있으면 각 슬롯의 fallback 문구로 예약.
-  /// 매일 같은 시각에 반복 (matchDateTimeComponents: DateTimeComponents.time).
-  Future<void> scheduleDailyBriefings({
-    Map<BriefingSlot, String>? bodies,
+  /// OS가 알아서 매일 발사 — 앱이 background거나 종료돼 있어도 동작.
+  /// 본문은 호출 시점 기준 최신값을 박아두고, 다음 foreground 진입 때
+  /// transcript가 새로 채워졌으면 다시 호출해서 덮어쓴다.
+  Future<void> scheduleDaily({
+    required BriefingSlot slot,
+    required String title,
+    required String body,
   }) async {
-    for (final slot in BriefingSlot.values) {
-      final body = bodies?[slot] ?? slot.fallbackBody;
-      await _scheduleSlot(slot, body);
-    }
-  }
-
-  Future<void> _scheduleSlot(BriefingSlot slot, String body) async {
-    // 이전 예약 취소 후 다시 등록.
     await _plugin.cancel(id: slot.id);
-
-    final scheduled = _nextOccurrence(slot.hour);
     await _plugin.zonedSchedule(
       id: slot.id,
-      title: slot.fallbackTitle,
+      title: title,
       body: body,
-      scheduledDate: scheduled,
+      scheduledDate: _nextOccurrence(slot.hour, slot.minute),
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           _channelId,
@@ -149,6 +159,16 @@ class NotificationService {
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time,
     );
+  }
+
+  Future<void> cancelSlot(BriefingSlot slot) async {
+    await _plugin.cancel(id: slot.id);
+  }
+
+  Future<void> cancelAllSlots() async {
+    for (final slot in BriefingSlot.values) {
+      await _plugin.cancel(id: slot.id);
+    }
   }
 
   /// 디버그용: 즉시 알림 발사.
@@ -170,10 +190,8 @@ class NotificationService {
     );
   }
 
-  Future<void> cancelAll() => _plugin.cancelAll();
-
-  /// 다음 [hour]시 정각(기기 로컬). 이미 오늘 그 시각이 지났으면 내일.
-  tz.TZDateTime _nextOccurrence(int hour) {
+  /// 다음 [hour]:[minute] 발사 시각 (기기 로컬). 오늘 그 시각이 지났으면 내일.
+  tz.TZDateTime _nextOccurrence(int hour, int minute) {
     final now = tz.TZDateTime.now(tz.local);
     var scheduled = tz.TZDateTime(
       tz.local,
@@ -181,6 +199,7 @@ class NotificationService {
       now.month,
       now.day,
       hour,
+      minute,
     );
     if (!scheduled.isAfter(now)) {
       scheduled = scheduled.add(const Duration(days: 1));

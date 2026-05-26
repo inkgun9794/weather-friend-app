@@ -248,3 +248,78 @@ assets/audio/overseas/
 ## 모르는 게 있으면
 
 핵심 파일들 (`worker/domain/`, `worker/adapters/`, `worker/usecases/`, `worker/main.py`) 읽으면 의도와 데이터 흐름 파악 가능. README는 `worker/README.md` 참고.
+
+---
+
+## 푸시 알림 — 플랫폼별 경로
+
+코드는 플랫폼 분기되어 있음 ([notification_coordinator.dart](client/lib/core/services/notification_coordinator.dart)):
+
+| 플랫폼 | 경로 | 상태 |
+|---|---|---|
+| Android | FCM 토픽 (서버 push) | 아래 2번만 끝내면 작동 |
+| iOS (현재) | 매일 5:05 / 21:05 로컬 알림 (recurring) | Apple Developer 가입 전까지 우회. OS가 매일 발사 — 워커가 늦어도 5분 마진 후엔 audio 준비돼 있음 |
+| iOS (APNs 키 발급 후) | FCM 토픽 | 1·3번 끝낸 뒤 [notification_coordinator.dart](client/lib/core/services/notification_coordinator.dart)의 `_isIosFcmReady = false`를 `true`로 바꾸면 자동 전환 |
+
+코드 변경은 끝. 아래 수동 단계는 Apple Developer 가입(1번)·Xcode 셋업(3번)을 제외하면 Android 작동에는 2번만 필요함.
+
+### 1. Firebase Console — APNs 인증 키 업로드 (iOS 필수)
+
+Apple Developer Portal에서:
+- **Certificates, Identifiers & Profiles → Keys → +**
+- "Apple Push Notifications service (APNs)" 체크 → Continue → 키 다운로드 (`.p8`)
+- Key ID와 Team ID 메모
+
+Firebase Console에서:
+- `weather-friend-92281` 프로젝트 → **Project settings → Cloud Messaging**
+- **Apple app configuration** → APNs Authentication Key → Upload
+  - `.p8` 파일, Key ID, Team ID 입력
+
+### 2. WIF Service Account에 FCM 권한 부여
+
+GitHub Actions가 FCM을 보내려면 WIF SA에 권한 필요:
+
+```bash
+PROJECT_ID=weather-friend-92281
+SA_EMAIL="<현재 vars.WIF_SERVICE_ACCOUNT 값>"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$SA_EMAIL" \
+  --role="roles/firebasecloudmessaging.admin"
+```
+
+(또는 Console: IAM → SA 선택 → +Grant access → `Firebase Cloud Messaging Admin`)
+
+### 3. Xcode — Push Notifications capability 활성화
+
+`client/ios/Runner.xcworkspace`를 Xcode로 열고:
+
+1. Runner target 선택 → **Signing & Capabilities** 탭
+2. **+ Capability** → **Push Notifications** 추가
+3. **+ Capability** → **Background Modes** 추가 → **Remote notifications** 체크
+4. Xcode가 `Runner.entitlements`를 자동 인식하고 `project.pbxproj`에 `CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements`를 추가함
+
+> 코드에서 미리 만들어 둔 `client/ios/Runner/Runner.entitlements`와 `Info.plist`의 `UIBackgroundModes`로 70% 끝나 있음. Xcode GUI에서 capability를 enable해야 pbxproj에 wiring이 들어가서 빌드 시 entitlements가 적용됨.
+
+### 4. 테스트
+
+**Android (FCM):**
+- 앱 빌드 → 온보딩에서 알림 권한 허용 → 캐릭터 선택 → 홈 화면 도달.
+- GitHub Actions를 workflow_dispatch로 `target_hour=5` 실행 → 곧 푸시 도착해야 함.
+- 캐릭터 변경 시 이전 캐릭터 토픽은 자동 unsubscribe (FcmService 로직).
+
+**iOS (Apple Developer 가입 전 — 로컬 알림 우회):**
+- 앱 빌드 → 온보딩에서 알림 권한 허용 → 캐릭터 선택 → 홈 화면 도달.
+- 매일 5:05 / 21:05에 OS가 자동으로 로컬 알림 발사 (앱 종료돼 있어도 OK).
+- 5분 마진을 둔 이유: GitHub Actions cron은 매 15분이고 가끔 dropped, 5:00 정각엔 데이터가 아직 없을 수 있음. 5:05엔 거의 항상 준비돼 있음.
+- 알림 본문은 앱이 마지막으로 foreground였을 때 sync한 transcript. 안 됐으면 fallback("오늘 날씨 브리핑이 준비됐어요"). 어차피 탭하면 앱에서 최신 데이터 fetch.
+
+**iOS (Apple Developer 가입 후 → FCM 전환):**
+1. 1번(APNs 키 업로드)·3번(Xcode capability) 끝낸 뒤
+2. [notification_coordinator.dart](client/lib/core/services/notification_coordinator.dart)의 `static const bool _isIosFcmReady = false;` → `true`로 변경
+3. 빌드 → Android와 동일하게 동작
+
+### 알려진 제약
+
+- `aps-environment`은 현재 `development`. App Store 배포 시 `production`으로 바꿔야 함 (Xcode가 빌드 모드에 따라 알아서 처리 가능).
+- 캐릭터 선택은 SharedPreferences에 영속화되지 않음 (별개 이슈). 매 launch마다 jiyoung 디폴트로 초기화되지만, FcmService는 마지막 구독 캐릭터를 별도로 추적해 중복 푸시를 방지.

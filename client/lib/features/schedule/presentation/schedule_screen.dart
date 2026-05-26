@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:weather_friend/core/services/fcm_service.dart';
 import 'package:weather_friend/core/services/notification_service.dart';
+import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 
 class ScheduleScreen extends ConsumerStatefulWidget {
   const ScheduleScreen({super.key});
@@ -20,18 +22,17 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   }
 
   Future<void> _refreshPermission() async {
-    final service = ref.read(notificationServiceProvider);
-    final ok = await service.hasPermission();
+    final ok = await ref.read(fcmServiceProvider).hasPermission();
     if (!mounted) return;
     setState(() => _hasPermission = ok);
   }
 
   Future<void> _requestPermission() async {
     setState(() => _busy = true);
-    final service = ref.read(notificationServiceProvider);
-    final ok = await service.requestPermissions();
+    final fcm = ref.read(fcmServiceProvider);
+    final ok = await fcm.requestPermissions();
     if (ok) {
-      await service.scheduleDailyBriefings();
+      await fcm.syncSubscriptions(ref.read(selectedCharacterProvider));
     }
     if (!mounted) return;
     setState(() {
@@ -41,18 +42,17 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     _toast(ok ? '알림이 켜졌어요' : '알림 권한이 거절됐어요');
   }
 
-  Future<void> _reschedule() async {
+  Future<void> _resync() async {
     setState(() => _busy = true);
-    final service = ref.read(notificationServiceProvider);
-    await service.scheduleDailyBriefings();
+    final fcm = ref.read(fcmServiceProvider);
+    await fcm.syncSubscriptions(ref.read(selectedCharacterProvider));
     if (!mounted) return;
     setState(() => _busy = false);
-    _toast('오전 5시·오후 9시 알림을 다시 예약했어요');
+    _toast('현재 캐릭터 토픽을 다시 구독했어요');
   }
 
   Future<void> _sendTest() async {
-    final service = ref.read(notificationServiceProvider);
-    await service.showTestNotification();
+    await ref.read(notificationServiceProvider).showTestNotification();
     _toast('테스트 알림을 보냈어요');
   }
 
@@ -91,9 +91,9 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           ),
           const Divider(height: 0),
           ListTile(
-            title: const Text('다시 예약'),
-            subtitle: const Text('최신 브리핑 본문으로 두 슬롯을 재예약해요'),
-            onTap: _busy || permission != true ? null : _reschedule,
+            title: const Text('토픽 재구독'),
+            subtitle: const Text('선택한 캐릭터의 morning/evening 토픽을 다시 구독'),
+            onTap: _busy || permission != true ? null : _resync,
             trailing: const Icon(Icons.refresh),
           ),
           const Divider(height: 0),
