@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:weather_friend/app/router/main_shell.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/core/utils/kst.dart';
 import 'package:weather_friend/features/briefing/domain/briefing.dart';
@@ -18,14 +19,20 @@ class ConversationScreen extends ConsumerWidget {
     final asyncBriefings = ref.watch(todayBriefingsProvider);
     final currentHour = currentHourKst();
 
+    // 하단 글래스 탭 뒤로 ListView가 흘러들어가도록 — 마지막 버블이 가려지지 않게
+    // 바 높이 + 시스템 safe area + 약간의 숨 공간만큼 ListView 바닥 패딩 확보.
+    final bottomInset =
+        kGlassNavBarHeight + MediaQuery.paddingOf(context).bottom + 16;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          '이전 메시지',
+          '메세지',
           style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.2),
         ),
         elevation: 0,
         scrolledUnderElevation: 0,
+        automaticallyImplyLeading: false,
       ),
       body: asyncBriefings.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -49,7 +56,7 @@ class ConversationScreen extends ConsumerWidget {
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(todayBriefingsProvider),
             child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, bottomInset),
               itemCount: entries.length,
               separatorBuilder: (_, _) => const SizedBox(height: 16),
               itemBuilder: (context, i) =>

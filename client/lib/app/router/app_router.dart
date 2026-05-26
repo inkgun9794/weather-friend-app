@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:weather_friend/app/router/main_shell.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_screen.dart';
 import 'package:weather_friend/features/briefing/presentation/conversation_screen.dart';
 import 'package:weather_friend/features/character/presentation/character_select_screen.dart';
@@ -24,14 +25,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(
-        path: '/',
-        builder: (_, _) => const BriefingScreen(),
+      // 하단바를 가지는 두 메인 탭. 각 브랜치가 자기 navigator를 가지므로
+      // 탭 사이를 오갈 때 스크롤/상태가 유지됨.
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) =>
+            MainShell(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/',
+                builder: (_, _) => const BriefingScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/messages',
+                builder: (_, _) => const ConversationScreen(),
+              ),
+            ],
+          ),
+        ],
       ),
-      GoRoute(
-        path: '/conversation',
-        builder: (_, _) => const ConversationScreen(),
-      ),
+      // 셸 바깥 — push하면 하단바를 덮는 전체 화면으로 뜸.
       GoRoute(
         path: '/onboarding',
         builder: (_, _) => const OnboardingScreen(),

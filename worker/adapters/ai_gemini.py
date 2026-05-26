@@ -13,9 +13,11 @@ from google import genai
 from google.genai import types
 
 from domain.briefing import (
+    HUMAN_VOICE_RULES,
     SEMANTIC_INSTRUCTIONS,
     BriefingType,
     DayForecast,
+    RainBlock,
 )
 from domain.character import Character
 
@@ -69,6 +71,25 @@ def _model_for(briefing_type: BriefingType) -> str:
     return _MODEL_HOURLY
 
 
+def _format_rain_blocks(blocks: tuple[RainBlock, ...]) -> str:
+    """비 블록을 의미 단위 자연어로 — LLM이 톤을 조절할 수 있게.
+
+    예: "9-10시 (2시간, 잠깐) / 14-19시 (6시간, 지속)"
+        "9시 (1시간, 잠깐)"
+        "없음"
+    """
+    if not blocks:
+        return "없음"
+    parts: list[str] = []
+    for b in blocks:
+        tone = "잠깐" if b.is_brief else "지속"
+        if b.length == 1:
+            parts.append(f"{b.start_hour}시 ({b.length}시간, {tone})")
+        else:
+            parts.append(f"{b.start_hour}-{b.end_hour}시 ({b.length}시간, {tone})")
+    return " / ".join(parts)
+
+
 def _weather_brief(
     briefing_type: BriefingType,
     hour: int,
@@ -81,8 +102,7 @@ def _weather_brief(
             f"【오늘({today.date}) 날씨】\n"
             f"- 전반: {today.overall_condition}\n"
             f"- 최고/최저: {today.high_c:.0f}°C / {today.low_c:.0f}°C\n"
-            f"- 강수 예상 시간대: "
-            f"{', '.join(f'{h}시' for h in today.rain_hours) or '없음'}\n"
+            f"- 비 블록: {_format_rain_blocks(today.rain_blocks)}\n"
         )
 
     if briefing_type == BriefingType.EVENING:
@@ -94,8 +114,7 @@ def _weather_brief(
             f"【내일({tomorrow.date}) 예보】\n"
             f"- 전반: {tomorrow.overall_condition}\n"
             f"- 최고/최저: {tomorrow.high_c:.0f}°C / {tomorrow.low_c:.0f}°C\n"
-            f"- 강수 예상 시간대: "
-            f"{', '.join(f'{h}시' for h in tomorrow.rain_hours) or '없음'}\n"
+            f"- 비 블록: {_format_rain_blocks(tomorrow.rain_blocks)}\n"
         )
 
     # HOURLY
@@ -131,7 +150,9 @@ class GeminiScriptGenerator:
             HOURLY 타입은 voice_script가 None.
         """
         semantic = SEMANTIC_INSTRUCTIONS[briefing_type].format(hour=hour)
-        system_instruction = f"{character.persona_prompt}\n\n{semantic}"
+        system_instruction = (
+            f"{character.persona_prompt}\n\n{HUMAN_VOICE_RULES}\n\n{semantic}"
+        )
         contents = _weather_brief(briefing_type, hour, today, tomorrow)
 
         config = types.GenerateContentConfig(

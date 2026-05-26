@@ -52,10 +52,10 @@ final todayBriefingsProvider = FutureProvider<Map<int, Briefing>>((ref) async {
   );
 });
 
-/// twoDayWeatherProvider를 wrap — kstDateProvider watch해서 자정에 새로 fetch.
+/// weatherBundleProvider를 wrap — kstDateProvider watch해서 자정에 새로 fetch.
 /// (open_meteo_client.dart의 raw provider는 그대로 두고, 여기서 시간 의존성 추가.)
-final reactiveTwoDayWeatherProvider = FutureProvider<TwoDayWeather>((ref) async {
+final reactiveWeatherBundleProvider = FutureProvider<WeatherBundle>((ref) async {
   ref.watch(kstDateProvider); // 자정에 새 fetch 트리거
-  ref.invalidate(twoDayWeatherProvider);
-  return ref.watch(twoDayWeatherProvider.future);
+  ref.invalidate(weatherBundleProvider);
+  return ref.watch(weatherBundleProvider.future);
 });

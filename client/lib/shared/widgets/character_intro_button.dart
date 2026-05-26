@@ -19,15 +19,12 @@ class CharacterIntroButton extends ConsumerWidget {
   final double size;
   final Color? color;
 
-  static const _baseUrl =
-      'https://inkgun9794.github.io/weather-friend-app/characters';
-
-  String get _url => '$_baseUrl/${charId.name}/intro.mp3';
+  String get _asset => 'assets/character_intros/${charId.name}.mp3';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final playing = ref.watch(currentlyPlayingProvider);
-    final isMe = playing == _url;
+    final isMe = playing == _asset;
     final tint = color ?? Theme.of(context).colorScheme.primary;
 
     return InkResponse(
@@ -38,9 +35,9 @@ class CharacterIntroButton extends ConsumerWidget {
           await service.pause();
           notifier.stop();
         } else {
-          notifier.start(_url);
+          notifier.start(_asset);
           try {
-            await service.playUrl(_url);
+            await service.playAsset(_asset);
           } catch (_) {
             notifier.stop();
           }

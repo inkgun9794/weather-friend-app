@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:weather_friend/app/router/main_shell.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/core/utils/kst.dart';
 import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
@@ -39,6 +40,7 @@ class BriefingScreen extends ConsumerWidget {
             child: Text('오류: $e', style: TextStyle(color: sky.ink)),
           ),
           data: (briefings) => SafeArea(
+            bottom: false,
             child: RefreshIndicator(
               onRefresh: () async => ref.invalidate(todayBriefingsProvider),
               child: CustomScrollView(
@@ -67,14 +69,8 @@ class BriefingScreen extends ConsumerWidget {
                     child: Consumer(
                       builder: (context, ref, _) {
                         final todayAsync = ref.watch(todayHourlyWeatherProvider);
-                        final tomorrowAsync = ref.watch(tomorrowHourlyWeatherProvider);
                         final todaySummaryAsync = ref.watch(todayDailySummaryProvider);
-                        final tomorrowSummaryAsync = ref.watch(tomorrowDailySummaryProvider);
                         final today = switch (todayAsync) {
-                          AsyncData(:final value) => value,
-                          _ => const <int, HourlyWeather>{},
-                        };
-                        final tomorrow = switch (tomorrowAsync) {
                           AsyncData(:final value) => value,
                           _ => const <int, HourlyWeather>{},
                         };
@@ -82,40 +78,28 @@ class BriefingScreen extends ConsumerWidget {
                           AsyncData(:final value) => value,
                           _ => null,
                         };
-                        final tomorrowSummary = switch (tomorrowSummaryAsync) {
-                          AsyncData(:final value) => value,
-                          _ => null,
-                        };
-                        return Column(
-                          children: [
-                            _TimelineSection(
-                              dateLabel: _todayLabel(),
-                              label: '오늘 날씨',
-                              summary: todaySummary?.shortLine(),
-                              sky: sky,
-                              briefings: briefings,
-                              hourlyWeather: today,
-                              currentHour: currentHour,
-                              scrollHour: currentHour,
-                              dimNonCurrent: true,
-                            ),
-                            _TimelineSection(
-                              dateLabel: _tomorrowLabel(),
-                              label: '내일 날씨',
-                              summary: tomorrowSummary?.shortLine(),
-                              sky: sky,
-                              briefings: const <int, Briefing>{},
-                              hourlyWeather: tomorrow,
-                              currentHour: -1,
-                              scrollHour: currentHour,
-                              dimNonCurrent: false,
-                            ),
-                          ],
+                        return _TimelineSection(
+                          dateLabel: _todayLabel(),
+                          label: '오늘 날씨',
+                          summary: todaySummary?.shortLine(),
+                          sky: sky,
+                          briefings: briefings,
+                          hourlyWeather: today,
+                          currentHour: currentHour,
                         );
                       },
                     ),
                   ),
-                  const SliverPadding(padding: EdgeInsets.only(bottom: 28)),
+                  SliverToBoxAdapter(child: _WeeklyForecastCard(sky: sky)),
+                  // 글래스 하단바 뒤로 컨텐츠가 흘러가도록 — 마지막 항목이 가려지지 않게
+                  // 바 높이 + 시스템 safe area + 약간의 숨 공간.
+                  SliverPadding(
+                    padding: EdgeInsets.only(
+                      bottom: kGlassNavBarHeight +
+                          MediaQuery.paddingOf(context).bottom +
+                          12,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -131,6 +115,19 @@ WeatherCondition _conditionFromString(String s) {
   if (s.contains('눈')) return WeatherCondition.snow;
   if (s.contains('흐') || s.contains('구름')) return WeatherCondition.cloudy;
   return WeatherCondition.clear;
+}
+
+IconData _weatherIconFor(WeatherCondition c) {
+  switch (c) {
+    case WeatherCondition.clear:
+      return Icons.wb_sunny;
+    case WeatherCondition.cloudy:
+      return Icons.cloud;
+    case WeatherCondition.rain:
+      return Icons.umbrella;
+    case WeatherCondition.snow:
+      return Icons.ac_unit;
+  }
 }
 
 WeatherCondition _conditionForCurrent(
@@ -169,9 +166,6 @@ List<Briefing> _mainHeroBriefings(Map<int, Briefing> briefings, int hour) {
 }
 
 String _todayLabel() => _formatDate(nowKst());
-
-String _tomorrowLabel() =>
-    _formatDate(nowKst().add(const Duration(days: 1)));
 
 String _formatDate(DateTime d) {
   const days = ['월', '화', '수', '목', '금', '토', '일'];
@@ -510,7 +504,7 @@ class _ConversationLink extends StatelessWidget {
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
-          onTap: () => context.push('/conversation'),
+          onTap: () => context.go('/messages'),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
@@ -538,6 +532,9 @@ class _ConversationLink extends StatelessWidget {
   }
 }
 
+/// 아이폰 날씨앱 스타일 — 단일 글래스 컨테이너 안에 24시간이 가로로 흐름.
+/// 시간마다 따로 카드를 두지 않고, 현재 hour는 세로 알약(pill) 배경 + "지금"
+/// 라벨로 강조한다. (이전엔 시간마다 86px 라운드 카드 + 박스섀도우 halo였음.)
 class _TimelineSection extends StatefulWidget {
   const _TimelineSection({
     required this.dateLabel,
@@ -547,8 +544,6 @@ class _TimelineSection extends StatefulWidget {
     required this.briefings,
     required this.hourlyWeather,
     required this.currentHour,
-    required this.scrollHour,
-    required this.dimNonCurrent,
   });
 
   final String dateLabel;
@@ -557,18 +552,21 @@ class _TimelineSection extends StatefulWidget {
   final SkyPalette sky;
   final Map<int, Briefing> briefings;
   final Map<int, HourlyWeather> hourlyWeather;
-  final int currentHour; // 칩 'now' 강조용. 내일 섹션은 -1로 비활성.
-  final int scrollHour;  // 초기 스크롤 위치. 오늘/내일 모두 현재 hour로 맞춤.
-  final bool dimNonCurrent;
+  final int currentHour;
 
   @override
   State<_TimelineSection> createState() => _TimelineSectionState();
 }
 
 class _TimelineSectionState extends State<_TimelineSection> {
-  // _HourChip width(86) + separator(8) = 94px / chip
-  static const double _chipPitch = 94.0;
-  static const double _listLeftPad = 20.0;
+  // 슬롯 폭(56) + 갭(2) = 58px / slot. 슬롯엔 개별 보더가 없어서
+  // 카드형(86px)보다 좁아도 시각적으로 답답하지 않다.
+  static const double _slotWidth = 56.0;
+  static const double _slotGap = 2.0;
+  static const double _slotPitch = _slotWidth + _slotGap;
+  static const double _stripHPad = 10.0;
+  // 컨테이너 좌우 마진 16씩 → strip viewport = screenW - 32.
+  static const double _containerHMargin = 16.0;
 
   final ScrollController _controller = ScrollController();
   bool _didInitialJump = false;
@@ -581,10 +579,11 @@ class _TimelineSectionState extends State<_TimelineSection> {
 
   void _jumpToCurrent() {
     if (_didInitialJump || !_controller.hasClients) return;
-    final screenW = MediaQuery.of(context).size.width;
-    final hour = widget.scrollHour.clamp(0, 23);
-    // 칩이 화면 중앙에 오도록.
-    final raw = _listLeftPad + hour * _chipPitch - (screenW - _chipPitch) / 2;
+    final viewportW =
+        MediaQuery.of(context).size.width - (_containerHMargin * 2);
+    final hour = widget.currentHour.clamp(0, 23);
+    // 슬롯이 strip viewport 중앙에 오도록.
+    final raw = _stripHPad + hour * _slotPitch - (viewportW - _slotWidth) / 2;
     final maxScroll = _controller.position.maxScrollExtent;
     _controller.jumpTo(raw.clamp(0.0, maxScroll));
     _didInitialJump = true;
@@ -598,99 +597,147 @@ class _TimelineSectionState extends State<_TimelineSection> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 2),
-          child: Text(
-            widget.dateLabel,
-            style: TextStyle(
-              color: widget.sky.inkSoft,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.1,
+    final sky = widget.sky;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        _containerHMargin,
+        18,
+        _containerHMargin,
+        0,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.22),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
             ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                widget.label,
-                style: TextStyle(
-                  color: widget.sky.ink,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.1,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 헤더: 날짜 + 라벨 + 요약. 컨테이너 안쪽 패딩.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.dateLabel,
+                        style: TextStyle(
+                          color: sky.inkSoft,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.1,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            widget.label,
+                            style: TextStyle(
+                              color: sky.ink,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.1,
+                            ),
+                          ),
+                          if (widget.summary != null) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                widget.summary!,
+                                style: TextStyle(
+                                  color: sky.inkSoft,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: -0.1,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              if (widget.summary != null) ...[
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.summary!,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w500,
-                      color: widget.sky.inkSoft,
-                      letterSpacing: -0.1,
+                // 헤더와 strip을 가르는 얇은 디바이더 (잉크 8% — 거의 안 보이지만
+                // 시각적 구분은 됨).
+                Container(
+                  height: 1,
+                  margin: const EdgeInsets.symmetric(horizontal: 12),
+                  color: sky.ink.withValues(alpha: 0.08),
+                ),
+                // 24시간 가로 strip — 슬롯 사이엔 보더 없이 2px 갭만.
+                // 높이는 isNow 슬롯(아이콘 24 + 폰트 19 + 알약 패딩)을 여유 있게
+                // 수용할 만큼.
+                SizedBox(
+                  height: 132,
+                  child: ListView.builder(
+                    controller: _controller,
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: _stripHPad,
+                      vertical: 8,
                     ),
-                    overflow: TextOverflow.ellipsis,
+                    itemCount: 24,
+                    itemBuilder: (context, hour) => _HourSlot(
+                      hour: hour,
+                      briefing: widget.briefings[hour],
+                      hourly: widget.hourlyWeather[hour],
+                      sky: sky,
+                      isNow: hour == widget.currentHour,
+                      isPast: hour < widget.currentHour,
+                      width: _slotWidth,
+                      rightGap: _slotGap,
+                    ),
                   ),
                 ),
               ],
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 130,
-          child: ListView.separated(
-            controller: _controller,
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: _listLeftPad),
-            itemCount: 24,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
-            itemBuilder: (context, hour) => _HourChip(
-              hour: hour,
-              briefing: widget.briefings[hour],
-              hourly: widget.hourlyWeather[hour],
-              isNow: hour == widget.currentHour,
-              isPast: widget.dimNonCurrent && hour < widget.currentHour,
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }
 
-class _HourChip extends StatelessWidget {
-  const _HourChip({
+/// 연결형 strip의 한 시간 칸. 개별 카드 보더 없이 부모 글래스 위에 그냥 얹힌다.
+/// 현재 hour만 알약(pill) 배경 + "지금" 라벨 + 굵은 텍스트로 확실히 튀게.
+class _HourSlot extends StatelessWidget {
+  const _HourSlot({
     required this.hour,
     required this.briefing,
     required this.hourly,
+    required this.sky,
     required this.isNow,
     required this.isPast,
+    required this.width,
+    required this.rightGap,
   });
 
   final int hour;
   final Briefing? briefing;
   final HourlyWeather? hourly;
+  final SkyPalette sky;
   final bool isNow;
   final bool isPast;
+  final double width;
+  final double rightGap;
 
   @override
   Widget build(BuildContext context) {
-    final sky = skyFor(hour);
     final hasAudio = briefing?.audioUrl != null;
     final charId = briefing != null
         ? Character.parseId(briefing!.characterId)
         : null;
-    // Briefing 데이터(메시지 있는 hour) 우선, 없으면 Open-Meteo hourly로 fallback
+    // Briefing 데이터(메시지 있는 hour) 우선, 없으면 Open-Meteo hourly로 fallback.
     final conditionStr = briefing?.weatherSnapshot.condition ?? hourly?.condition;
     final cond = conditionStr != null
         ? _conditionFromString(conditionStr)
@@ -698,101 +745,250 @@ class _HourChip extends StatelessWidget {
     final temp = briefing?.weatherSnapshot.temperatureC.round()
         ?? hourly?.temperatureC.round();
 
-    return Opacity(
-      opacity: isPast ? 0.7 : 1.0,
-      child: Container(
-        width: 86,
-        padding: const EdgeInsets.fromLTRB(8, 10, 8, 12),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [sky.top, sky.bot],
+    final ink = sky.ink;
+    final label = isNow ? '지금' : _hourLabel(hour);
+
+    // 슬롯 본체. isNow면 알약 배경 + 보더로 감싼다.
+    final slot = Container(
+      width: width,
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+      decoration: isNow
+          ? BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
+            )
+          : null,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: ink,
+              fontSize: isNow ? 11.5 : 11,
+              fontWeight: isNow ? FontWeight.w800 : FontWeight.w600,
+              letterSpacing: -0.1,
+            ),
           ),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-          boxShadow: isNow
-              ? [
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.95),
-                    spreadRadius: 2,
-                  ),
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
-                    blurRadius: 14,
-                    offset: const Offset(0, 6),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-        ),
-        child: Stack(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
+          const SizedBox(height: 8),
+          Icon(_weatherIconFor(cond), color: ink, size: isNow ? 24 : 22),
+          const SizedBox(height: 6),
+          Text(
+            temp != null ? '$temp°' : '—',
+            style: TextStyle(
+              color: ink,
+              fontSize: isNow ? 19 : 17,
+              fontWeight: isNow ? FontWeight.w800 : FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 4),
+          // 음성 보유 표시 — 작은 점으로. 슬롯 높이를 일정하게 유지하려고
+          // 점이 없어도 같은 크기 영역을 차지.
+          SizedBox(
+            height: 6,
+            child: hasAudio && charId != null
+                ? Center(
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: visualFor(charId).color,
+                      ),
+                    ),
+                  )
+                : null,
+          ),
+        ],
+      ),
+    );
+
+    return Padding(
+      padding: EdgeInsets.only(right: rightGap),
+      // 지난 시간은 살짝 디밍. 현재(isNow)는 알약 강조가 우선이라 디밍 X.
+      child: Opacity(
+        opacity: isPast && !isNow ? 0.55 : 1.0,
+        child: slot,
+      ),
+    );
+  }
+}
+
+/// 주간 카드 — 오늘부터 다음 주 월요일까지를 한 행 한 일로 보여준다.
+/// 각 행은 [요일 라벨 | 오전 (아이콘+기온) | 오후 (아이콘+기온)] 구성.
+/// 오늘 행은 라벨 "오늘" + bolder weight로 살짝 강조.
+class _WeeklyForecastCard extends ConsumerWidget {
+  const _WeeklyForecastCard({required this.sky});
+
+  final SkyPalette sky;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(weekDaysProvider);
+    final days = switch (async) {
+      AsyncData(:final value) => value,
+      _ => const <WeekDay>[],
+    };
+    if (days.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.22),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _hourLabel(hour),
-                  style: TextStyle(
-                    color: sky.ink,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                // 헤더 — timeline section과 같은 톤.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                  child: Text(
+                    '주간 날씨',
+                    style: TextStyle(
+                      color: sky.ink,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.1,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 6),
-                Icon(_iconFor(cond), color: sky.ink, size: 22),
-                const SizedBox(height: 4),
-                Text(
-                  temp != null ? '$temp°' : '—',
-                  style: TextStyle(
-                    color: sky.ink,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                    letterSpacing: -0.4,
-                  ),
+                // 컬럼 헤더 (오전/오후) — 한 번만 표시해서 각 행 의미 명확.
+                _WeekColumnHeaders(sky: sky),
+                Container(
+                  height: 1,
+                  margin: const EdgeInsets.symmetric(horizontal: 12),
+                  color: sky.ink.withValues(alpha: 0.08),
                 ),
+                for (var i = 0; i < days.length; i++) ...[
+                  _WeekDayRow(
+                    day: days[i],
+                    sky: sky,
+                    isToday: i == 0,
+                  ),
+                  // 행 사이 미세 디바이더 (마지막 행 뒤엔 없음).
+                  if (i < days.length - 1)
+                    Container(
+                      height: 1,
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      color: sky.ink.withValues(alpha: 0.05),
+                    ),
+                ],
+                const SizedBox(height: 8),
               ],
             ),
-            if (hasAudio && charId != null)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Container(
-                  width: 18,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: visualFor(charId).color,
-                  ),
-                  child: const Icon(
-                    Icons.play_arrow,
-                    color: Colors.white,
-                    size: 11,
-                  ),
-                ),
-              ),
-          ],
+          ),
         ),
       ),
     );
   }
+}
 
-  IconData _iconFor(WeatherCondition c) {
-    switch (c) {
-      case WeatherCondition.clear:
-        return Icons.wb_sunny;
-      case WeatherCondition.cloudy:
-        return Icons.cloud;
-      case WeatherCondition.rain:
-        return Icons.umbrella;
-      case WeatherCondition.snow:
-        return Icons.ac_unit;
-    }
+class _WeekColumnHeaders extends StatelessWidget {
+  const _WeekColumnHeaders({required this.sky});
+
+  final SkyPalette sky;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+      color: sky.inkSoft,
+      fontSize: 10.5,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.6,
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: Row(
+        children: [
+          // 첫 칸 너비는 _WeekDayRow의 day label 칸과 맞춰서 정렬.
+          const SizedBox(width: 52),
+          Expanded(child: Center(child: Text('오전', style: style))),
+          Expanded(child: Center(child: Text('오후', style: style))),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeekDayRow extends StatelessWidget {
+  const _WeekDayRow({
+    required this.day,
+    required this.sky,
+    required this.isToday,
+  });
+
+  final WeekDay day;
+  final SkyPalette sky;
+  final bool isToday;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = isToday ? '오늘' : _weekdayChar(day.weekday);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 52,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: sky.ink,
+                fontSize: isToday ? 14 : 13.5,
+                fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                letterSpacing: -0.1,
+              ),
+            ),
+          ),
+          Expanded(child: _HalfCell(summary: day.morning, sky: sky)),
+          Expanded(child: _HalfCell(summary: day.afternoon, sky: sky)),
+        ],
+      ),
+    );
+  }
+
+  static String _weekdayChar(int weekday) {
+    // DateTime.weekday: 1=Mon … 7=Sun.
+    const chars = ['월', '화', '수', '목', '금', '토', '일'];
+    return chars[(weekday - 1) % 7];
+  }
+}
+
+class _HalfCell extends StatelessWidget {
+  const _HalfCell({required this.summary, required this.sky});
+
+  final DayHalfSummary summary;
+  final SkyPalette sky;
+
+  @override
+  Widget build(BuildContext context) {
+    final cond = _conditionFromString(summary.condition);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(_weatherIconFor(cond), color: sky.ink, size: 18),
+        const SizedBox(width: 8),
+        Text(
+          '${summary.tempC}°',
+          style: TextStyle(
+            color: sky.ink,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            fontFeatures: const [FontFeature.tabularFigures()],
+            letterSpacing: -0.2,
+          ),
+        ),
+      ],
+    );
   }
 }

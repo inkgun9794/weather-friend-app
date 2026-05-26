@@ -10,7 +10,7 @@ import logging
 
 import httpx
 
-from domain.briefing import DayForecast, WeatherSnapshot
+from domain.briefing import DayForecast, RainBlock, WeatherSnapshot
 
 log = logging.getLogger(__name__)
 
@@ -116,7 +116,6 @@ def _parse(data: dict, city: str) -> tuple[DayForecast, DayForecast]:
         hour_start = day_idx * 24
 
         snapshots: list[WeatherSnapshot] = []
-        rain_hours: list[int] = []
         for h in range(24):
             i = hour_start + h
             s = WeatherSnapshot(
@@ -129,8 +128,6 @@ def _parse(data: dict, city: str) -> tuple[DayForecast, DayForecast]:
                 humidity=int(hourly["relative_humidity_2m"][i]),
             )
             snapshots.append(s)
-            if s.precipitation_prob >= 60:
-                rain_hours.append(h)
 
         days.append(
             DayForecast(
@@ -139,9 +136,29 @@ def _parse(data: dict, city: str) -> tuple[DayForecast, DayForecast]:
                 high_c=float(daily["temperature_2m_max"][day_idx]),
                 low_c=float(daily["temperature_2m_min"][day_idx]),
                 overall_condition=_condition_text(int(daily["weather_code"][day_idx])),
-                rain_hours=tuple(rain_hours),
+                rain_blocks=_rain_blocks_from(snapshots),
                 hourly=tuple(snapshots),
             )
         )
 
     return days[0], days[1]
+
+
+def _rain_blocks_from(snapshots: list[WeatherSnapshot]) -> tuple[RainBlock, ...]:
+    """precipitation_prob ≥ 60인 시간들을 연속 블록으로 묶음.
+
+    예: [9, 10] + [14, 15, 16, 17, 18, 19] → 두 블록
+    (각각 "잠깐"(2시간) / "지속"(6시간)으로 분류된다.)
+    """
+    blocks: list[RainBlock] = []
+    start: int | None = None
+    for s in snapshots:
+        is_rain = s.precipitation_prob >= 60
+        if is_rain and start is None:
+            start = s.hour
+        elif not is_rain and start is not None:
+            blocks.append(RainBlock(start_hour=start, end_hour=s.hour - 1))
+            start = None
+    if start is not None:
+        blocks.append(RainBlock(start_hour=start, end_hour=snapshots[-1].hour))
+    return tuple(blocks)

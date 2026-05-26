@@ -27,11 +27,10 @@ void main() {
           todayHourlyWeatherProvider.overrideWith(
             (ref) => Future.value(<int, HourlyWeather>{}),
           ),
-          tomorrowHourlyWeatherProvider.overrideWith(
-            (ref) => Future.value(<int, HourlyWeather>{}),
-          ),
           todayDailySummaryProvider.overrideWith((ref) => Future.value(null)),
-          tomorrowDailySummaryProvider.overrideWith((ref) => Future.value(null)),
+          weekDaysProvider.overrideWith(
+            (ref) => Future.value(const <WeekDay>[]),
+          ),
         ],
         child: const WeatherFriendApp(),
       ),
