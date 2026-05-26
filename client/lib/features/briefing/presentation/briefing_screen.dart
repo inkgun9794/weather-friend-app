@@ -9,6 +9,7 @@ import 'package:weather_friend/core/utils/kst.dart';
 import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
 import 'package:weather_friend/features/briefing/domain/briefing.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
+import 'package:weather_friend/features/briefing/presentation/widgets/ultra_short_section.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
 import 'package:weather_friend/features/location/data/selected_city_provider.dart';
 import 'package:weather_friend/shared/widgets/audio_bubble.dart';
@@ -67,6 +68,8 @@ class BriefingScreen extends ConsumerWidget {
                     // "이전 메시지 보기" 버튼 — 오늘 사이클에 메시지가 하나라도 있을 때만.
                     if (briefings.isNotEmpty)
                       SliverToBoxAdapter(child: _ConversationLink(sky: sky)),
+                    // 초단기 6시간 — KMA 데이터 있을 때만 자동 표시. OpenMeteo 폴백 시 숨김.
+                    SliverToBoxAdapter(child: UltraShortSection(sky: sky)),
                     SliverToBoxAdapter(
                       child: Consumer(
                         builder: (context, ref, _) {

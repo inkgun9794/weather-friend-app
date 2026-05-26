@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:weather_friend/core/utils/kst.dart';
+import 'package:weather_friend/features/briefing/data/weather_facade.dart'
+    show weatherFacadeProvider;
 
 /// Open-Meteo는 무료·무제한·인증 X. worker가 사용하는 것과 동일한 endpoint.
 /// 클라이언트가 직접 호출해서:
@@ -76,17 +78,36 @@ class WeekDay {
   final DayPartSummary evening;
 }
 
+/// 초단기 6시간 예측 — KMA만 제공. OpenMeteo 폴백 시 null.
+/// "초단기" 섹션 카드 + (선택) 비구름 지도용 데이터의 토대.
+class UltraShortForecast {
+  const UltraShortForecast({
+    required this.baseTime,
+    required this.hours,
+  });
+
+  /// 발표시각 (해당 데이터 정확도/신선도 표시용).
+  final DateTime baseTime;
+
+  /// 발표 +1~+6시간, 1시간 간격 6개 슬롯.
+  final List<HourlyWeather> hours;
+}
+
 /// 단일 API 호출로 받는 묶음. 화면별로 필요한 부분만 derived provider로 꺼냄.
 class WeatherBundle {
   const WeatherBundle({
     required this.today,
     required this.todaySummary,
     required this.weekDays,
+    this.ultraShort,
   });
 
   final Map<int, HourlyWeather> today;
   final DailySummary? todaySummary;
   final List<WeekDay> weekDays;
+
+  /// 초단기 6시간 — KMA에서 fetch 성공 시만 채워짐. 없으면 UI 섹션 숨김.
+  final UltraShortForecast? ultraShort;
 }
 
 // WMO weather code → 한국어. worker/adapters/weather_open_meteo.py와 정합.
@@ -288,9 +309,11 @@ final openMeteoClientProvider = Provider<OpenMeteoClient>((ref) {
   return OpenMeteoClient(ref.watch(httpClientProvider));
 });
 
+// KMA Firestore 캐시 우선 → 실패 시 OpenMeteo 자동 폴백.
+// 폴백 로직은 weather_facade.dart의 WeatherFacade가 담당.
 final weatherBundleProvider = FutureProvider<WeatherBundle>((ref) async {
-  final client = ref.watch(openMeteoClientProvider);
-  return client.fetchBundle();
+  final facade = ref.watch(weatherFacadeProvider);
+  return facade.fetchBundle();
 });
 
 final todayHourlyWeatherProvider = FutureProvider<Map<int, HourlyWeather>>((ref) async {
