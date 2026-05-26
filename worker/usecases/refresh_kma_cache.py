@@ -1,8 +1,8 @@
 """KMA 캐시 갱신 유스케이스.
 
-두 종류의 갱신 흐름:
-- `refresh_all(city_ids)`         — 단기 + 초단기 + 중기 (1시간 워크플로용)
-- `refresh_ultra_only(city_ids)`  — 초단기만 (10분 워크플로용)
+두 종류의 갱신 흐름 (호출량 중복 방지):
+- `refresh_short_and_mid(city_ids)` — 단기 + 중기 (base 워크플로, 1시간 주기)
+- `refresh_ultra_only(city_ids)`    — 초단기만 (grid 워크플로, 30분 주기)
 
 발표시각 계산도 여기서 (어댑터는 순수 호출만).
 """
@@ -89,16 +89,16 @@ def latest_ultra_base(now: datetime | None = None) -> tuple[str, str]:
 # ────────────────────────────────────────────────────────────────────────
 
 
-async def refresh_all(
+async def refresh_short_and_mid(
     city_ids: list[str],
     project_id: str,
 ) -> None:
-    """단기 + 초단기 + 중기 전체 갱신. 1시간 워크플로용."""
+    """단기 + 중기 갱신. 초단기는 별도 워크플로(refresh_ultra_only)에서 처리하여
+    호출 중복 방지. base 워크플로 (매 1시간) 용도."""
     store = KmaCacheStore(project_id=project_id)
     try:
         await asyncio.gather(
             _refresh_short(city_ids, store),
-            _refresh_ultra(city_ids, store),
             _refresh_mid(city_ids, store),
         )
     finally:

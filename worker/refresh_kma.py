@@ -1,8 +1,8 @@
 """KMA 캐시 갱신 entry point.
 
 Usage:
-    uv run python refresh_kma.py --mode ultra   # 초단기만 (10분 워크플로)
-    uv run python refresh_kma.py --mode full    # 단기+초단기+중기 (30분 또는 1시간 워크플로)
+    uv run python refresh_kma.py --mode ultra   # 초단기만 (grid 워크플로, 30분)
+    uv run python refresh_kma.py --mode base    # 단기+중기 (base 워크플로, 1시간)
 
 Required env vars:
 - KMA_OPENAPI_KEY  : data.go.kr 키 (URL-encoded 그대로)
@@ -17,8 +17,8 @@ import asyncio
 import logging
 import os
 
-from config import CITIES
-from usecases.refresh_kma_cache import refresh_all, refresh_ultra_only
+from domain.locations import CITIES_KMA
+from usecases.refresh_kma_cache import refresh_short_and_mid, refresh_ultra_only
 
 
 def _setup_logging() -> None:
@@ -33,24 +33,26 @@ def _setup_logging() -> None:
 
 async def _amain() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["ultra", "full"], required=True)
+    parser.add_argument("--mode", choices=["ultra", "base"], required=True)
     parser.add_argument(
         "--cities",
-        default=",".join(CITIES),
-        help="comma-separated city ids (default: from config.CITIES)",
+        default="",
+        help="comma-separated city ids. 빈 값이면 CITIES_KMA 전체.",
     )
     args = parser.parse_args()
 
     _setup_logging()
     project_id = os.environ.get("GCP_PROJECT_ID", "weather-friend-92281")
     city_ids = [c.strip() for c in args.cities.split(",") if c.strip()]
+    if not city_ids:
+        city_ids = list(CITIES_KMA.keys())
 
     log = logging.getLogger(__name__)
     log.info("KMA cache refresh — mode=%s cities=%s project=%s",
              args.mode, city_ids, project_id)
 
-    if args.mode == "full":
-        await refresh_all(city_ids, project_id)
+    if args.mode == "base":
+        await refresh_short_and_mid(city_ids, project_id)
     else:
         await refresh_ultra_only(city_ids, project_id)
 

@@ -1,18 +1,18 @@
-name: Refresh KMA cache (full)
+name: Refresh KMA cache (base — short + mid)
 
-# 단기 + 중기 + 초단기 갱신. 매 30분 (정시 cron이 dropped 돼도 두 번 시도하므로 안전).
-# 단기는 3시간마다, 중기는 6시간마다 발표라 30분 주기로도 충분.
+# 단기 + 중기 갱신. 매 1시간 정시 (:05). 초단기는 별도 grid 워크플로에서 처리.
+# 단기는 3시간마다, 중기는 6시간마다 발표라 1시간 주기면 충분.
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '5 * * * *'
   workflow_dispatch:
     inputs:
       cities:
-        description: 'Cities (comma-separated). 기본: seoul'
+        description: 'Cities (comma-separated). 비우면 전국 광역시·도 17개 전체.'
         required: false
         type: string
-        default: 'seoul'
+        default: ''
 
 permissions:
   id-token: write   # OIDC for GCP WIF
@@ -50,7 +50,7 @@ jobs:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
           service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
 
-      - name: Refresh KMA cache (full)
+      - name: Refresh KMA cache (base — short + mid)
         working-directory: worker
         env:
           KMA_OPENAPI_KEY: ${{ secrets.KMA_OPENAPI_KEY }}
@@ -58,5 +58,5 @@ jobs:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: |
           uv run python refresh_kma.py \
-            --mode full \
-            --cities "${{ inputs.cities || 'seoul' }}"
+            --mode base \
+            --cities "${{ inputs.cities }}"

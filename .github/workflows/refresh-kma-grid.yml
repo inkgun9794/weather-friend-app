@@ -1,18 +1,19 @@
 name: Refresh KMA cache (ultra-short only)
 
-# 초단기예보만 매 10분 갱신. 카드용 6시간 예측 데이터.
-# 단기/중기는 별도 워크플로 (refresh-kma-base.yml) 가 매 30분 갱신.
+# 초단기예보만 매 30분 갱신. 카드용 6시간 예측 데이터.
+# 184개 도시 캐싱이라 10분 주기는 한도 초과 → 30분으로 조정.
+# 단기/중기는 별도 워크플로 (refresh-kma-base.yml).
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '*/30 * * * *'
   workflow_dispatch:
     inputs:
       cities:
-        description: 'Cities (comma-separated). 기본: seoul'
+        description: 'Cities (comma-separated). 비우면 전국 광역시·도 17개 전체.'
         required: false
         type: string
-        default: 'seoul'
+        default: ''
 
 permissions:
   id-token: write   # OIDC for GCP WIF
@@ -59,4 +60,4 @@ jobs:
         run: |
           uv run python refresh_kma.py \
             --mode ultra \
-            --cities "${{ inputs.cities || 'seoul' }}"
+            --cities "${{ inputs.cities }}"
