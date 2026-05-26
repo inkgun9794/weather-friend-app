@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Android 12+ 백업/이전(transfer) 동작 정책.
+
+전부 차단 — 이 앱은 거의 stateless이고 SharedPreferences가
+복원되면 FCM 토큰과 last-subscribed character 정보가 stale 상태로 살아남아
+새 install의 토픽 구독 sync를 깨뜨림 ([fcm_service.dart]의 idempotent 분기 참고).
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

@@ -911,9 +911,10 @@ class _WeekColumnHeaders extends StatelessWidget {
       child: Row(
         children: [
           // 첫 칸 너비는 _WeekDayRow의 day label 칸과 맞춰서 정렬.
-          const SizedBox(width: 52),
+          const SizedBox(width: 44),
           Expanded(child: Center(child: Text('오전', style: style))),
           Expanded(child: Center(child: Text('오후', style: style))),
+          Expanded(child: Center(child: Text('저녁', style: style))),
         ],
       ),
     );
@@ -939,7 +940,7 @@ class _WeekDayRow extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 52,
+            width: 44,
             child: Text(
               label,
               style: TextStyle(
@@ -950,8 +951,9 @@ class _WeekDayRow extends StatelessWidget {
               ),
             ),
           ),
-          Expanded(child: _HalfCell(summary: day.morning, sky: sky)),
-          Expanded(child: _HalfCell(summary: day.afternoon, sky: sky)),
+          Expanded(child: _PartCell(summary: day.morning, sky: sky)),
+          Expanded(child: _PartCell(summary: day.afternoon, sky: sky)),
+          Expanded(child: _PartCell(summary: day.evening, sky: sky)),
         ],
       ),
     );
@@ -964,10 +966,10 @@ class _WeekDayRow extends StatelessWidget {
   }
 }
 
-class _HalfCell extends StatelessWidget {
-  const _HalfCell({required this.summary, required this.sky});
+class _PartCell extends StatelessWidget {
+  const _PartCell({required this.summary, required this.sky});
 
-  final DayHalfSummary summary;
+  final DayPartSummary summary;
   final SkyPalette sky;
 
   @override
@@ -977,12 +979,12 @@ class _HalfCell extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(_weatherIconFor(cond), color: sky.ink, size: 18),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         Text(
           '${summary.tempC}°',
           style: TextStyle(
             color: sky.ink,
-            fontSize: 14,
+            fontSize: 13.5,
             fontWeight: FontWeight.w600,
             fontFeatures: const [FontFeature.tabularFigures()],
             letterSpacing: -0.2,

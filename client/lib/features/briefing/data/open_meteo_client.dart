@@ -46,28 +46,34 @@ class DailySummary {
   }
 }
 
-/// 하루의 절반(오전/오후) 요약. 주간 카드에 두 칸으로 보여줌.
+/// 하루를 3구간(오전/오후/저녁)으로 쪼갠 한 칸의 요약.
 /// - condition: 한국어 텍스트. 윈도우 내 가장 심한 hour의 코드 기준.
 ///   (예: 오후 14~17시 중 한 시간이라도 비면 "비"로 표시 — 우산 챙길지 결정에 유의미.)
 /// - tempC: 윈도우 내 시간들 평균 (정수 반올림).
-class DayHalfSummary {
-  const DayHalfSummary({required this.condition, required this.tempC});
+class DayPartSummary {
+  const DayPartSummary({required this.condition, required this.tempC});
   final String condition;
   final int tempC;
 }
 
-/// 주간 카드의 한 행. 오전(6-11) / 오후(12-17) 요약을 들고 있음.
+/// 주간 카드의 한 행. 하루를 3구간으로 나눠서 표시.
+/// - morning   : 06~11시 (6시간, KST)
+/// - afternoon : 12~17시 (6시간, KST)
+/// - evening   : 18~23시 (6시간, KST)
+/// 새벽(0~5시)은 카드에서 의도적으로 뺀다 — 사용자가 행동하는 시간대만.
 class WeekDay {
   const WeekDay({
     required this.date,
     required this.weekday,
     required this.morning,
     required this.afternoon,
+    required this.evening,
   });
   final String date;     // ISO "2026-05-26"
   final int weekday;     // DateTime.weekday: 1=Mon, 7=Sun
-  final DayHalfSummary morning;
-  final DayHalfSummary afternoon;
+  final DayPartSummary morning;
+  final DayPartSummary afternoon;
+  final DayPartSummary evening;
 }
 
 /// 단일 API 호출로 받는 묶음. 화면별로 필요한 부분만 derived provider로 꺼냄.
@@ -191,7 +197,7 @@ class OpenMeteoClient {
       );
     }
 
-    // 주간 카드 — 각 일을 오전(6-11)/오후(12-17)로 분리해서 대표값 뽑음.
+    // 주간 카드 — 각 일을 오전(6-11)/오후(12-17)/저녁(18-23)로 분리해서 대표값 뽑음.
     final weekDays = <WeekDay>[];
     for (var d = 0; d < dates.length; d++) {
       final dateStr = dates[d].toString();
@@ -200,8 +206,9 @@ class OpenMeteoClient {
         WeekDay(
           date: dateStr,
           weekday: dt.weekday,
-          morning: _halfSummary(temps, codes, d, 6, 11),
-          afternoon: _halfSummary(temps, codes, d, 12, 17),
+          morning: _partSummary(temps, codes, d, 6, 11),
+          afternoon: _partSummary(temps, codes, d, 12, 17),
+          evening: _partSummary(temps, codes, d, 18, 23),
         ),
       );
     }
@@ -213,10 +220,10 @@ class OpenMeteoClient {
     );
   }
 
-  /// dayIdx번째 날의 [startHour, endHour] 구간을 오전/오후 한 칸으로 요약.
+  /// dayIdx번째 날의 [startHour, endHour] 구간을 한 칸으로 요약.
   /// 기온은 평균, 컨디션은 가장 심한 hour의 코드 (소나기 한 시간이라도 있으면
   /// "비"로 잡혀서 사용자가 알아챌 수 있게).
-  DayHalfSummary _halfSummary(
+  DayPartSummary _partSummary(
     List temps,
     List codes,
     int dayIdx,
@@ -240,7 +247,7 @@ class OpenMeteoClient {
         worstCode = code;
       }
     }
-    return DayHalfSummary(
+    return DayPartSummary(
       condition: _weatherCodeKo[worstCode] ?? '알 수 없음',
       tempC: count > 0 ? (tempSum / count).round() : 0,
     );
