@@ -15,6 +15,8 @@ import zoneinfo
 from datetime import datetime, timedelta
 
 from adapters.kma_openapi import (
+    KmaShortForecast,
+    KmaShortHour,
     fetch_mid_land_forecast,
     fetch_mid_temp_forecast,
     fetch_short_term_forecast,
@@ -53,6 +55,14 @@ def latest_short_base(now: datetime | None = None) -> tuple[str, str]:
             return t.strftime("%Y%m%d"), f"{h:02d}00"
     y = t - timedelta(days=1)
     return y.strftime("%Y%m%d"), "2300"
+
+
+def yesterday_last_short_base(now: datetime | None = None) -> tuple[str, str]:
+    """어제 23시 발표 — 오늘 0시부터의 데이터 커버용.
+    23시 발표는 그글피 자정까지 제공이라 오늘 새벽~다음다음날까지 커버.
+    """
+    t = (now or _now_kst()) - timedelta(days=1)
+    return t.strftime("%Y%m%d"), "2300"
 
 
 def latest_mid_tm_fc(now: datetime | None = None) -> str:
@@ -123,19 +133,57 @@ async def refresh_ultra_only(
 
 
 async def _refresh_short(city_ids: list[str], store: KmaCacheStore) -> None:
-    base_date, base_time = latest_short_base()
-    log.info("단기예보 갱신 시작 (base=%s %s, cities=%s)", base_date, base_time, city_ids)
+    # 두 발표를 받아 merge — 새벽 시간 데이터 누락 방지.
+    # - earlier(어제 23시): 오늘 0시부터의 과거~새벽 시간 커버
+    # - recent(가장 최근): 가장 신선한 미래 예보
+    # 같은 시각은 recent 우선 (더 최신).
+    recent_date, recent_time = latest_short_base()
+    earlier_date, earlier_time = yesterday_last_short_base()
+    same_base = (recent_date, recent_time) == (earlier_date, earlier_time)
+    log.info(
+        "단기예보 갱신 시작 (recent=%s %s, earlier=%s %s, same=%s, cities=%d)",
+        recent_date, recent_time, earlier_date, earlier_time, same_base, len(city_ids),
+    )
     for cid in city_ids:
         city = CITIES_KMA[cid]
         try:
-            fc = await fetch_short_term_forecast(
+            recent = await fetch_short_term_forecast(
                 nx=city.short_nx, ny=city.short_ny,
-                base_date=base_date, base_time=base_time,
+                base_date=recent_date, base_time=recent_time,
             )
-            await store.save_short(cid, fc)
-            log.info("  단기 %s: %d시간 저장", cid, len(fc.hours))
+            if same_base:
+                merged = recent
+            else:
+                earlier = await fetch_short_term_forecast(
+                    nx=city.short_nx, ny=city.short_ny,
+                    base_date=earlier_date, base_time=earlier_time,
+                )
+                merged = _merge_short(earlier, recent)
+            await store.save_short(cid, merged)
+            log.info("  단기 %s: %d시간 저장", cid, len(merged.hours))
         except Exception as e:
             log.error("  단기 %s 실패: %s", cid, e)
+
+
+def _merge_short(
+    earlier: KmaShortForecast, recent: KmaShortForecast,
+) -> KmaShortForecast:
+    """두 단기예보를 (fcst_date, fcst_time) 기준 merge. 같은 시각은 recent 우선."""
+    by_time: dict[tuple[str, str], KmaShortHour] = {}
+    for h in earlier.hours:
+        by_time[(h.fcst_date, h.fcst_time)] = h
+    for h in recent.hours:  # 더 최신 발표 — 같은 시각 덮어쓰기
+        by_time[(h.fcst_date, h.fcst_time)] = h
+    sorted_hours = tuple(
+        sorted(by_time.values(), key=lambda h: (h.fcst_date, h.fcst_time))
+    )
+    return KmaShortForecast(
+        base_date=recent.base_date,
+        base_time=recent.base_time,
+        nx=recent.nx,
+        ny=recent.ny,
+        hours=sorted_hours,
+    )
 
 
 async def _refresh_ultra(city_ids: list[str], store: KmaCacheStore) -> None:
