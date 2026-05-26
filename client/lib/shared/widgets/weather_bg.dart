@@ -34,29 +34,40 @@ class WeatherBg extends StatelessWidget {
         final w = constraints.maxWidth;
         final h = constraints.maxHeight;
         const bodySize = 88.0;
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [sky.top, sky.mid, sky.bot],
-              stops: const [0.0, 0.45, 1.0],
+        // 정적 배경(그라디언트 + 천체 + 컨디션 레이어 + 비네트)을 RepaintBoundary
+        // 안에 격리. 위에 올라가는 스크롤 콘텐츠가 매 프레임 갱신돼도 배경은
+        // 캐시된 레이어로 재사용되므로, BackdropFilter가 샘플링하는 비용이
+        // 일정하게 유지된다.
+        final background = RepaintBoundary(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [sky.top, sky.mid, sky.bot],
+                stops: const [0.0, 0.45, 1.0],
+              ),
+            ),
+            child: Stack(
+              children: [
+                if (pos != null)
+                  Positioned(
+                    left: w * pos.dx / 100 - bodySize / 2,
+                    top: h * pos.dy / 100 - bodySize / 2,
+                    child: _CelestialBody(sky: sky, isNight: isNight),
+                  ),
+                if (condition != WeatherCondition.clear) const _HazeBand(),
+                if (condition == WeatherCondition.rain) const _RainStreaks(),
+                const _Vignette(),
+              ],
             ),
           ),
-          child: Stack(
-            children: [
-              if (pos != null)
-                Positioned(
-                  left: w * pos.dx / 100 - bodySize / 2,
-                  top: h * pos.dy / 100 - bodySize / 2,
-                  child: _CelestialBody(sky: sky, isNight: isNight),
-                ),
-              if (condition != WeatherCondition.clear) const _HazeBand(),
-              if (condition == WeatherCondition.rain) const _RainStreaks(),
-              const _Vignette(),
-              if (child != null) Positioned.fill(child: child!),
-            ],
-          ),
+        );
+        return Stack(
+          children: [
+            Positioned.fill(child: background),
+            if (child != null) Positioned.fill(child: child!),
+          ],
         );
       },
     );

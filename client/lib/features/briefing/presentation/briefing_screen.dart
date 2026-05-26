@@ -33,9 +33,8 @@ class BriefingScreen extends ConsumerWidget {
         hour: currentHour,
         condition: _conditionForCurrent(asyncBriefings, currentHour),
         child: asyncBriefings.when(
-          loading: () => Center(
-            child: CircularProgressIndicator(color: sky.ink),
-          ),
+          loading: () =>
+              Center(child: CircularProgressIndicator(color: sky.ink)),
           error: (e, _) => Center(
             child: Text('오류: $e', style: TextStyle(color: sky.ink)),
           ),
@@ -43,64 +42,73 @@ class BriefingScreen extends ConsumerWidget {
             bottom: false,
             child: RefreshIndicator(
               onRefresh: () async => ref.invalidate(todayBriefingsProvider),
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(child: _TopBar(sky: sky)),
-                  SliverToBoxAdapter(
-                    child: _BigTemp(
-                      sky: sky,
-                      briefings: briefings,
-                      currentHour: currentHour,
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: _HeroCard(
-                      briefings: briefings,
-                      currentHour: currentHour,
-                    ),
-                  ),
-                  // "이전 메시지 보기" 버튼 — 오늘 사이클에 메시지가 하나라도 있을 때만.
-                  if (briefings.isNotEmpty)
+              // 화면 안 글래스 카드 4종(circle button, hero, timeline, weekly)을
+              // 같은 backdrop key로 묶어 백그라운드 샘플링을 1회로 합친다.
+              // 네비바(MainShell)는 스크롤 시 카드와 겹치므로 같은 그룹에 넣지
+              // 않는다 — 같은 key 공유 영역이 겹치면 한 번만 필터된 것처럼 보임.
+              child: BackdropGroup(
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(child: _TopBar(sky: sky)),
                     SliverToBoxAdapter(
-                      child: _ConversationLink(sky: sky),
+                      child: _BigTemp(
+                        sky: sky,
+                        briefings: briefings,
+                        currentHour: currentHour,
+                      ),
                     ),
-                  SliverToBoxAdapter(
-                    child: Consumer(
-                      builder: (context, ref, _) {
-                        final todayAsync = ref.watch(todayHourlyWeatherProvider);
-                        final todaySummaryAsync = ref.watch(todayDailySummaryProvider);
-                        final today = switch (todayAsync) {
-                          AsyncData(:final value) => value,
-                          _ => const <int, HourlyWeather>{},
-                        };
-                        final todaySummary = switch (todaySummaryAsync) {
-                          AsyncData(:final value) => value,
-                          _ => null,
-                        };
-                        return _TimelineSection(
-                          dateLabel: _todayLabel(),
-                          label: '오늘 날씨',
-                          summary: todaySummary?.shortLine(),
-                          sky: sky,
-                          briefings: briefings,
-                          hourlyWeather: today,
-                          currentHour: currentHour,
-                        );
-                      },
+                    SliverToBoxAdapter(
+                      child: _HeroCard(
+                        briefings: briefings,
+                        currentHour: currentHour,
+                      ),
                     ),
-                  ),
-                  SliverToBoxAdapter(child: _WeeklyForecastCard(sky: sky)),
-                  // 글래스 하단바 뒤로 컨텐츠가 흘러가도록 — 마지막 항목이 가려지지 않게
-                  // 바 높이 + 시스템 safe area + 약간의 숨 공간.
-                  SliverPadding(
-                    padding: EdgeInsets.only(
-                      bottom: kGlassNavBarHeight +
-                          MediaQuery.paddingOf(context).bottom +
-                          12,
+                    // "이전 메시지 보기" 버튼 — 오늘 사이클에 메시지가 하나라도 있을 때만.
+                    if (briefings.isNotEmpty)
+                      SliverToBoxAdapter(child: _ConversationLink(sky: sky)),
+                    SliverToBoxAdapter(
+                      child: Consumer(
+                        builder: (context, ref, _) {
+                          final todayAsync = ref.watch(
+                            todayHourlyWeatherProvider,
+                          );
+                          final todaySummaryAsync = ref.watch(
+                            todayDailySummaryProvider,
+                          );
+                          final today = switch (todayAsync) {
+                            AsyncData(:final value) => value,
+                            _ => const <int, HourlyWeather>{},
+                          };
+                          final todaySummary = switch (todaySummaryAsync) {
+                            AsyncData(:final value) => value,
+                            _ => null,
+                          };
+                          return _TimelineSection(
+                            dateLabel: _todayLabel(),
+                            label: '오늘 날씨',
+                            summary: todaySummary?.shortLine(),
+                            sky: sky,
+                            briefings: briefings,
+                            hourlyWeather: today,
+                            currentHour: currentHour,
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                ],
+                    SliverToBoxAdapter(child: _WeeklyForecastCard(sky: sky)),
+                    // 글래스 하단바 뒤로 컨텐츠가 흘러가도록 — 마지막 항목이 가려지지 않게
+                    // 바 높이 + 시스템 safe area + 약간의 숨 공간.
+                    SliverPadding(
+                      padding: EdgeInsets.only(
+                        bottom:
+                            kGlassNavBarHeight +
+                            MediaQuery.paddingOf(context).bottom +
+                            12,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -233,7 +241,7 @@ class _GlassCircleButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipOval(
-      child: BackdropFilter(
+      child: BackdropFilter.grouped(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Material(
           color: Colors.white.withValues(alpha: 0.25),
@@ -271,8 +279,8 @@ class _BigTemp extends ConsumerWidget {
       AsyncData(:final value) => value[currentHour],
       _ => null,
     };
-    final temp = b?.weatherSnapshot.temperatureC.round()
-        ?? hourly?.temperatureC.round();
+    final temp =
+        b?.weatherSnapshot.temperatureC.round() ?? hourly?.temperatureC.round();
     final feels = b?.weatherSnapshot.feelsLikeC.round();
     final cond = b?.weatherSnapshot.condition ?? hourly?.condition ?? '—';
 
@@ -395,7 +403,7 @@ class _HeroBriefingCard extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
-      child: BackdropFilter(
+      child: BackdropFilter.grouped(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           padding: const EdgeInsets.all(18),
@@ -607,7 +615,7 @@ class _TimelineSectionState extends State<_TimelineSection> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(22),
-        child: BackdropFilter(
+        child: BackdropFilter.grouped(
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: DecoratedBox(
             decoration: BoxDecoration(
@@ -738,12 +746,14 @@ class _HourSlot extends StatelessWidget {
         ? Character.parseId(briefing!.characterId)
         : null;
     // Briefing 데이터(메시지 있는 hour) 우선, 없으면 Open-Meteo hourly로 fallback.
-    final conditionStr = briefing?.weatherSnapshot.condition ?? hourly?.condition;
+    final conditionStr =
+        briefing?.weatherSnapshot.condition ?? hourly?.condition;
     final cond = conditionStr != null
         ? _conditionFromString(conditionStr)
         : WeatherCondition.clear;
-    final temp = briefing?.weatherSnapshot.temperatureC.round()
-        ?? hourly?.temperatureC.round();
+    final temp =
+        briefing?.weatherSnapshot.temperatureC.round() ??
+        hourly?.temperatureC.round();
 
     final ink = sky.ink;
     final label = isNow ? '지금' : _hourLabel(hour);
@@ -809,10 +819,7 @@ class _HourSlot extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.only(right: rightGap),
       // 지난 시간은 살짝 디밍. 현재(isNow)는 알약 강조가 우선이라 디밍 X.
-      child: Opacity(
-        opacity: isPast && !isNow ? 0.55 : 1.0,
-        child: slot,
-      ),
+      child: Opacity(opacity: isPast && !isNow ? 0.55 : 1.0, child: slot),
     );
   }
 }
@@ -838,7 +845,7 @@ class _WeeklyForecastCard extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(22),
-        child: BackdropFilter(
+        child: BackdropFilter.grouped(
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: DecoratedBox(
             decoration: BoxDecoration(
@@ -870,11 +877,7 @@ class _WeeklyForecastCard extends ConsumerWidget {
                   color: sky.ink.withValues(alpha: 0.08),
                 ),
                 for (var i = 0; i < days.length; i++) ...[
-                  _WeekDayRow(
-                    day: days[i],
-                    sky: sky,
-                    isToday: i == 0,
-                  ),
+                  _WeekDayRow(day: days[i], sky: sky, isToday: i == 0),
                   // 행 사이 미세 디바이더 (마지막 행 뒤엔 없음).
                   if (i < days.length - 1)
                     Container(
@@ -912,9 +915,15 @@ class _WeekColumnHeaders extends StatelessWidget {
         children: [
           // 첫 칸 너비는 _WeekDayRow의 day label 칸과 맞춰서 정렬.
           const SizedBox(width: 44),
-          Expanded(child: Center(child: Text('오전', style: style))),
-          Expanded(child: Center(child: Text('오후', style: style))),
-          Expanded(child: Center(child: Text('저녁', style: style))),
+          Expanded(
+            child: Center(child: Text('오전', style: style)),
+          ),
+          Expanded(
+            child: Center(child: Text('오후', style: style)),
+          ),
+          Expanded(
+            child: Center(child: Text('저녁', style: style)),
+          ),
         ],
       ),
     );
@@ -951,9 +960,15 @@ class _WeekDayRow extends StatelessWidget {
               ),
             ),
           ),
-          Expanded(child: _PartCell(summary: day.morning, sky: sky)),
-          Expanded(child: _PartCell(summary: day.afternoon, sky: sky)),
-          Expanded(child: _PartCell(summary: day.evening, sky: sky)),
+          Expanded(
+            child: _PartCell(summary: day.morning, sky: sky),
+          ),
+          Expanded(
+            child: _PartCell(summary: day.afternoon, sky: sky),
+          ),
+          Expanded(
+            child: _PartCell(summary: day.evening, sky: sky),
+          ),
         ],
       ),
     );
