@@ -6,6 +6,7 @@ import 'package:weather_friend/features/briefing/presentation/conversation_scree
 import 'package:weather_friend/features/character/presentation/character_select_screen.dart';
 import 'package:weather_friend/features/location/data/onboarding_provider.dart';
 import 'package:weather_friend/features/location/presentation/onboarding_screen.dart';
+import 'package:weather_friend/features/radar/presentation/radar_screen.dart';
 import 'package:weather_friend/features/schedule/presentation/schedule_screen.dart';
 import 'package:weather_friend/features/settings/presentation/settings_screen.dart';
 
@@ -65,6 +66,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings',
         builder: (_, _) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/radar',
+        builder: (_, _) => const RadarScreen(),
       ),
     ],
   );

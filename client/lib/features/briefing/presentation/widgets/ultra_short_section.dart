@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
 
@@ -23,65 +24,95 @@ class UltraShortSection extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
+    // 발효시각 기준으로 "이미 지나간" 슬롯 제외.
+    // Worker cron이 dropped되어 stale 데이터를 받게 되더라도
+    // UI 자체에서 항상 현재~미래만 노출 — Firestore 데이터 신뢰도와 무관하게 일관된 UX.
+    final now = DateTime.now();
+    final visible = <_SlotData>[];
+    for (var i = 0; i < ultra.hours.length; i++) {
+      // hours[i]는 baseTime + (i+1) hours 시점의 예보.
+      final slotTime = ultra.baseTime.add(Duration(hours: i + 1));
+      // 슬롯이 끝나는 시각(다음 정시)이 현재보다 미래여야 표시.
+      // → 8:32에 "8시" 슬롯은 9:00까지 유효하므로 표시, "7시" 슬롯은 8:00에 끝나 제외.
+      if (slotTime.add(const Duration(hours: 1)).isAfter(now)) {
+        visible.add(_SlotData(hour: ultra.hours[i], slotTime: slotTime));
+      }
+    }
+
+    if (visible.isEmpty) {
+      // 모든 슬롯이 지나간 경우 — stale 한참 — 카드 자체 숨김.
+      return const SizedBox.shrink();
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(22),
         child: BackdropFilter.grouped(
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+          child: Material(
+            color: Colors.white.withValues(alpha: 0.15),
+            child: InkWell(
+              // 카드 전체가 버튼 — 누르면 비구름 지도로.
+              onTap: () => context.push('/radar'),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.bolt_rounded, color: sky.ink, size: 18),
-                      const SizedBox(width: 6),
+                      Row(
+                        children: [
+                          Icon(Icons.bolt_rounded, color: sky.ink, size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            '초단기 6시간',
+                            style: TextStyle(
+                              color: sky.ink,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const Spacer(),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color: sky.ink.withValues(alpha: 0.6),
+                            size: 20,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
                       Text(
-                        '초단기 6시간',
+                        '비구름 이동 보기 · 매 30분 갱신',
                         style: TextStyle(
-                          color: sky.ink,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
+                          color: sky.ink.withValues(alpha: 0.7),
+                          fontSize: 12,
                         ),
                       ),
-                      const Spacer(),
-                      Text(
-                        '매 30분 갱신',
-                        style: TextStyle(
-                          color: sky.ink.withValues(alpha: 0.55),
-                          fontSize: 11,
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        height: 80,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: visible.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 14),
+                          itemBuilder: (_, i) => _UltraSlot(
+                            hour: visible[i].hour,
+                            slotTime: visible[i].slotTime,
+                            now: now,
+                            sky: sky,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '기상청 초단기 예보로 다음 6시간을 더 정밀하게',
-                    style: TextStyle(
-                      color: sky.ink.withValues(alpha: 0.7),
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    height: 80,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: ultra.hours.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 14),
-                      itemBuilder: (_, i) =>
-                          _UltraSlot(hour: ultra.hours[i], sky: sky),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -91,10 +122,23 @@ class UltraShortSection extends ConsumerWidget {
   }
 }
 
+class _SlotData {
+  const _SlotData({required this.hour, required this.slotTime});
+  final HourlyWeather hour;
+  final DateTime slotTime;
+}
+
 class _UltraSlot extends StatelessWidget {
-  const _UltraSlot({required this.hour, required this.sky});
+  const _UltraSlot({
+    required this.hour,
+    required this.slotTime,
+    required this.now,
+    required this.sky,
+  });
 
   final HourlyWeather hour;
+  final DateTime slotTime;
+  final DateTime now;
   final SkyPalette sky;
 
   @override
@@ -109,25 +153,31 @@ class _UltraSlot extends StatelessWidget {
       _ => Icons.wb_sunny_rounded,
     };
 
+    // 슬롯이 현재 시간대인지 ("지금")
+    final isNow = slotTime.year == now.year &&
+        slotTime.month == now.month &&
+        slotTime.day == now.day &&
+        slotTime.hour == now.hour;
+
+    final label = isNow ? '지금' : '${slotTime.hour}시';
+
     return SizedBox(
       width: 48,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            '${hour.hour}시',
+            label,
             style: TextStyle(
-              color: sky.ink.withValues(alpha: 0.7),
+              color: isNow ? sky.ink : sky.ink.withValues(alpha: 0.7),
               fontSize: 11,
-              fontWeight: FontWeight.w500,
+              fontWeight: isNow ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
           const SizedBox(height: 8),
           Icon(
             icon,
-            color: isRain
-                ? sky.ink
-                : sky.ink.withValues(alpha: 0.85),
+            color: isRain ? sky.ink : sky.ink.withValues(alpha: 0.85),
             size: 22,
           ),
           const SizedBox(height: 8),
