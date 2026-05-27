@@ -68,9 +68,9 @@ class _DataAttribution extends StatelessWidget {
           const SizedBox(height: 10),
           _Source(
             icon: Icons.map_outlined,
-            title: '한국 행정구역 outline',
-            subtitle: '비구름 지도 시·군·구 경계',
-            tail: 'github.com/southkorea/southkorea-maps · BSD License',
+            title: 'OpenStreetMap',
+            subtitle: '비구름 지도 배경 (도로/행정구역)',
+            tail: '© OpenStreetMap contributors · ODbL',
             muted: muted,
           ),
           const SizedBox(height: 16),

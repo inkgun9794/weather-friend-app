@@ -58,3 +58,30 @@ double _computeRo() {
   // +1 = 1-based 격자 (정수 변환 안 함)
   return (nx: x + 1, ny: y + 1);
 }
+
+/// 격자 → 위경도 (역방향).
+/// cell 4 corner 위경도를 구해서 PolygonLayer에 넘길 때 사용.
+({double lat, double lon}) gridToLatLonFloat(double nx, double ny) {
+  // 1-based → internal 0-based
+  final x = nx - 1;
+  final y = ny - 1;
+  final xn = x - _xo;
+  final yn = _ro - y + _yo;
+  var ra = math.sqrt(xn * xn + yn * yn);
+  if (_sn < 0.0) ra = -ra;
+  var alat = math.pow((_reN * _sf / ra), (1.0 / _sn)).toDouble();
+  alat = 2.0 * math.atan(alat) - math.pi * 0.5;
+
+  double theta;
+  if (xn.abs() <= 0.0) {
+    theta = 0.0;
+  } else if (yn.abs() <= 0.0) {
+    theta = math.pi * 0.5;
+    if (xn < 0.0) theta = -theta;
+  } else {
+    theta = math.atan2(xn, yn);
+  }
+  final alon = theta / _sn + _olonRad;
+  const radDeg = 180.0 / math.pi;
+  return (lat: alat * radDeg, lon: alon * radDeg);
+}
