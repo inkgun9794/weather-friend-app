@@ -32,6 +32,10 @@ log = logging.getLogger(__name__)
 
 KST = zoneinfo.ZoneInfo("Asia/Seoul")
 
+# 도시별 호출 동시 실행 한도. KMA API TPS 30 한도 안전선 + 응답 안정성 우선.
+# 184개 도시 × ~2초/호출이 순차로 6분 → 병렬 10개로 1분 안에 마무리.
+_CITY_CONCURRENCY = 10
+
 # 단기예보 발표시각 (1일 8회 KST)
 _SHORT_ISSUE_HOURS = (2, 5, 8, 11, 14, 17, 20, 23)
 
@@ -171,25 +175,31 @@ async def _refresh_short(city_ids: list[str], store: KmaCacheStore) -> None:
         "단기예보 갱신 시작 (recent=%s %s, earlier=%s %s, same=%s, cities=%d)",
         recent_date, recent_time, earlier_date, earlier_time, same_base, len(city_ids),
     )
-    for cid in city_ids:
-        city = CITIES_KMA[cid]
-        try:
-            recent = await fetch_short_term_forecast(
-                nx=city.short_nx, ny=city.short_ny,
-                base_date=recent_date, base_time=recent_time,
-            )
-            if same_base:
-                merged = recent
-            else:
-                earlier = await fetch_short_term_forecast(
+
+    sem = asyncio.Semaphore(_CITY_CONCURRENCY)
+
+    async def _one(cid: str) -> None:
+        async with sem:
+            city = CITIES_KMA[cid]
+            try:
+                recent = await fetch_short_term_forecast(
                     nx=city.short_nx, ny=city.short_ny,
-                    base_date=earlier_date, base_time=earlier_time,
+                    base_date=recent_date, base_time=recent_time,
                 )
-                merged = _merge_short(earlier, recent)
-            await store.save_short(cid, merged)
-            log.info("  단기 %s: %d시간 저장", cid, len(merged.hours))
-        except Exception as e:
-            log.error("  단기 %s 실패: %s", cid, e)
+                if same_base:
+                    merged = recent
+                else:
+                    earlier = await fetch_short_term_forecast(
+                        nx=city.short_nx, ny=city.short_ny,
+                        base_date=earlier_date, base_time=earlier_time,
+                    )
+                    merged = _merge_short(earlier, recent)
+                await store.save_short(cid, merged)
+                log.info("  단기 %s: %d시간 저장", cid, len(merged.hours))
+            except Exception as e:
+                log.error("  단기 %s 실패: %s", cid, e)
+
+    await asyncio.gather(*(_one(cid) for cid in city_ids))
 
 
 def _merge_short(
@@ -215,18 +225,27 @@ def _merge_short(
 
 async def _refresh_ultra(city_ids: list[str], store: KmaCacheStore) -> None:
     base_date, base_time = latest_ultra_base()
-    log.info("초단기예보 갱신 시작 (base=%s %s, cities=%s)", base_date, base_time, city_ids)
-    for cid in city_ids:
-        city = CITIES_KMA[cid]
-        try:
-            fc = await fetch_ultra_short_term_forecast(
-                nx=city.short_nx, ny=city.short_ny,
-                base_date=base_date, base_time=base_time,
-            )
-            await store.save_ultra(cid, fc)
-            log.info("  초단기 %s: %d시간 저장", cid, len(fc.hours))
-        except Exception as e:
-            log.error("  초단기 %s 실패: %s", cid, e)
+    log.info(
+        "초단기예보 갱신 시작 (base=%s %s, cities=%d)",
+        base_date, base_time, len(city_ids),
+    )
+
+    sem = asyncio.Semaphore(_CITY_CONCURRENCY)
+
+    async def _one(cid: str) -> None:
+        async with sem:
+            city = CITIES_KMA[cid]
+            try:
+                fc = await fetch_ultra_short_term_forecast(
+                    nx=city.short_nx, ny=city.short_ny,
+                    base_date=base_date, base_time=base_time,
+                )
+                await store.save_ultra(cid, fc)
+                log.info("  초단기 %s: %d시간 저장", cid, len(fc.hours))
+            except Exception as e:
+                log.error("  초단기 %s 실패: %s", cid, e)
+
+    await asyncio.gather(*(_one(cid) for cid in city_ids))
 
 
 async def _refresh_grid_rain(store: KmaCacheStore) -> None:
