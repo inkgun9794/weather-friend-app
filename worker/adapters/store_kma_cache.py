@@ -5,6 +5,10 @@
 - `kma_ultra/{city_id}`     — 초단기예보 카드용 (10분 갱신)
 - `kma_mid_land/{reg_id}`   — 중기육상 (6시간 갱신)
 - `kma_mid_temp/{reg_id}`   — 중기기온 (6시간 갱신)
+- `kma_radar/latest`              — 레이더 manifest (bbox + frame 메타)
+- `kma_radar/latest/frames/{slot}` — 프레임별 PNG bytes (덮어쓰기)
+
+레이더 PNG는 Firestore subcollection에 1MB 한도 안에서 직접 저장(Spark 플랜 호환).
 
 문서마다 `updated_at` 서버 타임스탬프를 함께 저장 → 클라이언트는 stale 판단에 사용.
 """
@@ -77,6 +81,39 @@ class KmaCacheStore:
         }
         """
         await self._set("kma_grid_rain/latest", payload)
+
+    async def save_radar_frame(self, slot: str, png: bytes) -> None:
+        """레이더 PNG 1프레임을 `kma_radar/latest/frames/{slot}` 에 직접 저장.
+
+        - slot: 'past_0' ~ 'past_5' / 'current' / 'future_1' ~ 'future_6'
+        - 같은 경로에 덮어씌우므로 별도 cleanup 불필요.
+        - Firestore field bytes 한도 1MB, PNG ~190KB라 안전.
+        """
+        ref = (
+            self._db.collection("kma_radar")
+            .document("latest")
+            .collection("frames")
+            .document(slot)
+        )
+        await ref.set({
+            "png": png,
+            "updated_at": firestore.SERVER_TIMESTAMP,
+        })
+
+    async def save_radar_manifest(self, payload: dict) -> None:
+        """레이더 메타데이터 doc. 클라이언트는 이 doc 1개 + frames 13개 doc을 fetch.
+
+        payload = {
+            "base_tm": "202605271500",
+            "bounds": {"south": .., "west": .., "north": .., "east": ..},
+            "frames": [
+                {"slot": "past_0", "kind": "obs", "tm": "...", "offset_min": -60},
+                ...
+                {"slot": "future_6", "kind": "fcst", "tm": "...", "offset_min": 360}
+            ]
+        }
+        """
+        await self._set("kma_radar/latest", payload)
 
     async def _set(self, path: str, payload: dict) -> None:
         coll, _, doc = path.partition("/")

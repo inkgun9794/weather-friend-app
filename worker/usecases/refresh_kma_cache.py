@@ -14,6 +14,9 @@ import logging
 import zoneinfo
 from datetime import datetime, timedelta
 
+import numpy as np
+
+from adapters.extrapolation import estimate_motion_per_hour, extrapolate_chain
 from adapters.kma_apihub import NX as GRID_NX
 from adapters.kma_apihub import NY as GRID_NY
 from adapters.kma_apihub import fetch_vsrt_grid
@@ -25,6 +28,15 @@ from adapters.kma_openapi import (
     fetch_short_term_forecast,
     fetch_ultra_short_term_forecast,
 )
+from adapters.kma_radar import (
+    HSR_BBOX_EAST,
+    HSR_BBOX_NORTH,
+    HSR_BBOX_SOUTH,
+    HSR_BBOX_WEST,
+    RadarFrame,
+    fetch_radar_hsr,
+)
+from adapters.radar_renderer import render_dbz_png
 from adapters.store_kma_cache import KmaCacheStore
 from domain.locations import CITIES_KMA
 
@@ -147,12 +159,14 @@ async def refresh_ultra_only(
 
     - 도시별 카드용 초단기 (`getUltraSrtFcst`)
     - 비구름 지도용 한반도 격자 (`nph-dfs_vsrt_grd`, RN1) — 도시 무관 1회.
+    - 레이더 PNG (과거 6 + 현재 1 + 외삽 미래 6 = 13프레임) — 도시 무관 1회.
     """
     store = KmaCacheStore(project_id=project_id)
     try:
         await asyncio.gather(
             _refresh_ultra(city_ids, store),
             _refresh_grid_rain(store),
+            _refresh_radar_frames(store),
         )
     finally:
         await store.close()
@@ -285,6 +299,141 @@ async def _refresh_grid_rain(store: KmaCacheStore) -> None:
     })
     total_cells = sum(len(h["cells"]) for h in hours_payload)
     log.info("비구름 격자 저장 완료 — 총 %d 셀 (6시간)", total_cells)
+
+
+# 레이더 합성영상은 매시 :00, :05, :10, ..., :55 (5분 단위 native).
+# 최신 슬롯은 보통 +5~7분 지나야 사이트에 올라옴 → 안전 10분 버퍼.
+_RADAR_BUFFER_MIN = 10
+
+
+def latest_radar_tm(now: datetime | None = None) -> str:
+    """레이더 합성 가장 최근 가용 시각 — KST, 5분 내림. YYYYMMDDHHmm."""
+    t = (now or _now_kst()) - timedelta(minutes=_RADAR_BUFFER_MIN)
+    minute = (t.minute // 5) * 5
+    return t.strftime("%Y%m%d%H") + f"{minute:02d}"
+
+
+def _shift_tm(tm: str, minutes: int) -> str:
+    """tm(YYYYMMDDHHmm) + minutes → 같은 포맷."""
+    t = datetime.strptime(tm, "%Y%m%d%H%M") + timedelta(minutes=minutes)
+    return t.strftime("%Y%m%d%H%M")
+
+
+async def _refresh_radar_frames(store: KmaCacheStore) -> None:
+    """과거 6장(10분 간격) + 현재 1장 + 외삽 미래 6장(1시간 간격) = 13프레임.
+
+    슬롯 명명: past_0(가장 과거) ~ past_5 → current → future_1(+1h) ~ future_6(+6h).
+    """
+    current_tm = latest_radar_tm()
+    past_tms = [_shift_tm(current_tm, -60 + i * 10) for i in range(6)]
+    log.info(
+        "레이더 갱신 시작 — current=%s, past=[%s..%s]",
+        current_tm, past_tms[0], past_tms[-1],
+    )
+
+    # 1) 과거 6장 + 현재 1장 = 7장을 병렬 fetch (KMA TPS 부담 낮음).
+    obs_tms = [*past_tms, current_tm]
+    obs_results = await asyncio.gather(
+        *(fetch_radar_hsr(tm) for tm in obs_tms),
+        return_exceptions=True,
+    )
+    obs_frames: list[RadarFrame | None] = []
+    for tm, res in zip(obs_tms, obs_results, strict=True):
+        if isinstance(res, RadarFrame):
+            obs_frames.append(res)
+        else:
+            log.error("레이더 fetch 실패 (%s): %s", tm, res)
+            obs_frames.append(None)
+
+    # 현재 프레임이 없으면 외삽 불가 → 중단.
+    base_frame = obs_frames[-1]
+    if base_frame is None:
+        log.error("현재 레이더 프레임 누락 — 외삽/저장 스킵")
+        return
+
+    # 2) Motion vector — 안정성 위해 가장 최근 두 프레임 (current와 past_5 = 10분 전).
+    motion_per_hour: tuple[float, float] = (0.0, 0.0)
+    prev_frame = obs_frames[-2]
+    if prev_frame is not None:
+        motion_per_hour = estimate_motion_per_hour(
+            prev_frame.values,
+            base_frame.values,
+            minutes_apart=10,
+        )
+    log.info("motion (px/h) = (dy=%.1f, dx=%.1f)", *motion_per_hour)
+
+    # 3) 외삽 6장 (1h 단위).
+    future_grids = extrapolate_chain(
+        base_frame.values,
+        motion_per_hour=motion_per_hour,
+        hours=6,
+    )
+    future_tms = [_shift_tm(current_tm, 60 * (i + 1)) for i in range(6)]
+
+    # 4) 모든 프레임을 PNG로 렌더 (CPU bound — to_thread).
+    def _render(values: np.ndarray) -> bytes:
+        return render_dbz_png(values)
+
+    render_tasks: list[asyncio.Task[bytes] | None] = []
+    for f in obs_frames:
+        if f is None:
+            render_tasks.append(None)
+        else:
+            render_tasks.append(asyncio.create_task(asyncio.to_thread(_render, f.values)))
+    for fg in future_grids:
+        render_tasks.append(asyncio.create_task(asyncio.to_thread(_render, fg)))
+
+    # 13개 PNG 병렬 렌더.
+    pngs: list[bytes | None] = []
+    for rt in render_tasks:
+        pngs.append(await rt if rt is not None else None)
+
+    # 5) frame doc 13개 병렬 저장 (Firestore subcollection).
+    slots = (
+        [f"past_{i}" for i in range(6)]
+        + ["current"]
+        + [f"future_{i}" for i in range(1, 7)]
+    )
+    save_tasks: list[asyncio.Task[None] | None] = []
+    saved_slots: set[str] = set()
+    for slot, png in zip(slots, pngs, strict=True):
+        if png is None:
+            save_tasks.append(None)
+        else:
+            saved_slots.add(slot)
+            save_tasks.append(asyncio.create_task(store.save_radar_frame(slot, png)))
+    for st in save_tasks:
+        if st is not None:
+            await st
+
+    # 6) Manifest — 저장 성공한 슬롯만 frame 메타에 포함.
+    all_tms = [*past_tms, current_tm, *future_tms]
+    offsets = [*range(-60, 0, 10), 0, *(60 * i for i in range(1, 7))]
+    kinds = ["obs"] * 7 + ["fcst"] * 6
+    frames = [
+        {
+            "slot": slot,
+            "kind": kind,
+            "tm": tm,
+            "offset_min": off,
+        }
+        for slot, kind, tm, off in zip(
+            slots, kinds, all_tms, offsets, strict=True,
+        )
+        if slot in saved_slots
+    ]
+    await store.save_radar_manifest({
+        "base_tm": current_tm,
+        "motion_per_hour_px": {"dy": motion_per_hour[0], "dx": motion_per_hour[1]},
+        "bounds": {
+            "south": HSR_BBOX_SOUTH,
+            "west": HSR_BBOX_WEST,
+            "north": HSR_BBOX_NORTH,
+            "east": HSR_BBOX_EAST,
+        },
+        "frames": frames,
+    })
+    log.info("레이더 manifest 저장 완료 — %d/%d 프레임", len(frames), len(slots))
 
 
 async def _refresh_mid(city_ids: list[str], store: KmaCacheStore) -> None:

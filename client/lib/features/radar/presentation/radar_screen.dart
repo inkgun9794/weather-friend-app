@@ -4,19 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:weather_friend/features/radar/data/lambert.dart';
-import 'package:weather_friend/features/radar/data/rain_grid.dart';
+import 'package:weather_friend/features/radar/data/radar_manifest.dart';
 import 'package:weather_friend/features/radar/data/user_location.dart';
 
-/// 자동 재생 시 한 슬롯이 보이는 시간.
-const _kPlaybackInterval = Duration(milliseconds: 800);
+/// 비구름 지도 — KMA 레이더 합성(과거 1h, 10분) + motion 외삽(미래 6h, 1h).
+/// 서버에서 PNG로 미리 렌더되어 Firestore에 13장 doc 저장 (Spark 플랜 호환).
 
-/// 비구름 지도 화면 — OpenStreetMap 진짜 지도 위에 KMA 5km 격자 강수 polygon.
-///
-/// - 지도: OSM tile (도로/행정구역/지형 자동, 줌별 라벨 LOD)
-/// - 강수: PolygonLayer (cell 4 corner 위경도)
-/// - 사용자: MarkerLayer (GPS 위경도)
-/// - 슬라이더로 1~6시간 전환 + 자동 재생.
+/// 자동 재생 시 한 프레임이 보이는 시간.
+const _kPlaybackInterval = Duration(milliseconds: 700);
+
 class RadarScreen extends ConsumerStatefulWidget {
   const RadarScreen({super.key});
 
@@ -25,8 +21,8 @@ class RadarScreen extends ConsumerStatefulWidget {
 }
 
 class _RadarScreenState extends ConsumerState<RadarScreen> {
-  int _hourIndex = 0;
-  bool _isPlaying = true;
+  int _frameIndex = 0;
+  bool _isPlaying = false;
   Timer? _playbackTimer;
   late final MapController _mapController;
 
@@ -34,7 +30,6 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
   void initState() {
     super.initState();
     _mapController = MapController();
-    _startPlayback();
   }
 
   @override
@@ -48,30 +43,38 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
     _playbackTimer?.cancel();
     _playbackTimer = Timer.periodic(_kPlaybackInterval, (_) {
       if (!mounted || !_isPlaying) return;
-      final grid = switch (ref.read(rainGridProvider)) {
+      final state = switch (ref.read(radarStateProvider)) {
         AsyncData(:final value) => value,
         _ => null,
       };
-      final count = grid?.hours.length ?? 0;
-      if (count == 0) return;
-      setState(() => _hourIndex = (_hourIndex + 1) % count);
+      final total = state?.frames.length ?? 0;
+      if (total == 0) return;
+      setState(() => _frameIndex = (_frameIndex + 1) % total);
     });
   }
 
   void _togglePlay() {
     setState(() => _isPlaying = !_isPlaying);
+    if (_isPlaying) {
+      _startPlayback();
+    } else {
+      _playbackTimer?.cancel();
+      _playbackTimer = null;
+    }
   }
 
   void _onSliderChanged(int i) {
     setState(() {
-      _hourIndex = i;
+      _frameIndex = i;
       _isPlaying = false;
     });
+    _playbackTimer?.cancel();
+    _playbackTimer = null;
   }
 
   @override
   Widget build(BuildContext context) {
-    final gridAsync = ref.watch(rainGridProvider);
+    final stateAsync = ref.watch(radarStateProvider);
     final userLatLng = switch (ref.watch(userLatLngProvider)) {
       AsyncData(:final value) => LatLng(value.lat, value.lon),
       _ => null,
@@ -79,115 +82,99 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('비구름 이동'),
+        title: const Text('비구름 이동 예측'),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      body: gridAsync.when(
-        loading: () =>
-            const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              '비구름 데이터를 불러올 수 없습니다.\n$e',
-              textAlign: TextAlign.center,
+      body: SafeArea(
+        top: false,
+        child: stateAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                '레이더 데이터를 불러올 수 없습니다.\n$e',
+                textAlign: TextAlign.center,
+              ),
             ),
           ),
-        ),
-        data: (grid) {
-          if (grid == null || grid.hours.isEmpty) {
-            return const Center(
-              child: Text('비구름 데이터가 아직 준비되지 않았어요.'),
-            );
-          }
-          final safeIndex = _hourIndex.clamp(0, grid.hours.length - 1);
-          final current = grid.hours[safeIndex];
-          return Column(
-            children: [
-              Expanded(
-                child: FlutterMap(
-                  mapController: _mapController,
-                  options: const MapOptions(
-                    // 한반도 중심 + 줌 7 (전국 한눈에)
-                    initialCenter: LatLng(36.5, 127.8),
-                    initialZoom: 7.0,
-                    minZoom: 5.5,
-                    maxZoom: 15.0,
-                  ),
-                  children: [
-                    // 1) 진짜 지도 tile (OSM, 무료)
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.weatherfriend.app',
-                      maxNativeZoom: 19,
+          data: (state) {
+            if (state == null || state.frames.isEmpty) {
+              return const Center(
+                child: Text('레이더 데이터가 아직 준비되지 않았어요.'),
+              );
+            }
+            final frames = state.frames;
+            final safeIdx = _frameIndex.clamp(0, frames.length - 1);
+            final current = frames[safeIdx];
+            final currentBytes = state.bytesBySlot[current.slot];
+            return Column(
+              children: [
+                Expanded(
+                  child: FlutterMap(
+                    mapController: _mapController,
+                    options: const MapOptions(
+                      initialCenter: LatLng(36.5, 127.8),
+                      initialZoom: 7.0,
+                      minZoom: 5.5,
+                      maxZoom: 15.0,
                     ),
-                    // 2) 강수 polygon overlay (cell 4 corner 위경도)
-                    if (current.cells.isNotEmpty)
-                      PolygonLayer(
-                        polygons: [
-                          for (final c in current.cells)
-                            Polygon(
-                              points: _cellCorners(c.nx, c.ny),
-                              color: _colorFor(c.rn1).withValues(alpha: 0.55),
-                              borderStrokeWidth: 0,
+                    children: [
+                      // 1) OSM 베이스 타일
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.weatherfriend.app',
+                        maxNativeZoom: 19,
+                      ),
+                      // 2) 레이더 PNG overlay — Firestore에서 prefetch한 bytes.
+                      if (currentBytes != null)
+                        OverlayImageLayer(
+                          overlayImages: [
+                            OverlayImage(
+                              bounds: state.bounds.toLatLngBounds(),
+                              opacity: 0.82,
+                              imageProvider: MemoryImage(currentBytes),
                             ),
-                        ],
+                          ],
+                        ),
+                      // 3) 사용자 위치
+                      if (userLatLng != null)
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: userLatLng,
+                              width: 30,
+                              height: 30,
+                              child: const _UserMarker(),
+                            ),
+                          ],
+                        ),
+                      const SimpleAttributionWidget(
+                        source: Text(
+                          '© OpenStreetMap',
+                          style: TextStyle(fontSize: 10),
+                        ),
+                        backgroundColor: Color(0x99FFFFFF),
                       ),
-                    // 3) 사용자 위치 마커
-                    if (userLatLng != null)
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: userLatLng,
-                            width: 30,
-                            height: 30,
-                            child: const _UserMarker(),
-                          ),
-                        ],
-                      ),
-                    // OSM attribution (라이선스 의무)
-                    const RichAttributionWidget(
-                      attributions: [
-                        TextSourceAttribution('OpenStreetMap contributors'),
-                      ],
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const _Legend(),
-              _TimeSlider(
-                hours: grid.hours,
-                index: safeIndex,
-                isPlaying: _isPlaying,
-                onChanged: _onSliderChanged,
-                onTogglePlay: _togglePlay,
-              ),
-            ],
-          );
-        },
+                const _Legend(),
+                _TimeSlider(
+                  frames: frames,
+                  index: safeIdx,
+                  isPlaying: _isPlaying,
+                  onChanged: _onSliderChanged,
+                  onTogglePlay: _togglePlay,
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
-  }
-
-  /// 격자 cell (nx, ny)의 4 corner 위경도 — Lambert 역변환.
-  static List<LatLng> _cellCorners(int nx, int ny) {
-    final corners = [
-      gridToLatLonFloat(nx - 0.5, ny - 0.5),
-      gridToLatLonFloat(nx + 0.5, ny - 0.5),
-      gridToLatLonFloat(nx + 0.5, ny + 0.5),
-      gridToLatLonFloat(nx - 0.5, ny + 0.5),
-    ];
-    return [for (final c in corners) LatLng(c.lat, c.lon)];
-  }
-
-  Color _colorFor(double rn1) {
-    if (rn1 < 1.0) return const Color(0xFF67D4FF);
-    if (rn1 < 5.0) return const Color(0xFF3A98FF);
-    if (rn1 < 15.0) return const Color(0xFF1B53D6);
-    if (rn1 < 30.0) return const Color(0xFF8129D9);
-    return const Color(0xFFE63960);
   }
 }
 
@@ -265,14 +252,14 @@ class _LegendItem extends StatelessWidget {
 
 class _TimeSlider extends StatelessWidget {
   const _TimeSlider({
-    required this.hours,
+    required this.frames,
     required this.index,
     required this.isPlaying,
     required this.onChanged,
     required this.onTogglePlay,
   });
 
-  final List<RainHour> hours;
+  final List<RadarFrame> frames;
   final int index;
   final bool isPlaying;
   final ValueChanged<int> onChanged;
@@ -280,8 +267,7 @@ class _TimeSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final current = hours[index];
-    final totalCells = current.cells.length;
+    final current = frames[index];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       child: Column(
@@ -290,17 +276,20 @@ class _TimeSlider extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '+${current.offset}시간 후 (${_formatTmef(current.tmef)})',
+                _formatLabel(current),
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               Text(
-                totalCells > 0 ? '강수 $totalCells셀' : '강수 없음',
+                current.isObservation ? '실측' : '외삽 예측',
                 style: TextStyle(
                   fontSize: 12,
-                  color: totalCells > 0 ? null : Colors.grey,
+                  color: current.isObservation
+                      ? Colors.blueGrey
+                      : Colors.deepPurple,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -318,10 +307,9 @@ class _TimeSlider extends StatelessWidget {
               Expanded(
                 child: Slider(
                   min: 0,
-                  max: (hours.length - 1).toDouble(),
-                  divisions: hours.length - 1,
+                  max: (frames.length - 1).toDouble(),
+                  divisions: frames.length - 1,
                   value: index.toDouble(),
-                  label: '+${current.offset}h',
                   onChanged: (v) => onChanged(v.round()),
                 ),
               ),
@@ -332,7 +320,17 @@ class _TimeSlider extends StatelessWidget {
     );
   }
 
-  String _formatTmef(String tmef) {
-    return '${tmef.substring(4, 6)}/${tmef.substring(6, 8)} ${tmef.substring(8, 10)}시';
+  String _formatLabel(RadarFrame f) {
+    // tm: YYYYMMDDHHmm (KST)
+    final mm = f.tm.substring(4, 6);
+    final dd = f.tm.substring(6, 8);
+    final hh = f.tm.substring(8, 10);
+    final min = f.tm.substring(10, 12);
+    final sign = f.offsetMin > 0
+        ? '+${f.offsetMin}분'
+        : f.offsetMin < 0
+            ? '${f.offsetMin}분'
+            : '지금';
+    return '$sign  ($mm/$dd $hh:$min)';
   }
 }

@@ -88,7 +88,7 @@ class UltraShortSection extends ConsumerWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '비구름 이동 보기 · 매 30분 갱신',
+                        '비구름 이동 예측 보기 · 매 30분 갱신',
                         style: TextStyle(
                           color: sky.ink.withValues(alpha: 0.7),
                           fontSize: 12,
