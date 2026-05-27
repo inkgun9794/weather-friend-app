@@ -63,6 +63,21 @@ class KmaCacheStore:
             "days": [asdict(d) for d in forecast.days],
         })
 
+    async def save_grid_rain(self, payload: dict) -> None:
+        """비구름 지도용 sparse 격자.
+
+        payload = {
+            "base_time": "YYYYMMDDHHMM",
+            "nx": 149, "ny": 253,
+            "hours": [
+                {"offset": 1, "tmef": "YYYYMMDDHH",
+                 "cells": [{"nx": ..., "ny": ..., "rn1": ...}, ...]},
+                ...x6
+            ],
+        }
+        """
+        await self._set("kma_grid_rain/latest", payload)
+
     async def _set(self, path: str, payload: dict) -> None:
         coll, _, doc = path.partition("/")
         ref = self._db.collection(coll).document(doc)

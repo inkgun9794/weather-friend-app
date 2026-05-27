@@ -14,6 +14,9 @@ import logging
 import zoneinfo
 from datetime import datetime, timedelta
 
+from adapters.kma_apihub import NX as GRID_NX
+from adapters.kma_apihub import NY as GRID_NY
+from adapters.kma_apihub import fetch_vsrt_grid
 from adapters.kma_openapi import (
     KmaShortForecast,
     KmaShortHour,
@@ -94,6 +97,23 @@ def latest_ultra_base(now: datetime | None = None) -> tuple[str, str]:
     return t.strftime("%Y%m%d"), f"{base_h:02d}30"
 
 
+def latest_grid_tmfc(now: datetime | None = None) -> str:
+    """초단기예보 격자 가장 최근 발표시각 tmfc=YYYYMMDDHHMM (10분 단위).
+
+    매 10분 발표. 안전 버퍼 15분 빼고 10분 단위로 내림.
+    """
+    t = (now or _now_kst()) - timedelta(minutes=15)
+    minute = (t.minute // 10) * 10
+    return t.strftime("%Y%m%d%H") + f"{minute:02d}"
+
+
+def grid_tmef(tmfc: str, offset_hours: int) -> str:
+    """tmfc(YYYYMMDDHHMM) + offset → tmef(YYYYMMDDHH)."""
+    base = datetime.strptime(tmfc, "%Y%m%d%H%M")
+    target = base + timedelta(hours=offset_hours)
+    return target.strftime("%Y%m%d%H")
+
+
 # ────────────────────────────────────────────────────────────────────────
 # 유스케이스
 # ────────────────────────────────────────────────────────────────────────
@@ -119,10 +139,17 @@ async def refresh_ultra_only(
     city_ids: list[str],
     project_id: str,
 ) -> None:
-    """초단기만 갱신. 10분 워크플로용."""
+    """초단기만 갱신. grid 워크플로용 (30분 주기).
+
+    - 도시별 카드용 초단기 (`getUltraSrtFcst`)
+    - 비구름 지도용 한반도 격자 (`nph-dfs_vsrt_grd`, RN1) — 도시 무관 1회.
+    """
     store = KmaCacheStore(project_id=project_id)
     try:
-        await _refresh_ultra(city_ids, store)
+        await asyncio.gather(
+            _refresh_ultra(city_ids, store),
+            _refresh_grid_rain(store),
+        )
     finally:
         await store.close()
 
@@ -200,6 +227,45 @@ async def _refresh_ultra(city_ids: list[str], store: KmaCacheStore) -> None:
             log.info("  초단기 %s: %d시간 저장", cid, len(fc.hours))
         except Exception as e:
             log.error("  초단기 %s 실패: %s", cid, e)
+
+
+async def _refresh_grid_rain(store: KmaCacheStore) -> None:
+    """비구름 지도용 한반도 RN1 격자 1~6시간 fetch + sparse 저장.
+
+    - 한 번 호출에 37,697 격자값 (실수). 도시 무관 1회 fetch만 필요.
+    - 강수 있는 셀만 (rn1 > 0) 추출해서 sparse JSON으로 저장.
+      비 안 오는 날: cells ≈ 0개. 비 오는 날에도 한반도 일부만 → 1MB 안전.
+    """
+    tmfc = latest_grid_tmfc()
+    log.info("비구름 격자 갱신 시작 (tmfc=%s)", tmfc)
+    hours_payload: list[dict] = []
+    for offset in range(1, 7):
+        tmef = grid_tmef(tmfc, offset)
+        try:
+            grid = await fetch_vsrt_grid(var="RN1", tmfc=tmfc, tmef=tmef)
+            cells: list[dict] = []
+            for ny in range(1, GRID_NY + 1):
+                for nx in range(1, GRID_NX + 1):
+                    v = grid.at(nx, ny)
+                    if v is not None and v > 0:
+                        cells.append({"nx": nx, "ny": ny, "rn1": round(v, 2)})
+            hours_payload.append({"offset": offset, "tmef": tmef, "cells": cells})
+            log.info("  +%dh (%s): %d개 강수 셀", offset, tmef, len(cells))
+        except Exception as e:
+            log.error("  +%dh 실패: %s", offset, e)
+
+    if not hours_payload:
+        log.warning("비구름 격자: 모든 시간 실패 → 저장 스킵")
+        return
+
+    await store.save_grid_rain({
+        "base_time": tmfc,
+        "nx": GRID_NX,
+        "ny": GRID_NY,
+        "hours": hours_payload,
+    })
+    total_cells = sum(len(h["cells"]) for h in hours_payload)
+    log.info("비구름 격자 저장 완료 — 총 %d 셀 (6시간)", total_cells)
 
 
 async def _refresh_mid(city_ids: list[str], store: KmaCacheStore) -> None:
