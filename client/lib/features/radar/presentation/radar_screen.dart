@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:weather_friend/features/radar/data/rain_grid.dart';
+
+/// 자동 재생 시 한 슬롯이 보이는 시간.
+const _kPlaybackInterval = Duration(milliseconds: 800);
 
 /// 비구름 지도 화면 — 한반도 격자에 1~6시간 강수 예측 색칠.
 ///
@@ -16,6 +21,46 @@ class RadarScreen extends ConsumerStatefulWidget {
 
 class _RadarScreenState extends ConsumerState<RadarScreen> {
   int _hourIndex = 0;
+  bool _isPlaying = true;
+  Timer? _playbackTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startPlayback();
+  }
+
+  @override
+  void dispose() {
+    _playbackTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startPlayback() {
+    _playbackTimer?.cancel();
+    _playbackTimer = Timer.periodic(_kPlaybackInterval, (_) {
+      if (!mounted || !_isPlaying) return;
+      final grid = switch (ref.read(rainGridProvider)) {
+        AsyncData(:final value) => value,
+        _ => null,
+      };
+      final count = grid?.hours.length ?? 0;
+      if (count == 0) return;
+      setState(() => _hourIndex = (_hourIndex + 1) % count);
+    });
+  }
+
+  void _togglePlay() {
+    setState(() => _isPlaying = !_isPlaying);
+  }
+
+  /// 사용자가 슬라이더를 만지면 자동 재생 중지 (직접 조작 의도 존중).
+  void _onSliderChanged(int i) {
+    setState(() {
+      _hourIndex = i;
+      _isPlaying = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -102,7 +147,9 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
                 _TimeSlider(
                   hours: grid.hours,
                   index: safeIndex,
-                  onChanged: (i) => setState(() => _hourIndex = i),
+                  isPlaying: _isPlaying,
+                  onChanged: _onSliderChanged,
+                  onTogglePlay: _togglePlay,
                 ),
               ],
             ),
@@ -194,12 +241,16 @@ class _TimeSlider extends StatelessWidget {
   const _TimeSlider({
     required this.hours,
     required this.index,
+    required this.isPlaying,
     required this.onChanged,
+    required this.onTogglePlay,
   });
 
   final List<RainHour> hours;
   final int index;
+  final bool isPlaying;
   final ValueChanged<int> onChanged;
+  final VoidCallback onTogglePlay;
 
   @override
   Widget build(BuildContext context) {
@@ -229,21 +280,36 @@ class _TimeSlider extends StatelessWidget {
               ),
             ],
           ),
-          SliderTheme(
-            data: SliderThemeData(
-              activeTrackColor: Colors.white,
-              inactiveTrackColor: Colors.white24,
-              thumbColor: Colors.white,
-              overlayColor: Colors.white.withValues(alpha: 0.2),
-            ),
-            child: Slider(
-              min: 0,
-              max: (hours.length - 1).toDouble(),
-              divisions: hours.length - 1,
-              value: index.toDouble(),
-              label: '+${current.offset}h',
-              onChanged: (v) => onChanged(v.round()),
-            ),
+          Row(
+            children: [
+              IconButton(
+                icon: Icon(
+                  isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
+                onPressed: onTogglePlay,
+                tooltip: isPlaying ? '일시정지' : '재생',
+              ),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderThemeData(
+                    activeTrackColor: Colors.white,
+                    inactiveTrackColor: Colors.white24,
+                    thumbColor: Colors.white,
+                    overlayColor: Colors.white.withValues(alpha: 0.2),
+                  ),
+                  child: Slider(
+                    min: 0,
+                    max: (hours.length - 1).toDouble(),
+                    divisions: hours.length - 1,
+                    value: index.toDouble(),
+                    label: '+${current.offset}h',
+                    onChanged: (v) => onChanged(v.round()),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
