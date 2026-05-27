@@ -87,7 +87,7 @@ class _KmaMapper {
   }) {
     final hours = (shortData['hours'] as List).cast<Map<String, dynamic>>();
     return WeatherBundle(
-      today: _todayHourly(hours),
+      today: _todayHourly(hours, ultraData),
       todaySummary: _todaySummary(hours),
       weekDays: _weekDays(hours, midLandData, midTempData),
       ultraShort: ultraData != null ? _ultraShort(ultraData) : null,
@@ -137,10 +137,19 @@ class _KmaMapper {
   }
 
   /// 오늘 시간별 → `Map<hour, HourlyWeather>`.
-  static Map<int, HourlyWeather> _todayHourly(List<Map<String, dynamic>> hours) {
+  ///
+  /// 단기예보를 기본으로 채우고, 같은 시각에 초단기예보 데이터가 있으면 덮어쓴다.
+  /// 초단기는 30분마다 발표라 단기(3시간 주기)보다 훨씬 신선 → 우선.
+  /// 강수확률(POP)은 초단기엔 없으므로 단기 값을 보존.
+  static Map<int, HourlyWeather> _todayHourly(
+    List<Map<String, dynamic>> shortHours,
+    Map<String, dynamic>? ultraData,
+  ) {
     final todayStr = _todayYYYYMMDD();
     final result = <int, HourlyWeather>{};
-    for (final h in hours) {
+
+    // 1) 단기예보로 기본 채움.
+    for (final h in shortHours) {
       if (h['fcst_date'] != todayStr) continue;
       final hour = _parseHour(h['fcst_time'] as String);
       final tmp = (h['tmp'] as num?)?.toDouble();
@@ -150,6 +159,24 @@ class _KmaMapper {
         temperatureC: tmp,
         condition: _kmaCondition(h['sky'] as int?, h['pty'] as int?),
         precipitationProb: (h['pop'] as num?)?.toInt() ?? 0,
+      );
+    }
+
+    // 2) 초단기예보가 커버하는 시각은 덮어쓰기 (더 신선한 기온/하늘/강수형태).
+    final ultraHours =
+        (ultraData?['hours'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+    for (final h in ultraHours) {
+      if (h['fcst_date'] != todayStr) continue;
+      final tmp = (h['t1h'] as num?)?.toDouble();
+      if (tmp == null) continue;
+      final hour = _parseHour(h['fcst_time'] as String);
+      final existing = result[hour];
+      result[hour] = HourlyWeather(
+        hour: hour,
+        temperatureC: tmp,
+        condition: _kmaCondition(h['sky'] as int?, h['pty'] as int?),
+        // 초단기엔 POP 없음 — 단기 값 유지.
+        precipitationProb: existing?.precipitationProb ?? 0,
       );
     }
     return result;
