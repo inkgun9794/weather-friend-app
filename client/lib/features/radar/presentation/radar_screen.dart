@@ -1,14 +1,23 @@
 import 'dart:async';
-import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:weather_friend/features/radar/data/korea_label.dart';
 import 'package:weather_friend/features/radar/data/korea_mask.dart';
 import 'package:weather_friend/features/radar/data/rain_grid.dart';
 
 /// 자동 재생 시 한 슬롯이 보이는 시간.
 const _kPlaybackInterval = Duration(milliseconds: 800);
+
+// 화면 표시 viewport — 남한 위주 (38선 살짝 위 ~ 제주 살짝 아래).
+// 격자 좌표는 (1,1)=(31.79°N, 123.76°E), (149,253)=(43.39°N, 132.78°E) 기준.
+// 한반도 격자 149×253 중 남한 + 약간 북한/인근 해상만 crop.
+const _kViewportNxMin = 10;
+const _kViewportNxMax = 135;
+const _kViewportNyMin = 25;
+const _kViewportNyMax = 165;
+const _kViewportNx = _kViewportNxMax - _kViewportNxMin + 1; // 126
+const _kViewportNy = _kViewportNyMax - _kViewportNyMin + 1; // 141
 
 /// 비구름 지도 화면 — 한반도 격자에 1~6시간 강수 예측 색칠.
 ///
@@ -31,11 +40,13 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
 
   /// 핀치 줌/팬용 변환 컨트롤러. 초기 1.3배 확대로 시작.
   late final TransformationController _viewerCtrl;
+  double _currentScale = 1.3;
 
   @override
   void initState() {
     super.initState();
     _viewerCtrl = TransformationController()..value = Matrix4.identity();
+    _viewerCtrl.addListener(_onTransform);
     // 첫 프레임 후 화면 중앙 기준 1.3배 줌.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -46,9 +57,17 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
 
   @override
   void dispose() {
+    _viewerCtrl.removeListener(_onTransform);
     _playbackTimer?.cancel();
     _viewerCtrl.dispose();
     super.dispose();
+  }
+
+  void _onTransform() {
+    final scale = _viewerCtrl.value.getMaxScaleOnAxis();
+    if ((scale - _currentScale).abs() > 0.05) {
+      setState(() => _currentScale = scale);
+    }
   }
 
   void _startPlayback() {
@@ -120,6 +139,10 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
               AsyncData(:final value) => value,
               _ => null,
             };
+            final labels = switch (ref.watch(koreaLabelsProvider)) {
+              AsyncData(:final value) => value,
+              _ => const <KoreaLabel>[],
+            };
 
             final safeIndex = _hourIndex.clamp(0, grid.hours.length - 1);
             final currentHour = grid.hours[safeIndex];
@@ -148,13 +171,13 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
                             double.infinity,
                           ),
                           child: AspectRatio(
-                            aspectRatio: grid.nx / grid.ny,
+                            aspectRatio: _kViewportNx / _kViewportNy,
                             child: CustomPaint(
                               painter: _RadarPainter(
-                                gridNx: grid.nx,
-                                gridNy: grid.ny,
                                 maskCells: mask?.cells ?? const [],
                                 rainCells: currentHour.cells,
+                                labels: labels,
+                                scale: _currentScale,
                               ),
                               size: Size.infinite,
                             ),
@@ -181,58 +204,114 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
   }
 }
 
-/// 한반도 mask + 강수 격자를 같은 캔버스에 그리는 painter.
+/// 한반도 mask + 강수 격자 + 행정구역 라벨을 같은 캔버스에 그리는 painter.
 ///
-/// - mask: 옅은 회색 dot (한반도 영역 표시 — 강수가 없어도 한반도 모양 보임)
-/// - rain: RN1 강도별 색 dot + blur (자연스러운 비구름 느낌)
+/// viewport 좌표계 — _kViewport* 범위만 화면에 그림. 그 밖은 무시.
+/// 라벨은 줌 스케일에 따라 단계적으로 노출 (광역시·도 → 시·군·구).
 class _RadarPainter extends CustomPainter {
   _RadarPainter({
-    required this.gridNx,
-    required this.gridNy,
     required this.maskCells,
     required this.rainCells,
+    required this.labels,
+    required this.scale,
   });
 
-  final int gridNx;
-  final int gridNy;
   final List<KoreaMaskCell> maskCells;
   final List<RainCell> rainCells;
+  final List<KoreaLabel> labels;
+  final double scale;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final cellW = size.width / gridNx;
-    final cellH = size.height / gridNy;
-    final cellSize = math.max(cellW, cellH);
+    final cellW = size.width / _kViewportNx;
+    final cellH = size.height / _kViewportNy;
+    final overdraw = cellW < 1 ? 0.5 : 0.3;
 
-    // ── 1) 한반도 mask — 옅은 회색 dot ──
-    final maskPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.10)
-      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 0.6);
+    // ── 1) 한반도 mask — 옅은 흰색 사각형 ──
+    final maskPaint = Paint()..color = Colors.white.withValues(alpha: 0.18);
     for (final c in maskCells) {
-      final cx = (c.nx - 0.5) * cellW;
-      final cy = (gridNy - c.ny + 0.5) * cellH;
-      canvas.drawCircle(Offset(cx, cy), cellSize * 0.6, maskPaint);
-    }
-
-    // ── 2) 강수 셀 — 강도별 색 + blur ──
-    for (final c in rainCells) {
-      final cx = (c.nx - 0.5) * cellW;
-      final cy = (gridNy - c.ny + 0.5) * cellH;
-      final color = _colorFor(c.rn1);
-      // 약한 비는 작게/투명하게, 폭우는 크고 진하게
-      final intensity = (c.rn1 / 15.0).clamp(0.3, 1.0);
-      final radius = cellSize * (1.0 + intensity * 0.8);
-      canvas.drawCircle(
-        Offset(cx, cy),
-        radius,
-        Paint()
-          ..color = color.withValues(alpha: 0.6 + intensity * 0.3)
-          ..maskFilter = ui.MaskFilter.blur(
-            ui.BlurStyle.normal,
-            cellSize * 0.5,
-          ),
+      if (!_inViewport(c.nx, c.ny)) continue;
+      final sx = (c.nx - _kViewportNxMin) * cellW;
+      final sy = (_kViewportNyMax - c.ny) * cellH;
+      canvas.drawRect(
+        Rect.fromLTWH(sx, sy, cellW + overdraw, cellH + overdraw),
+        maskPaint,
       );
     }
+
+    // ── 2) 강수 셀 — 격자 정렬 사각형 ──
+    for (final c in rainCells) {
+      if (!_inViewport(c.nx, c.ny)) continue;
+      final sx = (c.nx - _kViewportNxMin) * cellW;
+      final sy = (_kViewportNyMax - c.ny) * cellH;
+      canvas.drawRect(
+        Rect.fromLTWH(sx, sy, cellW + overdraw, cellH + overdraw),
+        Paint()..color = _colorFor(c.rn1).withValues(alpha: 0.95),
+      );
+    }
+
+    // ── 3) 라벨 — 줌 단계별 ──
+    // scale < 1.6: 광역시·도만 (적은 라벨 = 한눈에 보기)
+    // scale ≥ 1.6: 시·군·구도 함께
+    final showDistrict = scale >= 1.6;
+    // 라벨은 InteractiveViewer가 zoom으로 확대해버리므로 painter에서는
+    // scale의 역수만큼 작게 그려 화면상 항상 같은 픽셀 크기로 보이게 함.
+    final invScale = 1.0 / scale.clamp(0.5, 6.0);
+    final metroFontSize = 12.0 * invScale;
+    final districtFontSize = 9.0 * invScale;
+
+    for (final label in labels) {
+      if (label.level == LabelLevel.district && !showDistrict) continue;
+      if (!_inViewport(label.nx, label.ny)) continue;
+      final sx = (label.nx - _kViewportNxMin + 0.5) * cellW;
+      final sy = (_kViewportNyMax - label.ny + 0.5) * cellH;
+      _drawLabel(
+        canvas,
+        label.name,
+        Offset(sx, sy),
+        label.level == LabelLevel.metro ? metroFontSize : districtFontSize,
+        label.level == LabelLevel.metro
+            ? Colors.white
+            : Colors.white.withValues(alpha: 0.75),
+        label.level == LabelLevel.metro ? FontWeight.w700 : FontWeight.w500,
+      );
+    }
+  }
+
+  void _drawLabel(
+    Canvas canvas,
+    String text,
+    Offset center,
+    double fontSize,
+    Color color,
+    FontWeight weight,
+  ) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: fontSize,
+          fontWeight: weight,
+          shadows: const [
+            // 어두운 그림자로 어떤 색 위에서든 가독성 확보.
+            Shadow(color: Color(0xCC000000), blurRadius: 3),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(
+      canvas,
+      Offset(center.dx - tp.width / 2, center.dy - tp.height / 2),
+    );
+  }
+
+  static bool _inViewport(int nx, int ny) {
+    return nx >= _kViewportNxMin &&
+        nx <= _kViewportNxMax &&
+        ny >= _kViewportNyMin &&
+        ny <= _kViewportNyMax;
   }
 
   Color _colorFor(double rn1) {
@@ -247,8 +326,8 @@ class _RadarPainter extends CustomPainter {
   bool shouldRepaint(_RadarPainter old) =>
       old.rainCells != rainCells ||
       old.maskCells != maskCells ||
-      old.gridNx != gridNx ||
-      old.gridNy != gridNy;
+      old.labels != labels ||
+      old.scale != scale;
 }
 
 class _Legend extends StatelessWidget {
