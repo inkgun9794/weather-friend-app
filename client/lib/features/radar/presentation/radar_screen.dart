@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:weather_friend/features/radar/data/rain_grid.dart';
 
 /// 비구름 지도 화면 — 한반도 격자에 1~6시간 강수 예측 색칠.
@@ -64,12 +65,34 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
                       aspectRatio: grid.nx / grid.ny,
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: CustomPaint(
-                          painter: _RainPainter(
-                            grid: grid,
-                            cells: currentHour.cells,
+                        child: DecoratedBox(
+                          decoration: const BoxDecoration(color: Color(0xFF1B2230)),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              // 한반도 윤곽 (Wikimedia Commons "Map of Korea-blank",
+                              // CC-BY-SA-3.0, NordNordWest).
+                              Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: SvgPicture.asset(
+                                  'assets/maps/korea_outline.svg',
+                                  fit: BoxFit.contain,
+                                  colorFilter: const ColorFilter.mode(
+                                    Color(0xFF3A4660),
+                                    BlendMode.srcIn,
+                                  ),
+                                ),
+                              ),
+                              // 강수 격자 셀 — SVG 위에 overlay.
+                              CustomPaint(
+                                painter: _RainPainter(
+                                  grid: grid,
+                                  cells: currentHour.cells,
+                                ),
+                                size: Size.infinite,
+                              ),
+                            ],
                           ),
-                          size: Size.infinite,
                         ),
                       ),
                     ),
@@ -98,33 +121,22 @@ class _RainPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 배경 (어두운 청회색 — 한반도 영역 placeholder)
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = const Color(0xFF1B2230),
-    );
+    // 배경은 Stack 부모의 DecoratedBox가 담당, SVG outline은 같은 Stack의 별도 layer.
+    // 여기선 강수 셀만 그림 (SVG 위에 overlay).
 
-    // 격자 한 셀의 화면상 크기 (1-based → 화면 좌표)
+    // 격자 한 셀의 화면상 크기 (1-based → 화면 좌표).
     final cellW = size.width / grid.nx;
     final cellH = size.height / grid.ny;
 
-    // 강수 셀 색칠
     for (final c in cells) {
       // 좌측하단 origin (KMA 격자) → 좌측상단 origin (화면) 변환.
       final screenX = (c.nx - 1) * cellW;
       final screenY = (grid.ny - c.ny) * cellH;
       canvas.drawRect(
         Rect.fromLTWH(screenX, screenY, cellW + 0.5, cellH + 0.5),
-        Paint()..color = _colorFor(c.rn1),
+        Paint()..color = _colorFor(c.rn1).withValues(alpha: 0.85),
       );
     }
-
-    // 한반도 영역 frame (placeholder — 정확한 outline은 추후 SVG로 교체)
-    final framePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.15)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-    canvas.drawRect(Offset.zero & size, framePaint);
   }
 
   /// RN1 (mm/h) 기준 색 매핑.

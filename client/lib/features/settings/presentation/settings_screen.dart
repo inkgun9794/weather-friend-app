@@ -65,6 +65,14 @@ class _DataAttribution extends StatelessWidget {
             tail: 'open-meteo.com',
             muted: muted,
           ),
+          const SizedBox(height: 10),
+          _Source(
+            icon: Icons.map_outlined,
+            title: '한반도 지도 outline',
+            subtitle: '비구름 지도 배경 (Wikimedia Commons)',
+            tail: '"Map of Korea-blank" by NordNordWest · CC BY-SA 3.0',
+            muted: muted,
+          ),
           const SizedBox(height: 16),
           Text(
             '기상청 자료는 공공누리 제1유형(출처표시)에 따라 제공받아 사용 중.',
