@@ -65,6 +65,14 @@ class _DataAttribution extends StatelessWidget {
             tail: 'open-meteo.com',
             muted: muted,
           ),
+          const SizedBox(height: 10),
+          _Source(
+            icon: Icons.map_outlined,
+            title: '한국 행정구역 outline',
+            subtitle: '비구름 지도 시·군·구 경계',
+            tail: 'github.com/southkorea/southkorea-maps · BSD License',
+            muted: muted,
+          ),
           const SizedBox(height: 16),
           Text(
             '기상청 자료는 공공누리 제1유형(출처표시)에 따라 제공받아 사용 중.',

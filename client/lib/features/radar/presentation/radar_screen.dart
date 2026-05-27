@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:weather_friend/features/radar/data/korea_geojson.dart';
 import 'package:weather_friend/features/radar/data/korea_label.dart';
 import 'package:weather_friend/features/radar/data/korea_mask.dart';
 import 'package:weather_friend/features/radar/data/rain_grid.dart';
@@ -9,15 +10,15 @@ import 'package:weather_friend/features/radar/data/rain_grid.dart';
 /// 자동 재생 시 한 슬롯이 보이는 시간.
 const _kPlaybackInterval = Duration(milliseconds: 800);
 
-// 화면 표시 viewport — 남한 위주 (38선 살짝 위 ~ 제주 살짝 아래).
+// 화면 표시 viewport — 남한 위주 (38선 살짝 위 ~ 제주 살짝 아래) + 인근 해상.
 // 격자 좌표는 (1,1)=(31.79°N, 123.76°E), (149,253)=(43.39°N, 132.78°E) 기준.
-// 한반도 격자 149×253 중 남한 + 약간 북한/인근 해상만 crop.
-const _kViewportNxMin = 10;
-const _kViewportNxMax = 135;
-const _kViewportNyMin = 25;
-const _kViewportNyMax = 165;
-const _kViewportNx = _kViewportNxMax - _kViewportNxMin + 1; // 126
-const _kViewportNy = _kViewportNyMax - _kViewportNyMin + 1; // 141
+// 서해/동해 강수도 보이도록 좌우 약간 넓힘.
+const _kViewportNxMin = 1;
+const _kViewportNxMax = 149;
+const _kViewportNyMin = 20;
+const _kViewportNyMax = 175;
+const _kViewportNx = _kViewportNxMax - _kViewportNxMin + 1; // 149
+const _kViewportNy = _kViewportNyMax - _kViewportNyMin + 1; // 156
 
 /// 비구름 지도 화면 — 한반도 격자에 1~6시간 강수 예측 색칠.
 ///
@@ -143,6 +144,10 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
               AsyncData(:final value) => value,
               _ => const <KoreaLabel>[],
             };
+            final polygons = switch (ref.watch(koreaMunicipalitiesProvider)) {
+              AsyncData(:final value) => value,
+              _ => const <MunicipalityShape>[],
+            };
 
             final safeIndex = _hourIndex.clamp(0, grid.hours.length - 1);
             final currentHour = grid.hours[safeIndex];
@@ -177,6 +182,7 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
                                 maskCells: mask?.cells ?? const [],
                                 rainCells: currentHour.cells,
                                 labels: labels,
+                                polygons: polygons,
                                 scale: _currentScale,
                               ),
                               size: Size.infinite,
@@ -213,12 +219,14 @@ class _RadarPainter extends CustomPainter {
     required this.maskCells,
     required this.rainCells,
     required this.labels,
+    required this.polygons,
     required this.scale,
   });
 
   final List<KoreaMaskCell> maskCells;
   final List<RainCell> rainCells;
   final List<KoreaLabel> labels;
+  final List<MunicipalityShape> polygons;
   final double scale;
 
   @override
@@ -227,8 +235,10 @@ class _RadarPainter extends CustomPainter {
     final cellH = size.height / _kViewportNy;
     final overdraw = cellW < 1 ? 0.5 : 0.3;
 
-    // ── 1) 한반도 mask — 옅은 흰색 사각형 ──
-    final maskPaint = Paint()..color = Colors.white.withValues(alpha: 0.18);
+    // ── 1) 한반도 + 근해 mask ──
+    // KMA 레이더 관측영역(-99 아닌 셀) 전체 표시 → 한반도 + 서해/동해 일부 영역 명확.
+    // alpha 진하게 (0.25) 해서 본토만 두드러지지 않게.
+    final maskPaint = Paint()..color = Colors.white.withValues(alpha: 0.25);
     for (final c in maskCells) {
       if (!_inViewport(c.nx, c.ny)) continue;
       final sx = (c.nx - _kViewportNxMin) * cellW;
@@ -248,6 +258,30 @@ class _RadarPainter extends CustomPainter {
         Rect.fromLTWH(sx, sy, cellW + overdraw, cellH + overdraw),
         Paint()..color = _colorFor(c.rn1).withValues(alpha: 0.95),
       );
+    }
+
+    // ── 3) 시·군·구 outline ──
+    // polygon은 격자 좌표(1-based)로 저장되어 있음. Matrix4로 viewport→화면 변환.
+    if (polygons.isNotEmpty) {
+      final matrix = Matrix4.identity()
+        ..setEntry(0, 0, cellW)
+        ..setEntry(1, 1, -cellH)
+        ..setEntry(0, 3, -_kViewportNxMin * cellW)
+        ..setEntry(1, 3, _kViewportNyMax * cellH);
+
+      // 줌 보정 — 화면 stroke 두께를 일정하게 (scale 커지면 가늘게).
+      final invScale = 1.0 / scale.clamp(0.5, 6.0);
+      final outlinePaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.4)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8 * invScale;
+
+      canvas.save();
+      canvas.transform(matrix.storage);
+      for (final p in polygons) {
+        canvas.drawPath(p.path, outlinePaint);
+      }
+      canvas.restore();
     }
 
     // ── 3) 라벨 — 줌 단계별 ──
@@ -327,6 +361,7 @@ class _RadarPainter extends CustomPainter {
       old.rainCells != rainCells ||
       old.maskCells != maskCells ||
       old.labels != labels ||
+      old.polygons != polygons ||
       old.scale != scale;
 }
 
