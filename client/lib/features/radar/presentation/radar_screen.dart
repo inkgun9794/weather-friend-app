@@ -6,6 +6,7 @@ import 'package:weather_friend/features/radar/data/korea_geojson.dart';
 import 'package:weather_friend/features/radar/data/korea_label.dart';
 import 'package:weather_friend/features/radar/data/korea_mask.dart';
 import 'package:weather_friend/features/radar/data/rain_grid.dart';
+import 'package:weather_friend/features/radar/data/user_location.dart';
 
 /// 자동 재생 시 한 슬롯이 보이는 시간.
 const _kPlaybackInterval = Duration(milliseconds: 800);
@@ -41,18 +42,13 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
 
   /// 핀치 줌/팬용 변환 컨트롤러. 초기 1.3배 확대로 시작.
   late final TransformationController _viewerCtrl;
-  double _currentScale = 1.3;
+  double _currentScale = 1.0;
 
   @override
   void initState() {
     super.initState();
     _viewerCtrl = TransformationController()..value = Matrix4.identity();
     _viewerCtrl.addListener(_onTransform);
-    // 첫 프레임 후 화면 중앙 기준 1.3배 줌.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _viewerCtrl.value = Matrix4.identity()..scaleByDouble(1.3, 1.3, 1, 1);
-    });
     _startPlayback();
   }
 
@@ -148,6 +144,10 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
               AsyncData(:final value) => value,
               _ => const <MunicipalityShape>[],
             };
+            final userGrid = switch (ref.watch(userGridProvider)) {
+              AsyncData(:final value) => value,
+              _ => null,
+            };
 
             final safeIndex = _hourIndex.clamp(0, grid.hours.length - 1);
             final currentHour = grid.hours[safeIndex];
@@ -170,7 +170,7 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
                         child: InteractiveViewer(
                           transformationController: _viewerCtrl,
                           minScale: 0.8,
-                          maxScale: 6.0,
+                          maxScale: 10.0,
                           // 무한 boundaryMargin → 자유 팬 (잘려도 끝까지 움직임)
                           boundaryMargin: const EdgeInsets.all(
                             double.infinity,
@@ -183,6 +183,7 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
                                 rainCells: currentHour.cells,
                                 labels: labels,
                                 polygons: polygons,
+                                userGrid: userGrid,
                                 scale: _currentScale,
                               ),
                               size: Size.infinite,
@@ -220,6 +221,7 @@ class _RadarPainter extends CustomPainter {
     required this.rainCells,
     required this.labels,
     required this.polygons,
+    required this.userGrid,
     required this.scale,
   });
 
@@ -227,6 +229,7 @@ class _RadarPainter extends CustomPainter {
   final List<RainCell> rainCells;
   final List<KoreaLabel> labels;
   final List<MunicipalityShape> polygons;
+  final ({double nx, double ny})? userGrid;
   final double scale;
 
   @override
@@ -284,42 +287,108 @@ class _RadarPainter extends CustomPainter {
       canvas.restore();
     }
 
-    // ── 3) 라벨 — 줌 단계별 ──
-    // scale < 1.6: 광역시·도만 (적은 라벨 = 한눈에 보기)
-    // scale ≥ 1.6: 시·군·구도 함께
-    final showDistrict = scale >= 1.6;
-    // 라벨은 InteractiveViewer가 zoom으로 확대해버리므로 painter에서는
-    // scale의 역수만큼 작게 그려 화면상 항상 같은 픽셀 크기로 보이게 함.
-    final invScale = 1.0 / scale.clamp(0.5, 6.0);
-    final metroFontSize = 12.0 * invScale;
+    // ── 4) 라벨 — 줌 단계별 + 겹침 방지 ──
+    // 광역시·도는 항상. 시·군·구는 많이 줌인했을 때만 (scale ≥ 3.5).
+    // 광역시·도를 먼저 그리고, 시·군·구는 겹치지 않는 것만 — 화면 정돈.
+    final showDistrict = scale >= 3.5;
+    final invScale = 1.0 / scale.clamp(0.5, 10.0);
+    final metroFontSize = 13.0 * invScale;
     final districtFontSize = 9.0 * invScale;
 
+    final drawnBoxes = <Rect>[];
+
+    // 1단계: 광역시·도 (우선) — viewport 안 + 거의 항상 그림
     for (final label in labels) {
-      if (label.level == LabelLevel.district && !showDistrict) continue;
+      if (label.level != LabelLevel.metro) continue;
       if (!_inViewport(label.nx, label.ny)) continue;
       final sx = (label.nx - _kViewportNxMin + 0.5) * cellW;
       final sy = (_kViewportNyMax - label.ny + 0.5) * cellH;
-      _drawLabel(
+      _drawLabelWithBox(
         canvas,
         label.name,
         Offset(sx, sy),
-        label.level == LabelLevel.metro ? metroFontSize : districtFontSize,
-        label.level == LabelLevel.metro
-            ? Colors.white
-            : Colors.white.withValues(alpha: 0.75),
-        label.level == LabelLevel.metro ? FontWeight.w700 : FontWeight.w500,
+        metroFontSize,
+        Colors.white,
+        FontWeight.w700,
+        drawnBoxes,
+        skipIfOverlap: false, // 광역시·도는 무조건
       );
+    }
+
+    // 2단계: 시·군·구 — 줌인 시 + 광역시·도와 안 겹치는 것만
+    if (showDistrict) {
+      for (final label in labels) {
+        if (label.level != LabelLevel.district) continue;
+        if (!_inViewport(label.nx, label.ny)) continue;
+        final sx = (label.nx - _kViewportNxMin + 0.5) * cellW;
+        final sy = (_kViewportNyMax - label.ny + 0.5) * cellH;
+        _drawLabelWithBox(
+          canvas,
+          label.name,
+          Offset(sx, sy),
+          districtFontSize,
+          Colors.white.withValues(alpha: 0.85),
+          FontWeight.w500,
+          drawnBoxes,
+          skipIfOverlap: true,
+        );
+      }
+    }
+
+    // ── 5) 사용자 위치 마커 — 초록 동그라미 + 펄스 (가장 위) ──
+    if (userGrid != null) {
+      final ug = userGrid!;
+      // viewport 안에 있을 때만 그림
+      if (ug.nx >= _kViewportNxMin &&
+          ug.nx <= _kViewportNxMax &&
+          ug.ny >= _kViewportNyMin &&
+          ug.ny <= _kViewportNyMax) {
+        final cx = (ug.nx - _kViewportNxMin) * cellW;
+        final cy = (_kViewportNyMax - ug.ny) * cellH;
+        _drawUserMarker(canvas, Offset(cx, cy), invScale);
+      }
     }
   }
 
-  void _drawLabel(
+  /// 사용자 위치 마커 — 줌과 무관하게 항상 같은 화면 크기 (1/scale 보정).
+  /// 흰 테두리 + 초록 코어 + 옅은 후광 = 표준 GPS 마커 디자인.
+  void _drawUserMarker(Canvas canvas, Offset center, double invScale) {
+    final outerRadius = 16.0 * invScale; // 후광
+    final coreRadius = 6.0 * invScale; // 본체
+    final borderWidth = 2.5 * invScale; // 흰 테두리
+
+    // 후광 (펄스 느낌)
+    canvas.drawCircle(
+      center,
+      outerRadius,
+      Paint()..color = const Color(0xFF22C55E).withValues(alpha: 0.3),
+    );
+    // 흰 테두리 (어떤 배경 위에서도 보이게)
+    canvas.drawCircle(
+      center,
+      coreRadius + borderWidth / 2,
+      Paint()..color = Colors.white,
+    );
+    // 진한 초록 코어
+    canvas.drawCircle(
+      center,
+      coreRadius,
+      Paint()..color = const Color(0xFF22C55E),
+    );
+  }
+
+  /// 라벨 한 개를 그리되, 이미 그려진 box와 겹치면 (옵션) skip.
+  /// padding을 약간 추가해서 너무 빡빡한 겹침 방지.
+  void _drawLabelWithBox(
     Canvas canvas,
     String text,
     Offset center,
     double fontSize,
     Color color,
     FontWeight weight,
-  ) {
+    List<Rect> drawnBoxes, {
+    required bool skipIfOverlap,
+  }) {
     final tp = TextPainter(
       text: TextSpan(
         text: text,
@@ -328,17 +397,31 @@ class _RadarPainter extends CustomPainter {
           fontSize: fontSize,
           fontWeight: weight,
           shadows: const [
-            // 어두운 그림자로 어떤 색 위에서든 가독성 확보.
             Shadow(color: Color(0xCC000000), blurRadius: 3),
           ],
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
+
+    // 겹침 검사용 박스 (양옆 padding 약간)
+    final box = Rect.fromCenter(
+      center: center,
+      width: tp.width + fontSize * 0.4,
+      height: tp.height,
+    );
+
+    if (skipIfOverlap) {
+      for (final b in drawnBoxes) {
+        if (b.overlaps(box)) return;
+      }
+    }
+
     tp.paint(
       canvas,
       Offset(center.dx - tp.width / 2, center.dy - tp.height / 2),
     );
+    drawnBoxes.add(box);
   }
 
   static bool _inViewport(int nx, int ny) {
@@ -362,6 +445,7 @@ class _RadarPainter extends CustomPainter {
       old.maskCells != maskCells ||
       old.labels != labels ||
       old.polygons != polygons ||
+      old.userGrid != userGrid ||
       old.scale != scale;
 }
 
