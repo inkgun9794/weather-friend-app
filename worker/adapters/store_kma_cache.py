@@ -82,34 +82,18 @@ class KmaCacheStore:
         """
         await self._set("kma_grid_rain/latest", payload)
 
-    async def save_radar_frame(self, slot: str, png: bytes) -> None:
-        """레이더 PNG 1프레임을 `kma_radar/latest/frames/{slot}` 에 직접 저장.
-
-        - slot: 'past_0' ~ 'past_5' / 'current' / 'future_1' ~ 'future_6'
-        - 같은 경로에 덮어씌우므로 별도 cleanup 불필요.
-        - Firestore field bytes 한도 1MB, PNG ~190KB라 안전.
-        """
-        ref = (
-            self._db.collection("kma_radar")
-            .document("latest")
-            .collection("frames")
-            .document(slot)
-        )
-        await ref.set({
-            "png": png,
-            "updated_at": firestore.SERVER_TIMESTAMP,
-        })
-
     async def save_radar_manifest(self, payload: dict) -> None:
-        """레이더 메타데이터 doc. 클라이언트는 이 doc 1개 + frames 13개 doc을 fetch.
+        """레이더 메타데이터 doc. PNG 자체는 GitHub Pages에서 서빙하므로
+        manifest에는 슬롯 메타와 URL만. 클라는 이 doc 1개만 읽으면 끝.
 
         payload = {
             "base_tm": "202605271500",
             "bounds": {"south": .., "west": .., "north": .., "east": ..},
+            "motion_per_hour_deg": {"dlat": .., "dlon": ..},
             "frames": [
-                {"slot": "past_0", "kind": "obs", "tm": "...", "offset_min": -60},
+                {"slot": "past", "kind": "obs", "tm": "...", "offset_min": -60,
+                 "url": "https://.../radar/past.png?v=..."},
                 ...
-                {"slot": "future_6", "kind": "fcst", "tm": "...", "offset_min": 360}
             ]
         }
         """

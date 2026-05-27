@@ -1,20 +1,20 @@
-import 'dart:typed_data';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
-/// 한 프레임 메타 — bytes는 별도 doc에서 lazy fetch.
+/// 한 슬라이더 포지션의 메타 — 'past'(=-60분) 또는 'current'(=0분).
+/// PNG 자체는 GitHub Pages에서 [url]로 fetch.
 class RadarFrame {
   const RadarFrame({
     required this.slot,
     required this.kind,
     required this.tm,
     required this.offsetMin,
+    required this.url,
   });
 
-  /// 'past_0' ~ 'past_5' / 'current' / 'future_1' ~ 'future_6'
+  /// 'past' | 'current'
   final String slot;
 
   /// 'obs' (실측) | 'fcst' (외삽 예측)
@@ -23,8 +23,11 @@ class RadarFrame {
   /// YYYYMMDDHHmm (KST)
   final String tm;
 
-  /// 현재 기준 분 단위 오프셋. 과거는 음수, 미래는 양수.
+  /// 분 단위 오프셋. -60 또는 양수.
   final int offsetMin;
+
+  /// GitHub Pages public URL. base_tm을 ?v= 쿼리로 붙여 캐시 버스팅됨.
+  final String url;
 
   bool get isObservation => kind == 'obs';
 
@@ -33,10 +36,11 @@ class RadarFrame {
         kind: m['kind'] as String,
         tm: m['tm'] as String,
         offsetMin: (m['offset_min'] as num).toInt(),
+        url: m['url'] as String,
       );
 }
 
-/// 레이더 PNG가 차지하는 위경도 영역. flutter_map OverlayImage에 그대로 전달.
+/// 'current' PNG의 원본 위경도 영역. 외삽 frame은 이걸 shift해서 그림.
 class RadarBounds {
   const RadarBounds({
     required this.south,
@@ -53,6 +57,14 @@ class RadarBounds {
   LatLngBounds toLatLngBounds() =>
       LatLngBounds(LatLng(south, west), LatLng(north, east));
 
+  RadarBounds shifted({required double dlat, required double dlon}) =>
+      RadarBounds(
+        south: south + dlat,
+        west: west + dlon,
+        north: north + dlat,
+        east: east + dlon,
+      );
+
   factory RadarBounds.fromMap(Map<String, dynamic> m) => RadarBounds(
         south: (m['south'] as num).toDouble(),
         west: (m['west'] as num).toDouble(),
@@ -61,29 +73,49 @@ class RadarBounds {
       );
 }
 
-/// manifest + 모든 프레임 bytes를 한 묶음으로 — 한 번에 prefetch해 슬라이더 부드럽게.
+/// 시간당 위경도 이동량.
+class RadarMotionDeg {
+  const RadarMotionDeg({required this.dlat, required this.dlon});
+  final double dlat;
+  final double dlon;
+
+  factory RadarMotionDeg.fromMap(Map<String, dynamic> m) => RadarMotionDeg(
+        dlat: (m['dlat'] as num).toDouble(),
+        dlon: (m['dlon'] as num).toDouble(),
+      );
+}
+
+/// manifest 1개 doc만 fetch — PNG는 [RadarFrame.url]로 NetworkImage가 알아서 받음.
 class RadarState {
   const RadarState({
     required this.baseTm,
     required this.bounds,
+    required this.motionDeg,
     required this.frames,
-    required this.bytesBySlot,
   });
 
   final String baseTm;
   final RadarBounds bounds;
-  final List<RadarFrame> frames; // 시간순 (과거 → 현재 → 미래)
-  final Map<String, Uint8List> bytesBySlot;
+  final RadarMotionDeg motionDeg;
+  final List<RadarFrame> frames;
+
+  RadarBounds boundsFor(RadarFrame f) {
+    if (f.slot == 'current' && f.offsetMin != 0) {
+      final hours = f.offsetMin / 60.0;
+      return bounds.shifted(
+        dlat: motionDeg.dlat * hours,
+        dlon: motionDeg.dlon * hours,
+      );
+    }
+    return bounds;
+  }
 }
 
-/// 1) `kma_radar/latest` manifest doc 1번
-/// 2) `kma_radar/latest/frames/{slot}` 프레임 doc 13개를 병렬 fetch
-/// 3) bytes를 메모리에 캐시한 채로 [RadarState] 반환 → 슬라이더 즉시 전환
 final radarStateProvider = FutureProvider<RadarState?>((ref) async {
   final fs = FirebaseFirestore.instance;
-  final manifestDoc = await fs.collection('kma_radar').doc('latest').get();
-  if (!manifestDoc.exists) return null;
-  final data = manifestDoc.data()!;
+  final doc = await fs.collection('kma_radar').doc('latest').get();
+  if (!doc.exists) return null;
+  final data = doc.data()!;
 
   final frames = ((data['frames'] as List?) ?? const [])
       .cast<Map<String, dynamic>>()
@@ -91,26 +123,12 @@ final radarStateProvider = FutureProvider<RadarState?>((ref) async {
       .toList()
     ..sort((a, b) => a.offsetMin.compareTo(b.offsetMin));
 
-  final framesRef =
-      fs.collection('kma_radar').doc('latest').collection('frames');
-  final fetched = await Future.wait(
-    frames.map((f) async {
-      final doc = await framesRef.doc(f.slot).get();
-      if (!doc.exists) return null;
-      final raw = doc.data()?['png'];
-      if (raw is Blob) return MapEntry(f.slot, raw.bytes);
-      return null;
-    }),
-  );
-  final bytesBySlot = <String, Uint8List>{
-    for (final entry in fetched)
-      if (entry != null) entry.key: entry.value,
-  };
-
+  final motionMap =
+      (data['motion_per_hour_deg'] as Map<String, dynamic>? ?? const {});
   return RadarState(
     baseTm: data['base_tm'] as String,
     bounds: RadarBounds.fromMap(data['bounds'] as Map<String, dynamic>),
-    frames: frames.where((f) => bytesBySlot.containsKey(f.slot)).toList(),
-    bytesBySlot: bytesBySlot,
+    motionDeg: RadarMotionDeg.fromMap(motionMap),
+    frames: frames,
   );
 });

@@ -17,6 +17,7 @@ on:
 
 permissions:
   id-token: write   # OIDC for GCP WIF
+  contents: write   # 레이더 PNG를 docs/에 commit/push (GitHub Pages 서빙)
 
 concurrency:
   group: refresh-kma-grid
@@ -60,4 +61,28 @@ jobs:
         run: |
           uv run python refresh_kma.py \
             --mode ultra \
-            --cities "${{ inputs.cities }}"
+            --cities "${{ inputs.cities }}" \
+            --docs-root ../docs
+
+      - name: Commit & push radar PNGs (for GitHub Pages)
+        # 워커가 실패해도 일부 PNG는 publish해야 함 → always().
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/radar/
+          if git diff --staged --quiet; then
+            echo "No radar PNG changes."
+          else
+            git commit -m "chore(radar): update PNG $(date -u +'%Y-%m-%d %H:%M UTC')"
+            for attempt in 1 2 3; do
+              if git pull --rebase --autostash origin main && git push; then
+                echo "✓ Pushed on attempt $attempt"
+                exit 0
+              fi
+              echo "Push attempt $attempt failed, retrying in 5s..."
+              sleep 5
+            done
+            echo "✗ Push failed after 3 attempts"
+            exit 1
+          fi

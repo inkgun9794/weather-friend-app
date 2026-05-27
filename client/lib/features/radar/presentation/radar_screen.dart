@@ -108,7 +108,8 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
             final frames = state.frames;
             final safeIdx = _frameIndex.clamp(0, frames.length - 1);
             final current = frames[safeIdx];
-            final currentBytes = state.bytesBySlot[current.slot];
+            // 외삽 frame은 같은 PNG에 bounds만 shift — motion × hours.
+            final frameBounds = state.boundsFor(current);
             return Column(
               children: [
                 Expanded(
@@ -128,17 +129,17 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
                         userAgentPackageName: 'com.weatherfriend.app',
                         maxNativeZoom: 19,
                       ),
-                      // 2) 레이더 PNG overlay — Firestore에서 prefetch한 bytes.
-                      if (currentBytes != null)
-                        OverlayImageLayer(
-                          overlayImages: [
-                            OverlayImage(
-                              bounds: state.bounds.toLatLngBounds(),
-                              opacity: 0.82,
-                              imageProvider: MemoryImage(currentBytes),
-                            ),
-                          ],
-                        ),
+                      // 2) 레이더 PNG overlay — GitHub Pages URL (NetworkImage).
+                      //    외삽 슬롯은 frameBounds로 평행이동.
+                      OverlayImageLayer(
+                        overlayImages: [
+                          OverlayImage(
+                            bounds: frameBounds.toLatLngBounds(),
+                            opacity: 0.82,
+                            imageProvider: NetworkImage(current.url),
+                          ),
+                        ],
+                      ),
                       // 3) 사용자 위치
                       if (userLatLng != null)
                         MarkerLayer(
@@ -321,16 +322,15 @@ class _TimeSlider extends StatelessWidget {
   }
 
   String _formatLabel(RadarFrame f) {
-    // tm: YYYYMMDDHHmm (KST)
-    final mm = f.tm.substring(4, 6);
-    final dd = f.tm.substring(6, 8);
+    // tm: YYYYMMDDHHmm — 그 슬롯의 KST 시각만 표기 ('hh:mm', 날짜 바뀌면 'M/d hh:mm').
+    final now = DateTime.now();
     final hh = f.tm.substring(8, 10);
     final min = f.tm.substring(10, 12);
-    final sign = f.offsetMin > 0
-        ? '+${f.offsetMin}분'
-        : f.offsetMin < 0
-            ? '${f.offsetMin}분'
-            : '지금';
-    return '$sign  ($mm/$dd $hh:$min)';
+    final mm = f.tm.substring(4, 6);
+    final dd = f.tm.substring(6, 8);
+    final isToday = (mm == _two(now.month)) && (dd == _two(now.day));
+    return isToday ? '$hh:$min' : '$mm/$dd $hh:$min';
   }
+
+  static String _two(int n) => n.toString().padLeft(2, '0');
 }

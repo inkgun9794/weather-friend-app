@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import pathlib
 import zoneinfo
 from datetime import datetime, timedelta
 
 import numpy as np
 
-from adapters.extrapolation import estimate_motion_per_hour, extrapolate_chain
+from adapters.extrapolation import estimate_motion_per_hour
 from adapters.kma_apihub import NX as GRID_NX
 from adapters.kma_apihub import NY as GRID_NY
 from adapters.kma_apihub import fetch_vsrt_grid
@@ -33,6 +34,8 @@ from adapters.kma_radar import (
     HSR_BBOX_NORTH,
     HSR_BBOX_SOUTH,
     HSR_BBOX_WEST,
+    HSR_NX,
+    HSR_NY,
     RadarFrame,
     fetch_radar_hsr,
 )
@@ -154,19 +157,22 @@ async def refresh_short_and_mid(
 async def refresh_ultra_only(
     city_ids: list[str],
     project_id: str,
+    *,
+    docs_root: str = "_docs",
+    pages_base_url: str = "https://inkgun9794.github.io/weather-friend-app",
 ) -> None:
     """초단기만 갱신. grid 워크플로용 (30분 주기).
 
     - 도시별 카드용 초단기 (`getUltraSrtFcst`)
     - 비구름 지도용 한반도 격자 (`nph-dfs_vsrt_grd`, RN1) — 도시 무관 1회.
-    - 레이더 PNG (과거 6 + 현재 1 + 외삽 미래 6 = 13프레임) — 도시 무관 1회.
+    - 레이더 PNG (과거 1 + 현재 1 = 2장) — `docs_root/radar/`에 저장 후 GitHub Pages 서빙.
     """
     store = KmaCacheStore(project_id=project_id)
     try:
         await asyncio.gather(
             _refresh_ultra(city_ids, store),
             _refresh_grid_rain(store),
-            _refresh_radar_frames(store),
+            _refresh_radar_frames(store, docs_root=docs_root, pages_base_url=pages_base_url),
         )
     finally:
         await store.close()
@@ -319,121 +325,114 @@ def _shift_tm(tm: str, minutes: int) -> str:
     return t.strftime("%Y%m%d%H%M")
 
 
-async def _refresh_radar_frames(store: KmaCacheStore) -> None:
-    """과거 6장(10분 간격) + 현재 1장 + 외삽 미래 6장(1시간 간격) = 13프레임.
+async def _refresh_radar_frames(
+    store: KmaCacheStore,
+    *,
+    docs_root: str,
+    pages_base_url: str,
+) -> None:
+    """1시간 전 1장(실측) + 현재 1장(외삽 base) = 2 PNG.
 
-    슬롯 명명: past_0(가장 과거) ~ past_5 → current → future_1(+1h) ~ future_6(+6h).
+    PNG는 `{docs_root}/radar/{slot}.png` 파일로 저장 → 워크플로가 commit/push →
+    GitHub Pages가 서빙. 클라이언트는 manifest의 url(NetworkImage)로 fetch.
+
+    미래 36장은 클라이언트가 `current` PNG의 bounds를 motion vector만큼 shift해
+    시각화 — 서버는 렌더 안 함.
     """
     current_tm = latest_radar_tm()
-    past_tms = [_shift_tm(current_tm, -60 + i * 10) for i in range(6)]
+    prev_tm = _shift_tm(current_tm, -10)   # motion 추정용
+    past_tm = _shift_tm(current_tm, -60)   # 슬라이더 -60m 슬롯
     log.info(
-        "레이더 갱신 시작 — current=%s, past=[%s..%s]",
-        current_tm, past_tms[0], past_tms[-1],
+        "레이더 갱신 시작 — current=%s, prev=%s, past=%s, docs=%s",
+        current_tm, prev_tm, past_tm, docs_root,
     )
 
-    # 1) 과거 6장 + 현재 1장 = 7장을 병렬 fetch (KMA TPS 부담 낮음).
-    obs_tms = [*past_tms, current_tm]
-    obs_results = await asyncio.gather(
-        *(fetch_radar_hsr(tm) for tm in obs_tms),
+    # 1) 세 시각 병렬 fetch.
+    fetch_tms = [past_tm, prev_tm, current_tm]
+    results = await asyncio.gather(
+        *(fetch_radar_hsr(tm) for tm in fetch_tms),
         return_exceptions=True,
     )
-    obs_frames: list[RadarFrame | None] = []
-    for tm, res in zip(obs_tms, obs_results, strict=True):
+    frames: list[RadarFrame | None] = []
+    for tm, res in zip(fetch_tms, results, strict=True):
         if isinstance(res, RadarFrame):
-            obs_frames.append(res)
+            frames.append(res)
         else:
             log.error("레이더 fetch 실패 (%s): %s", tm, res)
-            obs_frames.append(None)
+            frames.append(None)
+    past_frame, prev_frame, current_frame = frames
 
-    # 현재 프레임이 없으면 외삽 불가 → 중단.
-    base_frame = obs_frames[-1]
-    if base_frame is None:
-        log.error("현재 레이더 프레임 누락 — 외삽/저장 스킵")
+    if current_frame is None:
+        log.error("현재 레이더 프레임 누락 — 저장 스킵")
         return
 
-    # 2) Motion vector — 안정성 위해 가장 최근 두 프레임 (current와 past_5 = 10분 전).
-    motion_per_hour: tuple[float, float] = (0.0, 0.0)
-    prev_frame = obs_frames[-2]
+    # 2) Motion vector — prev → current (10분 차) → px/h.
+    motion_per_hour_px: tuple[float, float] = (0.0, 0.0)
     if prev_frame is not None:
-        motion_per_hour = estimate_motion_per_hour(
+        motion_per_hour_px = estimate_motion_per_hour(
             prev_frame.values,
-            base_frame.values,
+            current_frame.values,
             minutes_apart=10,
         )
-    log.info("motion (px/h) = (dy=%.1f, dx=%.1f)", *motion_per_hour)
+    log.info("motion (px/h) = (dy=%.1f, dx=%.1f)", *motion_per_hour_px)
 
-    # 3) 외삽 6장 (1h 단위).
-    future_grids = extrapolate_chain(
-        base_frame.values,
-        motion_per_hour=motion_per_hour,
-        hours=6,
-    )
-    future_tms = [_shift_tm(current_tm, 60 * (i + 1)) for i in range(6)]
+    # 3) px/h → deg/h.
+    deg_per_px_lon = (HSR_BBOX_EAST - HSR_BBOX_WEST) / HSR_NX
+    deg_per_px_lat = (HSR_BBOX_NORTH - HSR_BBOX_SOUTH) / HSR_NY
+    motion_per_hour_deg = {
+        "dlat": motion_per_hour_px[0] * deg_per_px_lat,
+        "dlon": motion_per_hour_px[1] * deg_per_px_lon,
+    }
 
-    # 4) 모든 프레임을 PNG로 렌더 (CPU bound — to_thread).
+    # 4) PNG 렌더 + 파일 저장.
     def _render(values: np.ndarray) -> bytes:
         return render_dbz_png(values)
 
-    render_tasks: list[asyncio.Task[bytes] | None] = []
-    for f in obs_frames:
-        if f is None:
-            render_tasks.append(None)
-        else:
-            render_tasks.append(asyncio.create_task(asyncio.to_thread(_render, f.values)))
-    for fg in future_grids:
-        render_tasks.append(asyncio.create_task(asyncio.to_thread(_render, fg)))
+    radar_dir = pathlib.Path(docs_root) / "radar"
+    radar_dir.mkdir(parents=True, exist_ok=True)
 
-    # 13개 PNG 병렬 렌더.
-    pngs: list[bytes | None] = []
-    for rt in render_tasks:
-        pngs.append(await rt if rt is not None else None)
-
-    # 5) frame doc 13개 병렬 저장 (Firestore subcollection).
-    slots = (
-        [f"past_{i}" for i in range(6)]
-        + ["current"]
-        + [f"future_{i}" for i in range(1, 7)]
-    )
-    save_tasks: list[asyncio.Task[None] | None] = []
     saved_slots: set[str] = set()
-    for slot, png in zip(slots, pngs, strict=True):
-        if png is None:
-            save_tasks.append(None)
-        else:
-            saved_slots.add(slot)
-            save_tasks.append(asyncio.create_task(store.save_radar_frame(slot, png)))
-    for st in save_tasks:
-        if st is not None:
-            await st
+    if past_frame is not None:
+        png = await asyncio.to_thread(_render, past_frame.values)
+        (radar_dir / "past.png").write_bytes(png)
+        saved_slots.add("past")
+    current_png = await asyncio.to_thread(_render, current_frame.values)
+    (radar_dir / "current.png").write_bytes(current_png)
+    saved_slots.add("current")
+    log.info("PNG 파일 저장 완료 — %s, slots=%s", radar_dir, sorted(saved_slots))
 
-    # 6) Manifest — 저장 성공한 슬롯만 frame 메타에 포함.
-    all_tms = [*past_tms, current_tm, *future_tms]
-    offsets = [*range(-60, 0, 10), 0, *(60 * i for i in range(1, 7))]
-    kinds = ["obs"] * 7 + ["fcst"] * 6
-    frames = [
-        {
+    # 5) Manifest — 37 슬라이더 + GitHub Pages URL (cache-bust 위해 ?v= 붙임).
+    offsets = [-60, *range(10, 361, 10)]
+    frame_entries: list[dict] = []
+    for off in offsets:
+        slot = "past" if off == -60 else "current"
+        if slot not in saved_slots:
+            continue
+        frame_entries.append({
             "slot": slot,
-            "kind": kind,
-            "tm": tm,
+            "kind": "obs" if off <= 0 else "fcst",
+            "tm": _shift_tm(current_tm, off),
             "offset_min": off,
-        }
-        for slot, kind, tm, off in zip(
-            slots, kinds, all_tms, offsets, strict=True,
-        )
-        if slot in saved_slots
-    ]
+            "url": f"{pages_base_url}/radar/{slot}.png?v={current_tm}",
+        })
     await store.save_radar_manifest({
         "base_tm": current_tm,
-        "motion_per_hour_px": {"dy": motion_per_hour[0], "dx": motion_per_hour[1]},
+        "motion_per_hour_px": {
+            "dy": motion_per_hour_px[0], "dx": motion_per_hour_px[1],
+        },
+        "motion_per_hour_deg": motion_per_hour_deg,
         "bounds": {
             "south": HSR_BBOX_SOUTH,
             "west": HSR_BBOX_WEST,
             "north": HSR_BBOX_NORTH,
             "east": HSR_BBOX_EAST,
         },
-        "frames": frames,
+        "frames": frame_entries,
     })
-    log.info("레이더 manifest 저장 완료 — %d/%d 프레임", len(frames), len(slots))
+    log.info(
+        "레이더 manifest 저장 완료 — %d/%d 슬라이더, motion_deg=%s",
+        len(frame_entries), len(offsets), motion_per_hour_deg,
+    )
 
 
 async def _refresh_mid(city_ids: list[str], store: KmaCacheStore) -> None:
