@@ -33,13 +33,13 @@ HSR_NY = 2881
 OUT_OF_RANGE = -30000
 NO_ECHO = -25000
 
-# 한반도(HB) 합성 영역의 위경도 bbox.
-# 2305×2881 격자 × 500m = 약 1152×1440 km. Lambert 원점 (38°N, 126°E)를 중심으로
-# 좌우/상하 약 6.5°씩 (= 13°×13°)를 덮음. flutter_map OverlayImage 정렬용 추정값.
-HSR_BBOX_SOUTH = 31.5
-HSR_BBOX_WEST = 119.5
-HSR_BBOX_NORTH = 44.5
-HSR_BBOX_EAST = 132.5
+# 한반도(HB) 합성 영역의 위경도 bbox — 경험적 보정값.
+# 격자 자체는 13°×13°지만 Lambert 원점이 격자 중심이 아니라 비대칭 offset (DFS 5km
+# 격자 분석 + rain.do 비교로 추정). 중심을 (36.5°N, 127°E)로 잡음.
+HSR_BBOX_SOUTH = 30.0
+HSR_BBOX_WEST = 120.5
+HSR_BBOX_NORTH = 43.0
+HSR_BBOX_EAST = 133.5
 
 
 def _auth_key() -> str:
