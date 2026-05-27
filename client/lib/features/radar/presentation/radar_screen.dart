@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:weather_friend/features/radar/data/korea_mask.dart';
 import 'package:weather_friend/features/radar/data/rain_grid.dart';
 
 /// 자동 재생 시 한 슬롯이 보이는 시간.
@@ -10,7 +12,10 @@ const _kPlaybackInterval = Duration(milliseconds: 800);
 
 /// 비구름 지도 화면 — 한반도 격자에 1~6시간 강수 예측 색칠.
 ///
-/// 데이터: Firestore `kma_grid_rain/latest` (Worker가 30분마다 갱신).
+/// 데이터:
+/// - `kma_grid_mask/korea`: 한반도 영역 격자 (정적, 한반도 모양 표현)
+/// - `kma_grid_rain/latest`: 1~6시간 강수 격자 (sparse, 30분마다 갱신)
+///
 /// 슬라이더로 1~6시간 사이 전환 → 비구름 이동 경향 시각화.
 class RadarScreen extends ConsumerStatefulWidget {
   const RadarScreen({super.key});
@@ -24,15 +29,25 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
   bool _isPlaying = true;
   Timer? _playbackTimer;
 
+  /// 핀치 줌/팬용 변환 컨트롤러. 초기 1.3배 확대로 시작.
+  late final TransformationController _viewerCtrl;
+
   @override
   void initState() {
     super.initState();
+    _viewerCtrl = TransformationController()..value = Matrix4.identity();
+    // 첫 프레임 후 화면 중앙 기준 1.3배 줌.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _viewerCtrl.value = Matrix4.identity()..scaleByDouble(1.3, 1.3, 1, 1);
+    });
     _startPlayback();
   }
 
   @override
   void dispose() {
     _playbackTimer?.cancel();
+    _viewerCtrl.dispose();
     super.dispose();
   }
 
@@ -54,7 +69,6 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
     setState(() => _isPlaying = !_isPlaying);
   }
 
-  /// 사용자가 슬라이더를 만지면 자동 재생 중지 (직접 조작 의도 존중).
   void _onSliderChanged(int i) {
     setState(() {
       _hourIndex = i;
@@ -65,9 +79,10 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
   @override
   Widget build(BuildContext context) {
     final gridAsync = ref.watch(rainGridProvider);
+    final maskAsync = ref.watch(koreaMaskProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1620),
+      backgroundColor: const Color(0xFF0A1020),
       appBar: AppBar(
         title: const Text('비구름 이동'),
         backgroundColor: Colors.transparent,
@@ -75,68 +90,74 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
         foregroundColor: Colors.white,
       ),
       extendBodyBehindAppBar: true,
-      body: gridAsync.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: Colors.white70),
-        ),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              '비구름 데이터를 불러올 수 없습니다.\n$e',
-              style: const TextStyle(color: Colors.white70),
-              textAlign: TextAlign.center,
+      body: SafeArea(
+        child: gridAsync.when(
+          loading: () => const Center(
+            child: CircularProgressIndicator(color: Colors.white70),
+          ),
+          error: (e, _) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                '비구름 데이터를 불러올 수 없습니다.\n$e',
+                style: const TextStyle(color: Colors.white70),
+                textAlign: TextAlign.center,
+              ),
             ),
           ),
-        ),
-        data: (grid) {
-          if (grid == null || grid.hours.isEmpty) {
-            return const Center(
-              child: Text(
-                '비구름 데이터가 아직 준비되지 않았어요.',
-                style: TextStyle(color: Colors.white70),
-              ),
-            );
-          }
-          final safeIndex = _hourIndex.clamp(0, grid.hours.length - 1);
-          final currentHour = grid.hours[safeIndex];
-          return SafeArea(
-            child: Column(
+          data: (grid) {
+            if (grid == null || grid.hours.isEmpty) {
+              return const Center(
+                child: Text(
+                  '비구름 데이터가 아직 준비되지 않았어요.',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              );
+            }
+
+            // mask는 보조 — 없어도 강수 셀만 그려짐 (한반도 모양 X).
+            final mask = switch (maskAsync) {
+              AsyncData(:final value) => value,
+              _ => null,
+            };
+
+            final safeIndex = _hourIndex.clamp(0, grid.hours.length - 1);
+            final currentHour = grid.hours[safeIndex];
+
+            return Column(
               children: [
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: AspectRatio(
-                      aspectRatio: grid.nx / grid.ny,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: DecoratedBox(
-                          decoration: const BoxDecoration(color: Color(0xFF1B2230)),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              // 한반도 윤곽 (Wikimedia Commons "Map of Korea-blank",
-                              // CC-BY-SA-3.0, NordNordWest).
-                              Padding(
-                                padding: const EdgeInsets.all(4),
-                                child: SvgPicture.asset(
-                                  'assets/maps/korea_outline.svg',
-                                  fit: BoxFit.contain,
-                                  colorFilter: const ColorFilter.mode(
-                                    Color(0xFF3A4660),
-                                    BlendMode.srcIn,
-                                  ),
-                                ),
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: DecoratedBox(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Color(0xFF0F1A2E), Color(0xFF1A2540)],
+                          ),
+                        ),
+                        child: InteractiveViewer(
+                          transformationController: _viewerCtrl,
+                          minScale: 0.8,
+                          maxScale: 6.0,
+                          // 무한 boundaryMargin → 자유 팬 (잘려도 끝까지 움직임)
+                          boundaryMargin: const EdgeInsets.all(
+                            double.infinity,
+                          ),
+                          child: AspectRatio(
+                            aspectRatio: grid.nx / grid.ny,
+                            child: CustomPaint(
+                              painter: _RadarPainter(
+                                gridNx: grid.nx,
+                                gridNy: grid.ny,
+                                maskCells: mask?.cells ?? const [],
+                                rainCells: currentHour.cells,
                               ),
-                              // 강수 격자 셀 — SVG 위에 overlay.
-                              CustomPaint(
-                                painter: _RainPainter(
-                                  grid: grid,
-                                  cells: currentHour.cells,
-                                ),
-                                size: Size.infinite,
-                              ),
-                            ],
+                              size: Size.infinite,
+                            ),
                           ),
                         ),
                       ),
@@ -152,52 +173,82 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
                   onTogglePlay: _togglePlay,
                 ),
               ],
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
 }
 
-class _RainPainter extends CustomPainter {
-  _RainPainter({required this.grid, required this.cells});
+/// 한반도 mask + 강수 격자를 같은 캔버스에 그리는 painter.
+///
+/// - mask: 옅은 회색 dot (한반도 영역 표시 — 강수가 없어도 한반도 모양 보임)
+/// - rain: RN1 강도별 색 dot + blur (자연스러운 비구름 느낌)
+class _RadarPainter extends CustomPainter {
+  _RadarPainter({
+    required this.gridNx,
+    required this.gridNy,
+    required this.maskCells,
+    required this.rainCells,
+  });
 
-  final RainGrid grid;
-  final List<RainCell> cells;
+  final int gridNx;
+  final int gridNy;
+  final List<KoreaMaskCell> maskCells;
+  final List<RainCell> rainCells;
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 배경은 Stack 부모의 DecoratedBox가 담당, SVG outline은 같은 Stack의 별도 layer.
-    // 여기선 강수 셀만 그림 (SVG 위에 overlay).
+    final cellW = size.width / gridNx;
+    final cellH = size.height / gridNy;
+    final cellSize = math.max(cellW, cellH);
 
-    // 격자 한 셀의 화면상 크기 (1-based → 화면 좌표).
-    final cellW = size.width / grid.nx;
-    final cellH = size.height / grid.ny;
+    // ── 1) 한반도 mask — 옅은 회색 dot ──
+    final maskPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.10)
+      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 0.6);
+    for (final c in maskCells) {
+      final cx = (c.nx - 0.5) * cellW;
+      final cy = (gridNy - c.ny + 0.5) * cellH;
+      canvas.drawCircle(Offset(cx, cy), cellSize * 0.6, maskPaint);
+    }
 
-    for (final c in cells) {
-      // 좌측하단 origin (KMA 격자) → 좌측상단 origin (화면) 변환.
-      final screenX = (c.nx - 1) * cellW;
-      final screenY = (grid.ny - c.ny) * cellH;
-      canvas.drawRect(
-        Rect.fromLTWH(screenX, screenY, cellW + 0.5, cellH + 0.5),
-        Paint()..color = _colorFor(c.rn1).withValues(alpha: 0.85),
+    // ── 2) 강수 셀 — 강도별 색 + blur ──
+    for (final c in rainCells) {
+      final cx = (c.nx - 0.5) * cellW;
+      final cy = (gridNy - c.ny + 0.5) * cellH;
+      final color = _colorFor(c.rn1);
+      // 약한 비는 작게/투명하게, 폭우는 크고 진하게
+      final intensity = (c.rn1 / 15.0).clamp(0.3, 1.0);
+      final radius = cellSize * (1.0 + intensity * 0.8);
+      canvas.drawCircle(
+        Offset(cx, cy),
+        radius,
+        Paint()
+          ..color = color.withValues(alpha: 0.6 + intensity * 0.3)
+          ..maskFilter = ui.MaskFilter.blur(
+            ui.BlurStyle.normal,
+            cellSize * 0.5,
+          ),
       );
     }
   }
 
-  /// RN1 (mm/h) 기준 색 매핑.
   Color _colorFor(double rn1) {
-    if (rn1 < 1.0) return const Color(0xFF80D0FF); // 약한 비
-    if (rn1 < 5.0) return const Color(0xFF40A0FF); // 보통 비
-    if (rn1 < 15.0) return const Color(0xFF2060E0); // 강한 비
-    if (rn1 < 30.0) return const Color(0xFF8020E0); // 매우 강한 비
-    return const Color(0xFFE02060); // 폭우
+    if (rn1 < 1.0) return const Color(0xFF67D4FF);
+    if (rn1 < 5.0) return const Color(0xFF3A98FF);
+    if (rn1 < 15.0) return const Color(0xFF1B53D6);
+    if (rn1 < 30.0) return const Color(0xFF8129D9);
+    return const Color(0xFFE63960);
   }
 
   @override
-  bool shouldRepaint(_RainPainter old) =>
-      old.cells != cells || old.grid != grid;
+  bool shouldRepaint(_RadarPainter old) =>
+      old.rainCells != rainCells ||
+      old.maskCells != maskCells ||
+      old.gridNx != gridNx ||
+      old.gridNy != gridNy;
 }
 
 class _Legend extends StatelessWidget {
@@ -208,11 +259,11 @@ class _Legend extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: const [
-          _LegendItem(color: Color(0xFF80D0FF), label: '약'),
-          _LegendItem(color: Color(0xFF40A0FF), label: '보통'),
-          _LegendItem(color: Color(0xFF2060E0), label: '강'),
-          _LegendItem(color: Color(0xFF8020E0), label: '매우 강'),
-          _LegendItem(color: Color(0xFFE02060), label: '폭우'),
+          _LegendItem(color: Color(0xFF67D4FF), label: '약'),
+          _LegendItem(color: Color(0xFF3A98FF), label: '보통'),
+          _LegendItem(color: Color(0xFF1B53D6), label: '강'),
+          _LegendItem(color: Color(0xFF8129D9), label: '매우 강'),
+          _LegendItem(color: Color(0xFFE63960), label: '폭우'),
         ],
       ),
     );
@@ -229,7 +280,14 @@ class _LegendItem extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(width: 14, height: 14, color: color),
+        Container(
+          width: 14,
+          height: 14,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(7),
+          ),
+        ),
         const SizedBox(width: 6),
         Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
       ],
@@ -317,7 +375,6 @@ class _TimeSlider extends StatelessWidget {
   }
 
   String _formatTmef(String tmef) {
-    // YYYYMMDDHH → "MM/DD HH시"
     return '${tmef.substring(4, 6)}/${tmef.substring(6, 8)} ${tmef.substring(8, 10)}시';
   }
 }
