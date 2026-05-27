@@ -7,8 +7,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:weather_friend/features/radar/data/radar_manifest.dart';
 import 'package:weather_friend/features/radar/data/user_location.dart';
 
-/// 비구름 지도 — KMA 레이더 합성(과거 1h, 10분) + motion 외삽(미래 6h, 1h).
-/// 서버에서 PNG로 미리 렌더되어 Firestore에 13장 doc 저장 (Spark 플랜 호환).
+/// 비구름 지도 — 현재 KMA 레이더(500m) + +2h/+4h/+6h KMA 예보(5km) 4-anchor 하이브리드.
+/// 슬라이더 10분 단위 37 포지션은 가장 가까운 anchor + motion shift로 생성.
 
 /// 자동 재생 시 한 프레임이 보이는 시간.
 const _kPlaybackInterval = Duration(milliseconds: 700);
@@ -108,8 +108,6 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
             final frames = state.frames;
             final safeIdx = _frameIndex.clamp(0, frames.length - 1);
             final current = frames[safeIdx];
-            // 외삽 frame은 같은 PNG에 bounds만 shift — motion × hours.
-            final frameBounds = state.boundsFor(current);
             return Column(
               children: [
                 Expanded(
@@ -129,14 +127,13 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
                         userAgentPackageName: 'com.weatherfriend.app',
                         maxNativeZoom: 19,
                       ),
-                      // 2) 레이더 PNG overlay — GitHub Pages URL (NetworkImage).
-                      //    외삽 슬롯은 frameBounds로 평행이동.
+                      // 2) anchor PNG overlay — motion shift된 bounds 사용.
                       OverlayImageLayer(
                         overlayImages: [
                           OverlayImage(
-                            bounds: frameBounds.toLatLngBounds(),
+                            bounds: current.bounds.toLatLngBounds(),
                             opacity: 0.82,
-                            imageProvider: NetworkImage(current.url),
+                            imageProvider: NetworkImage(current.anchor.url),
                           ),
                         ],
                       ),
@@ -260,7 +257,7 @@ class _TimeSlider extends StatelessWidget {
     required this.onTogglePlay,
   });
 
-  final List<RadarFrame> frames;
+  final List<RadarSliderFrame> frames;
   final int index;
   final bool isPlaying;
   final ValueChanged<int> onChanged;
@@ -284,7 +281,7 @@ class _TimeSlider extends StatelessWidget {
                 ),
               ),
               Text(
-                current.isObservation ? '실측' : '외삽 예측',
+                current.isObservation ? '실측' : 'KMA 예보',
                 style: TextStyle(
                   fontSize: 12,
                   color: current.isObservation
@@ -321,8 +318,7 @@ class _TimeSlider extends StatelessWidget {
     );
   }
 
-  String _formatLabel(RadarFrame f) {
-    // tm: YYYYMMDDHHmm — 그 슬롯의 KST 시각만 표기 ('hh:mm', 날짜 바뀌면 'M/d hh:mm').
+  String _formatLabel(RadarSliderFrame f) {
     final now = DateTime.now();
     final hh = f.tm.substring(8, 10);
     final min = f.tm.substring(10, 12);
