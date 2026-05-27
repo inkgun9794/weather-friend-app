@@ -33,13 +33,13 @@ HSR_NY = 2881
 OUT_OF_RANGE = -30000
 NO_ECHO = -25000
 
-# 한반도(HB) 합성 영역의 위경도 bbox — latlon API가 막혀 있어 표준 KMA Lambert
-# 파라미터로 계산한 좌하단·우상단 근사값. flutter_map OverlayImage 정렬용.
-# 픽셀 정밀도까지 필요하면 추후 latlon API로 교체 가능.
-HSR_BBOX_SOUTH = 32.20  # lower-left lat
-HSR_BBOX_WEST = 121.50  # lower-left lon
-HSR_BBOX_NORTH = 43.50  # upper-right lat
-HSR_BBOX_EAST = 134.00  # upper-right lon
+# 한반도(HB) 합성 영역의 위경도 bbox.
+# 2305×2881 격자 × 500m = 약 1152×1440 km. Lambert 원점 (38°N, 126°E)를 중심으로
+# 좌우/상하 약 6.5°씩 (= 13°×13°)를 덮음. flutter_map OverlayImage 정렬용 추정값.
+HSR_BBOX_SOUTH = 31.5
+HSR_BBOX_WEST = 119.5
+HSR_BBOX_NORTH = 44.5
+HSR_BBOX_EAST = 132.5
 
 
 def _auth_key() -> str:
