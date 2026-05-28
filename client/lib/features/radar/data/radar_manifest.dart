@@ -88,9 +88,10 @@ class RadarMotionDeg {
   final double dlat;
   final double dlon;
 
+  /// 빠진 키는 0으로 — 옛 manifest 호환 + 비 안 와서 motion 없는 경우 둘 다 안전.
   factory RadarMotionDeg.fromMap(Map<String, dynamic> m) => RadarMotionDeg(
-        dlat: (m['dlat'] as num).toDouble(),
-        dlon: (m['dlon'] as num).toDouble(),
+        dlat: (m['dlat'] as num?)?.toDouble() ?? 0.0,
+        dlon: (m['dlon'] as num?)?.toDouble() ?? 0.0,
       );
 }
 
@@ -141,18 +142,15 @@ class RadarState {
   RadarState({
     required this.baseTm,
     required this.anchors,
-    required this.motionDeg,
-  }) : frames = _buildFrames(baseTm, anchors, motionDeg);
+  }) : frames = _buildFrames(baseTm, anchors);
 
   final String baseTm; // YYYYMMDDHHmm — anchor 0(=current)의 시각
   final List<RadarAnchor> anchors;
-  final RadarMotionDeg motionDeg;
   final List<RadarSliderFrame> frames; // 37 포지션 (0, 10, 20, ..., 360분)
 
   static List<RadarSliderFrame> _buildFrames(
     String baseTm,
     List<RadarAnchor> anchors,
-    RadarMotionDeg _,
   ) {
     if (anchors.isEmpty) return const [];
     final sorted = [...anchors]
@@ -238,11 +236,8 @@ final radarStateProvider = FutureProvider<RadarState?>((ref) async {
       .toList();
   if (anchors.isEmpty) return null;
 
-  final motionMap =
-      (data['motion_per_hour_deg'] as Map<String, dynamic>? ?? const {});
   return RadarState(
     baseTm: data['base_tm'] as String,
     anchors: anchors,
-    motionDeg: RadarMotionDeg.fromMap(motionMap),
   );
 });
