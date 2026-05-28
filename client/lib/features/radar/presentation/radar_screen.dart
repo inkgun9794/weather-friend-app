@@ -281,12 +281,10 @@ class _TimeSlider extends StatelessWidget {
                 ),
               ),
               Text(
-                current.isObservation ? '실측' : 'KMA 예보',
+                _kindLabel(current.kind),
                 style: TextStyle(
                   fontSize: 12,
-                  color: current.isObservation
-                      ? Colors.blueGrey
-                      : Colors.deepPurple,
+                  color: _kindColor(current.kind),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -329,4 +327,16 @@ class _TimeSlider extends StatelessWidget {
   }
 
   static String _two(int n) => n.toString().padLeft(2, '0');
+
+  static String _kindLabel(RadarKind k) => switch (k) {
+        RadarKind.observation => '실측',
+        RadarKind.extrapolation => '외삽 예측',
+        RadarKind.forecast => 'KMA 예보',
+      };
+
+  static Color _kindColor(RadarKind k) => switch (k) {
+        RadarKind.observation => Colors.blueGrey,
+        RadarKind.extrapolation => Colors.deepPurple,
+        RadarKind.forecast => Colors.indigo,
+      };
 }

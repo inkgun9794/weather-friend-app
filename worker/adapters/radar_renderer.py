@@ -37,10 +37,13 @@ def dbz_to_mmhr(dbz: np.ndarray) -> np.ndarray:
 
 
 def _mmhr_to_rgba(mmhr: np.ndarray) -> np.ndarray:
-    """mm/hr 2D → (h, w, 4) uint8 RGBA. 강수 없는 영역은 alpha=0."""
+    """mm/hr 2D → (h, w, 4) uint8 RGBA. 강수 없는 영역은 alpha=0.
+
+    KMA rain.do와 동일한 임계값 사용 — 0.5 mm/h 미만은 노이즈로 간주.
+    """
     h, w = mmhr.shape
     rgba = np.zeros((h, w, 4), dtype=np.uint8)
-    prev_thresh = 0.05  # noise floor — 더 작으면 안 보이게
+    prev_thresh = 0.5  # noise floor (rain.do 기준과 동일)
     for thresh, (r, g, b) in _PALETTE:
         sel = (mmhr >= prev_thresh) & (mmhr < thresh)
         rgba[sel, 0] = r

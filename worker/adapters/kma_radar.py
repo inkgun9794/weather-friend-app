@@ -33,13 +33,22 @@ HSR_NY = 2881
 OUT_OF_RANGE = -30000
 NO_ECHO = -25000
 
-# 한반도(HB) 합성 영역의 위경도 bbox — 경험적 보정값.
-# 격자 자체는 13°×13°지만 Lambert 원점이 격자 중심이 아니라 비대칭 offset (DFS 5km
-# 격자 분석 + rain.do 비교로 추정). 중심을 (36.5°N, 127°E)로 잡음.
-HSR_BBOX_SOUTH = 30.0
-HSR_BBOX_WEST = 120.5
-HSR_BBOX_NORTH = 43.0
-HSR_BBOX_EAST = 133.5
+# 한반도(HB) 합성 영역의 위경도 bbox — KMA 공식 문서 기준 Lambert 역변환.
+# 출처: 레이더 합성자료(500m해상도) 포맷정보 PDF
+#   투영: Lambert Conformal Conic
+#   기준위경도: 38°N, 126°E
+#   기준격자점: (1121, 1681) — 격자 (1,1)의 SW 모서리 기준 1121번째 x, 1681번째 y
+#   격자: 2305×2881 × 500m = 1152×1440 km
+# 4 corner 위경도 (Lambert 역변환):
+#   SW (1, 1)        = (30.147, 120.167)
+#   NW (1, 2881)     = (43.332, 118.826)   ← 가장 서쪽
+#   SE (2305, 1)     = (30.125, 132.165)
+#   NE (2305, 2881)  = (43.305, 133.581)   ← 가장 동쪽
+# Lambert는 사다리꼴이라 직사각 bbox는 외접 사각형 (가장자리 미세 왜곡 있음).
+HSR_BBOX_SOUTH = 30.13
+HSR_BBOX_WEST = 118.83
+HSR_BBOX_NORTH = 43.33
+HSR_BBOX_EAST = 133.58
 
 
 def _auth_key() -> str:

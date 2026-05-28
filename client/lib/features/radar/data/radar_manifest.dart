@@ -85,6 +85,13 @@ class RadarMotionDeg {
       );
 }
 
+/// 데이터 종류 라벨용 — 슬라이더 포지션별로 셋 중 하나.
+enum RadarKind {
+  observation, // offset=0: 진짜 실측 레이더
+  extrapolation, // offset>0 & anchor=current: 실측 + motion shift
+  forecast, // anchor=forecast_Nh: KMA 예보
+}
+
 /// 슬라이더 한 포지션의 표시 정보 — 클라이언트가 anchor + motion으로 계산.
 class RadarSliderFrame {
   const RadarSliderFrame({
@@ -99,7 +106,16 @@ class RadarSliderFrame {
   final RadarBounds bounds; // motion shift 적용된 실제 bounds
   final String tm; // 이 슬라이더 포지션이 가리키는 절대시각 (YYYYMMDDHHmm)
 
-  bool get isObservation => offsetMin == 0 && anchor.isObservation;
+  RadarKind get kind {
+    if (offsetMin == 0 && anchor.isObservation) {
+      return RadarKind.observation;
+    }
+    if (anchor.isObservation) {
+      // current 앵커 + 음수가 아닌 offset → 실측을 motion으로 외삽
+      return RadarKind.extrapolation;
+    }
+    return RadarKind.forecast;
+  }
 }
 
 /// 전체 상태 — manifest + 클라이언트가 계산한 37 슬라이더 frame.
