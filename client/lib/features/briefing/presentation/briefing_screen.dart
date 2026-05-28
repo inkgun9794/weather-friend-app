@@ -910,8 +910,7 @@ class _HourSlot extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.only(right: rightGap),
-      // 지난 시간은 살짝 디밍. 현재(isNow)는 알약 강조가 우선이라 디밍 X.
-      child: Opacity(opacity: isPast && !isNow ? 0.55 : 1.0, child: slot),
+      child: slot,
     );
   }
 }
