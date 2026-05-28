@@ -20,12 +20,17 @@ class HourlyWeather {
     required this.temperatureC,
     required this.condition,
     required this.precipitationProb,
+    this.weatherCode,
   });
 
   final int hour;
   final double temperatureC;
   final String condition;
   final int precipitationProb;
+
+  /// 원본 WMO weather code (Open-Meteo). 강도/세부 condition 매핑용.
+  /// null이면 KMA 출처 등으로 코드 없음.
+  final int? weatherCode;
 }
 
 class DailySummary {
@@ -99,12 +104,18 @@ class WeatherBundle {
     required this.today,
     required this.todaySummary,
     required this.weekDays,
+    this.sunriseToday,
+    this.sunsetToday,
     this.ultraShort,
   });
 
   final Map<int, HourlyWeather> today;
   final DailySummary? todaySummary;
   final List<WeekDay> weekDays;
+
+  /// 오늘 일출/일몰 시각 (KST). 아이콘 낮/밤 결정용. fetch 실패 시 null.
+  final DateTime? sunriseToday;
+  final DateTime? sunsetToday;
 
   /// 초단기 6시간 — KMA에서 fetch 성공 시만 채워짐. 없으면 UI 섹션 숨김.
   final UltraShortForecast? ultraShort;
@@ -177,7 +188,7 @@ class OpenMeteoClient {
       'latitude': lat.toString(),
       'longitude': lng.toString(),
       'hourly': 'temperature_2m,precipitation_probability,weather_code',
-      'daily': 'temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max',
+      'daily': 'temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,sunrise,sunset',
       'timezone': 'Asia/Seoul',
       'forecast_days': daysCount.toString(),
     });
@@ -206,6 +217,17 @@ class OpenMeteoClient {
     final mins = (daily?['temperature_2m_min'] as List?) ?? const [];
     final dCodes = (daily?['weather_code'] as List?) ?? const [];
     final dProbs = (daily?['precipitation_probability_max'] as List?) ?? const [];
+    final sunrises = (daily?['sunrise'] as List?) ?? const [];
+    final sunsets = (daily?['sunset'] as List?) ?? const [];
+
+    DateTime? sunriseToday;
+    DateTime? sunsetToday;
+    if (sunrises.isNotEmpty) {
+      sunriseToday = DateTime.tryParse(sunrises[0].toString());
+    }
+    if (sunsets.isNotEmpty) {
+      sunsetToday = DateTime.tryParse(sunsets[0].toString());
+    }
 
     DailySummary? todaySummary;
     if (dates.isNotEmpty) {
@@ -238,6 +260,8 @@ class OpenMeteoClient {
       today: today,
       todaySummary: todaySummary,
       weekDays: weekDays,
+      sunriseToday: sunriseToday,
+      sunsetToday: sunsetToday,
     );
   }
 
@@ -275,11 +299,13 @@ class OpenMeteoClient {
   }
 
   HourlyWeather _snapshot(int hour, Object? temp, Object? prob, Object? code) {
+    final codeInt = (code as num).toInt();
     return HourlyWeather(
       hour: hour,
       temperatureC: (temp as num).toDouble(),
-      condition: _weatherCodeKo[(code as num).toInt()] ?? '알 수 없음',
+      condition: _weatherCodeKo[codeInt] ?? '알 수 없음',
       precipitationProb: ((prob as num?) ?? 0).toInt(),
+      weatherCode: codeInt,
     );
   }
 }
@@ -326,4 +352,11 @@ final todayDailySummaryProvider = FutureProvider<DailySummary?>((ref) async {
 
 final weekDaysProvider = FutureProvider<List<WeekDay>>((ref) async {
   return (await ref.watch(weatherBundleProvider.future)).weekDays;
+});
+
+/// 오늘 일출/일몰 시각 — 날씨 아이콘 낮/밤 결정용. fetch 실패 시 null.
+final todaySunriseSunsetProvider =
+    FutureProvider<(DateTime?, DateTime?)>((ref) async {
+  final bundle = await ref.watch(weatherBundleProvider.future);
+  return (bundle.sunriseToday, bundle.sunsetToday);
 });

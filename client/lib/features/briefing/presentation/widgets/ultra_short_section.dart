@@ -19,6 +19,10 @@ class UltraShortSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final bundleAsync = ref.watch(weatherBundleProvider);
     final ultra = bundleAsync.whenOrNull(data: (b) => b.ultraShort);
+    final sunrise =
+        bundleAsync.whenOrNull(data: (b) => b.sunriseToday);
+    final sunset =
+        bundleAsync.whenOrNull(data: (b) => b.sunsetToday);
 
     if (ultra == null || ultra.hours.isEmpty) {
       return const SizedBox.shrink();
@@ -107,6 +111,8 @@ class UltraShortSection extends ConsumerWidget {
                             slotTime: visible[i].slotTime,
                             now: now,
                             sky: sky,
+                            sunrise: sunrise,
+                            sunset: sunset,
                           ),
                         ),
                       ),
@@ -128,30 +134,50 @@ class _SlotData {
   final DateTime slotTime;
 }
 
+/// 일출/일몰 비교로 낮/밤 판정. 둘 다 null이면 6시~19시 휴리스틱.
+bool _isDaytime(DateTime t, DateTime? sunrise, DateTime? sunset) {
+  if (sunrise == null || sunset == null) {
+    return t.hour >= 6 && t.hour < 19;
+  }
+  // 같은 날짜 기준 시각 비교 — sunrise/sunset이 오늘 시각, t가 미래 슬롯이면
+  // 시각만 일치시켜 비교.
+  final cmp = DateTime(sunrise.year, sunrise.month, sunrise.day,
+      t.hour, t.minute);
+  return cmp.isAfter(sunrise) && cmp.isBefore(sunset);
+}
+
 class _UltraSlot extends StatelessWidget {
   const _UltraSlot({
     required this.hour,
     required this.slotTime,
     required this.now,
     required this.sky,
+    this.sunrise,
+    this.sunset,
   });
 
   final HourlyWeather hour;
   final DateTime slotTime;
   final DateTime now;
   final SkyPalette sky;
+  final DateTime? sunrise;
+  final DateTime? sunset;
 
   @override
   Widget build(BuildContext context) {
-    // iOS Apple emoji 컬러 아이콘 — Icon 대신 Text로.
-    final emoji = switch (hour.condition) {
-      '소나기' => '🌦️',
-      '비' => '🌧️',
-      '비/눈' => '🌨️',
-      '눈' => '❄️',
-      '흐림' => '☁️',
-      '구름많음' => '⛅',
-      _ => '☀️',
+    // Flaticon Premium 카와이 PNG 아이콘. 낮/밤은 일출/일몰 시각 기반 (대략적
+    // 6시~19시 fallback).
+    final isDay = _isDaytime(slotTime, sunrise, sunset);
+    final asset = switch (hour.condition) {
+      '소나기' => 'assets/icons/weather/shower.png',
+      '비' => 'assets/icons/weather/rain.png',
+      '비/눈' => 'assets/icons/weather/sleet.png',
+      '눈' => 'assets/icons/weather/snow.png',
+      '흐림' => 'assets/icons/weather/cloud.png',
+      '구름많음' => 'assets/icons/weather/cloud.png',
+      _ => isDay
+          ? 'assets/icons/weather/sun.png'
+          : 'assets/icons/weather/moon.png',
     };
 
     // 슬롯이 현재 시간대인지 ("지금")
@@ -176,9 +202,11 @@ class _UltraSlot extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            emoji,
-            style: const TextStyle(fontSize: 20, height: 1.0),
+          Image.asset(
+            asset,
+            width: 26,
+            height: 26,
+            filterQuality: FilterQuality.medium,
           ),
           const SizedBox(height: 8),
           Text(

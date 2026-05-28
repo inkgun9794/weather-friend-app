@@ -79,6 +79,9 @@ class BriefingScreen extends ConsumerWidget {
                           final todaySummaryAsync = ref.watch(
                             todayDailySummaryProvider,
                           );
+                          final sunAsync = ref.watch(
+                            todaySunriseSunsetProvider,
+                          );
                           final today = switch (todayAsync) {
                             AsyncData(:final value) => value,
                             _ => const <int, HourlyWeather>{},
@@ -86,6 +89,10 @@ class BriefingScreen extends ConsumerWidget {
                           final todaySummary = switch (todaySummaryAsync) {
                             AsyncData(:final value) => value,
                             _ => null,
+                          };
+                          final (sunrise, sunset) = switch (sunAsync) {
+                            AsyncData(:final value) => value,
+                            _ => (null, null),
                           };
                           return _TimelineSection(
                             dateLabel: _todayLabel(),
@@ -95,6 +102,8 @@ class BriefingScreen extends ConsumerWidget {
                             briefings: briefings,
                             hourlyWeather: today,
                             currentHour: currentHour,
+                            sunrise: sunrise,
+                            sunset: sunset,
                           );
                         },
                       ),
@@ -128,18 +137,73 @@ WeatherCondition _conditionFromString(String s) {
   return WeatherCondition.clear;
 }
 
-/// iOS Apple emoji 기반 컬러 날씨 아이콘 — Icon 대신 Text로 렌더링.
-String _weatherEmoji(WeatherCondition c) {
+/// Flaticon Premium 카와이 날씨 아이콘 (PNG).
+///
+/// 우선순위 (KMA가 절대 우선):
+/// 1. KMA condition (c)이 비/눈/흐림이면 그 카테고리 그대로 — Open-Meteo 강도 보강만
+///    (예: KMA "비" + Open-Meteo WMO 95(천둥번개) → thunder.png)
+///    (예: KMA "맑음" + Open-Meteo WMO 95 → 천둥 무시, 그냥 맑음 아이콘)
+/// 2. KMA "맑음"일 때만 일출/일몰 윈도우 (±30분) 검사 → sunrise/sunset.png
+/// 3. 그 외 맑음 → 낮/밤 (일출~일몰 사이) → sun/moon.png
+String _weatherAsset(
+  WeatherCondition c,
+  int hour, {
+  int? weatherCode,
+  DateTime? sunrise,
+  DateTime? sunset,
+}) {
+  // 1. KMA condition 우선 — 비/눈/흐림 카테고리 결정
   switch (c) {
-    case WeatherCondition.clear:
-      return '☀️';
-    case WeatherCondition.cloudy:
-      return '☁️';
     case WeatherCondition.rain:
-      return '🌧️';
+      // KMA가 비라면 비 계열 안에서 Open-Meteo로 강도 보강
+      if (weatherCode != null) {
+        if (weatherCode >= 95) return 'assets/icons/weather/thunder.png';
+        if (weatherCode == 65 || weatherCode == 82) {
+          return 'assets/icons/weather/heavy_rain.png';
+        }
+        if (weatherCode == 81) return 'assets/icons/weather/shower.png';
+      }
+      return 'assets/icons/weather/rain.png';
     case WeatherCondition.snow:
-      return '❄️';
+      if (weatherCode == 75 || weatherCode == 86) {
+        return 'assets/icons/weather/blizzard.png';
+      }
+      return 'assets/icons/weather/snow.png';
+    case WeatherCondition.cloudy:
+      return 'assets/icons/weather/cloud.png';
+    case WeatherCondition.clear:
+      break; // 아래 일출/일몰/낮/밤 처리로 진행
   }
+
+  // 2. KMA "맑음"일 때만 일출/일몰 윈도우 (±30분) → sunrise/sunset.png
+  if (sunrise != null && _isWithinHourWindow(hour, sunrise, 30)) {
+    return 'assets/icons/weather/sunrise.png';
+  }
+  if (sunset != null && _isWithinHourWindow(hour, sunset, 30)) {
+    return 'assets/icons/weather/sunset.png';
+  }
+
+  // 3. 평소 맑음 — 낮/밤 결정
+  final isDay = _isDaytime(hour, sunrise, sunset);
+  return isDay
+      ? 'assets/icons/weather/sun.png'
+      : 'assets/icons/weather/moon.png';
+}
+
+/// `hour:00` (정시)이 [t]에서 ±[minutes]분 이내인지.
+/// 일출/일몰이 가운데 시각인 한 시간 슬롯에만 sunrise/sunset 아이콘 표시.
+bool _isWithinHourWindow(int hour, DateTime t, int minutes) {
+  final base = DateTime(t.year, t.month, t.day, hour);
+  return base.difference(t).inMinutes.abs() <= minutes;
+}
+
+/// 일출/일몰 시각이 있으면 그걸로 비교, 없으면 단순 6시~19시 휴리스틱.
+bool _isDaytime(int hour, DateTime? sunrise, DateTime? sunset) {
+  if (sunrise == null || sunset == null) {
+    return hour >= 6 && hour < 19;
+  }
+  final today = DateTime(sunrise.year, sunrise.month, sunrise.day, hour);
+  return today.isAfter(sunrise) && today.isBefore(sunset);
 }
 
 WeatherCondition _conditionForCurrent(
@@ -558,6 +622,8 @@ class _TimelineSection extends StatefulWidget {
     required this.briefings,
     required this.hourlyWeather,
     required this.currentHour,
+    this.sunrise,
+    this.sunset,
   });
 
   final String dateLabel;
@@ -567,6 +633,8 @@ class _TimelineSection extends StatefulWidget {
   final Map<int, Briefing> briefings;
   final Map<int, HourlyWeather> hourlyWeather;
   final int currentHour;
+  final DateTime? sunrise;
+  final DateTime? sunset;
 
   @override
   State<_TimelineSection> createState() => _TimelineSectionState();
@@ -710,6 +778,8 @@ class _TimelineSectionState extends State<_TimelineSection> {
                       isPast: hour < widget.currentHour,
                       width: _slotWidth,
                       rightGap: _slotGap,
+                      sunrise: widget.sunrise,
+                      sunset: widget.sunset,
                     ),
                   ),
                 ),
@@ -734,6 +804,8 @@ class _HourSlot extends StatelessWidget {
     required this.isPast,
     required this.width,
     required this.rightGap,
+    this.sunrise,
+    this.sunset,
   });
 
   final int hour;
@@ -744,6 +816,8 @@ class _HourSlot extends StatelessWidget {
   final bool isPast;
   final double width;
   final double rightGap;
+  final DateTime? sunrise;
+  final DateTime? sunset;
 
   @override
   Widget build(BuildContext context) {
@@ -789,9 +863,17 @@ class _HourSlot extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            _weatherEmoji(cond),
-            style: TextStyle(fontSize: isNow ? 22 : 20, height: 1.0),
+          Image.asset(
+            _weatherAsset(
+              cond,
+              hour,
+              weatherCode: hourly?.weatherCode,
+              sunrise: sunrise,
+              sunset: sunset,
+            ),
+            width: isNow ? 28 : 26,
+            height: isNow ? 28 : 26,
+            filterQuality: FilterQuality.medium,
           ),
           const SizedBox(height: 6),
           Text(
@@ -971,13 +1053,13 @@ class _WeekDayRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: _PartCell(summary: day.morning, sky: sky),
+            child: _PartCell(summary: day.morning, sky: sky, partHour: 9),
           ),
           Expanded(
-            child: _PartCell(summary: day.afternoon, sky: sky),
+            child: _PartCell(summary: day.afternoon, sky: sky, partHour: 14),
           ),
           Expanded(
-            child: _PartCell(summary: day.evening, sky: sky),
+            child: _PartCell(summary: day.evening, sky: sky, partHour: 20),
           ),
         ],
       ),
@@ -992,10 +1074,18 @@ class _WeekDayRow extends StatelessWidget {
 }
 
 class _PartCell extends StatelessWidget {
-  const _PartCell({required this.summary, required this.sky});
+  const _PartCell({
+    required this.summary,
+    required this.sky,
+    this.partHour = 12,
+  });
 
   final DayPartSummary summary;
   final SkyPalette sky;
+  // morning ~9시 / afternoon ~14시 / evening ~20시.
+  // weekly 카드는 day-level이라 sunrise/sunset 정확한 값을 알 수 없음 →
+  // _weatherAsset에 sunrise/sunset 안 넘기고 6시~19시 휴리스틱으로 fallback.
+  final int partHour;
 
   @override
   Widget build(BuildContext context) {
@@ -1003,7 +1093,12 @@ class _PartCell extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(_weatherEmoji(cond), style: const TextStyle(fontSize: 16, height: 1.0)),
+        Image.asset(
+          _weatherAsset(cond, partHour),
+          width: 20,
+          height: 20,
+          filterQuality: FilterQuality.medium,
+        ),
         const SizedBox(width: 6),
         Text(
           '${summary.tempC}°',
