@@ -7,8 +7,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:weather_friend/features/radar/data/radar_manifest.dart';
 import 'package:weather_friend/features/radar/data/user_location.dart';
 
-/// 비구름 지도 — 현재 KMA 레이더(500m) + +2h/+4h/+6h KMA 예보(5km) 4-anchor 하이브리드.
-/// 슬라이더 10분 단위 37 포지션은 가장 가까운 anchor + motion shift로 생성.
+/// 비구름 지도 — 현재 KMA 레이더(500m) + +1h~+6h KMA 시간별 예보(5km) 7-anchor.
+/// 슬라이더 10분 단위 37 포지션은 인접한 두 anchor를 opacity cross-fade로 morphing.
 
 /// 자동 재생 시 한 프레임이 보이는 시간.
 const _kPlaybackInterval = Duration(milliseconds: 700);
@@ -128,15 +128,22 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
                         userAgentPackageName: 'com.weatherfriend.app',
                         maxNativeZoom: 19,
                       ),
-                      // 2) anchor PNG overlay — motion shift된 bounds 사용.
-                      //    다크 베이스에 파란색이 잘 살도록 opacity ↑.
+                      // 2) anchor PNG overlay — 두 인접 anchor의 cross-fade morphing.
+                      //    blend=0이면 primary 단독 (full opacity), blend>0이면 두 PNG
+                      //    stack해서 opacity 가중치로 보간.
                       OverlayImageLayer(
                         overlayImages: [
                           OverlayImage(
-                            bounds: current.bounds.toLatLngBounds(),
-                            opacity: 0.92,
+                            bounds: current.anchor.bounds.toLatLngBounds(),
+                            opacity: 0.92 * (1.0 - current.blend),
                             imageProvider: NetworkImage(current.anchor.url),
                           ),
+                          if (current.next != null)
+                            OverlayImage(
+                              bounds: current.next!.bounds.toLatLngBounds(),
+                              opacity: 0.92 * current.blend,
+                              imageProvider: NetworkImage(current.next!.url),
+                            ),
                         ],
                       ),
                       // 3) 사용자 위치

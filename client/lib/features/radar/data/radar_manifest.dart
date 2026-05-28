@@ -92,26 +92,32 @@ enum RadarKind {
   forecast, // anchor=forecast_Nh: KMA 예보
 }
 
-/// 슬라이더 한 포지션의 표시 정보 — 클라이언트가 anchor + motion으로 계산.
+/// 슬라이더 한 포지션의 표시 정보 — 두 인접 anchor의 cross-fade 가중치.
+///
+/// 슬라이더가 anchor 위 (예: offset=60, anchor=forecast_1h)면 blend=0, [next]는 null.
+/// anchor 사이 (예: offset=30, anchor=current, next=forecast_1h)면 blend = 0~1로
+/// 두 PNG의 opacity 가중치. 클라이언트가 두 OverlayImage stack해서 morphing 효과.
 class RadarSliderFrame {
   const RadarSliderFrame({
     required this.offsetMin,
-    required this.anchor,
-    required this.bounds,
     required this.tm,
+    required this.anchor,
+    this.next,
+    this.blend = 0.0,
   });
 
   final int offsetMin; // 0 ~ 360
-  final RadarAnchor anchor; // 어느 anchor의 PNG를 쓰는가
-  final RadarBounds bounds; // motion shift 적용된 실제 bounds
   final String tm; // 이 슬라이더 포지션이 가리키는 절대시각 (YYYYMMDDHHmm)
+  final RadarAnchor anchor; // primary (offset 이하 가장 가까운 anchor)
+  final RadarAnchor? next; // secondary (offset 초과 다음 anchor). null이면 정확히 anchor 위치
+  final double blend; // 0.0 = pure anchor, 1.0 = pure next
 
   RadarKind get kind {
     if (offsetMin == 0 && anchor.isObservation) {
       return RadarKind.observation;
     }
     if (anchor.isObservation) {
-      // current 앵커 + 음수가 아닌 offset → 실측을 motion으로 외삽
+      // current 앵커 + 양수 offset → 실측에서 예보로 전환 중
       return RadarKind.extrapolation;
     }
     return RadarKind.forecast;
@@ -137,34 +143,40 @@ class RadarState {
     RadarMotionDeg motion,
   ) {
     if (anchors.isEmpty) return const [];
-    // anchor를 시간순 정렬 + 슬라이더 0~360분.
+    // anchor를 시간순 정렬.
     final sorted = [...anchors]
       ..sort((a, b) => a.anchorMin.compareTo(b.anchorMin));
     final base = _parseTm(baseTm);
     final out = <RadarSliderFrame>[];
     for (var off = 0; off <= 360; off += 10) {
-      // off보다 작거나 같은 anchor 중 가장 가까운 것.
-      RadarAnchor chosen = sorted.first;
-      for (final a in sorted) {
+      // off 이하 가장 가까운 anchor (primary) + 그 다음 anchor (secondary).
+      RadarAnchor primary = sorted.first;
+      RadarAnchor? secondary;
+      for (var i = 0; i < sorted.length; i++) {
+        final a = sorted[i];
         if (a.anchorMin <= off) {
-          chosen = a;
+          primary = a;
+          // 다음 anchor가 있으면 secondary로
+          secondary = i + 1 < sorted.length ? sorted[i + 1] : null;
         } else {
           break;
         }
       }
-      // 그 anchor의 시각 기준으로 motion 적용.
-      final deltaMin = off - chosen.anchorMin;
-      final hours = deltaMin / 60.0;
-      final bounds = chosen.bounds.shifted(
-        dlat: motion.dlat * hours,
-        dlon: motion.dlon * hours,
-      );
-      final tm = _formatTm(base.add(Duration(minutes: off)));
+      // off가 정확히 primary 위치면 cross-fade 없이 단독.
+      double blend = 0.0;
+      if (secondary != null && primary.anchorMin < off) {
+        blend = (off - primary.anchorMin) /
+            (secondary.anchorMin - primary.anchorMin);
+        blend = blend.clamp(0.0, 1.0);
+      } else {
+        secondary = null;
+      }
       out.add(RadarSliderFrame(
         offsetMin: off,
-        anchor: chosen,
-        bounds: bounds,
-        tm: tm,
+        tm: _formatTm(base.add(Duration(minutes: off))),
+        anchor: primary,
+        next: secondary,
+        blend: blend,
       ));
     }
     return out;

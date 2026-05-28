@@ -17,7 +17,6 @@ from datetime import datetime, timedelta
 
 import numpy as np
 
-from adapters.extrapolation import estimate_motion_per_hour
 from adapters.kma_apihub import NX as GRID_NX
 from adapters.kma_apihub import NY as GRID_NY
 from adapters.kma_apihub import fetch_vsrt_grid
@@ -34,25 +33,16 @@ from adapters.kma_radar import (
     HSR_BBOX_NORTH,
     HSR_BBOX_SOUTH,
     HSR_BBOX_WEST,
-    HSR_NX,
-    HSR_NY,
     RadarFrame,
     fetch_radar_hsr,
 )
-from adapters.radar_renderer import render_radar_webp, render_rn1_webp
+from adapters.radar_renderer import render_radar_webp, render_rn1_on_hsr_canvas
 from adapters.store_kma_cache import KmaCacheStore
 from domain.locations import CITIES_KMA
 
 log = logging.getLogger(__name__)
 
 KST = zoneinfo.ZoneInfo("Asia/Seoul")
-
-# KMA DFS Lambert 격자 (149×253, 5km) 의 위경도 bbox.
-# 표준 KMA 문서 "동네예보 격자영역정보" — 격자 (1,1)~(149,253) 모서리 4점 기준.
-RN1_BBOX_SOUTH = 32.176
-RN1_BBOX_WEST = 120.815
-RN1_BBOX_NORTH = 43.286
-RN1_BBOX_EAST = 131.871
 
 # 도시별 호출 동시 실행 한도. KMA API TPS 30 한도 안전선 + 응답 안정성 우선.
 # 184개 도시 × ~2초/호출이 순차로 6분 → 병렬 10개로 1분 안에 마무리.
@@ -338,68 +328,35 @@ async def _refresh_radar_frames(
     docs_root: str,
     pages_base_url: str,
 ) -> None:
-    """4 anchor 하이브리드 + 클라이언트 motion shift:
+    """7-anchor cross-fade morphing:
 
-    - `current.webp`      = 0분  실제 KMA HSR 레이더 (500m, dBZ 기반)
-    - `forecast_2h.webp`  = +2h  KMA 초단기예보 격자 RN1 (5km, mm/hr 기반)
-    - `forecast_4h.webp`  = +4h  RN1
-    - `forecast_6h.webp`  = +6h  RN1
+    - `current.webp`     = 0분  실제 KMA HSR 레이더 (500m)
+    - `forecast_1h.webp` = +1h  KMA 초단기예보 RN1 (HSR bbox로 정렬)
+    - `forecast_2h.webp` = +2h  RN1
+    - ...
+    - `forecast_6h.webp` = +6h  RN1
 
-    클라이언트는 슬라이더 위치(0~360분)에 따라 가장 가까운 anchor를 골라 그 PNG를
-    motion × (대상시각 - anchor시각)만큼 bounds shift해서 표시.
+    모든 anchor가 같은 HSR bbox에 렌더 → 클라이언트가 두 인접 anchor를 opacity
+    가중치로 cross-fade해서 시각적 morphing 효과.
 
-    가까운 미래: current + linear motion (smooth)
-    먼 미래: KMA 비선형 예보 (성장/감쇠 반영)
+    이전엔 KMA 예보를 spar(2시간 간격)하게 anchor로 썼는데, 그 사이는 우리의 단순
+    외삽이라 어색했음. 매 시간마다 KMA의 정확한 예보값을 anchor로 두면 외삽 의존도가
+    크게 줄고 KMA 알고리즘의 비선형 예측이 매 시간 반영됨.
     """
     current_tm = latest_radar_tm()
-    prev_tm = _shift_tm(current_tm, -10)   # motion 추정용
-    log.info("레이더 갱신 시작 — current=%s, prev=%s, docs=%s",
-             current_tm, prev_tm, docs_root)
+    log.info("레이더 갱신 시작 — current=%s, docs=%s", current_tm, docs_root)
 
-    # 1) 레이더 2장 (current + prev) 병렬 fetch.
-    radar_results = await asyncio.gather(
-        fetch_radar_hsr(prev_tm),
-        fetch_radar_hsr(current_tm),
-        return_exceptions=True,
-    )
-    prev_frame: RadarFrame | None = None
+    # 1) 현재 레이더 fetch.
     current_frame: RadarFrame | None = None
-    if isinstance(radar_results[0], RadarFrame):
-        prev_frame = radar_results[0]
-    else:
-        log.error("이전 레이더 fetch 실패 (%s): %s", prev_tm, radar_results[0])
-    if isinstance(radar_results[1], RadarFrame):
-        current_frame = radar_results[1]
-    else:
-        log.error("현재 레이더 fetch 실패 (%s): %s", current_tm, radar_results[1])
-
-    if current_frame is None:
-        log.error("현재 레이더 프레임 누락 — 저장 스킵")
+    try:
+        current_frame = await fetch_radar_hsr(current_tm)
+    except Exception as e:
+        log.error("현재 레이더 fetch 실패 (%s): %s", current_tm, e)
         return
 
-    # 2) Motion vector (prev → current, 10분 차) → px/h → deg/h.
-    motion_per_hour_px: tuple[float, float] = (0.0, 0.0)
-    if prev_frame is not None:
-        motion_per_hour_px = estimate_motion_per_hour(
-            prev_frame.values,
-            current_frame.values,
-            minutes_apart=10,
-        )
-    deg_per_px_lon = (HSR_BBOX_EAST - HSR_BBOX_WEST) / HSR_NX
-    deg_per_px_lat = (HSR_BBOX_NORTH - HSR_BBOX_SOUTH) / HSR_NY
-    motion_per_hour_deg = {
-        "dlat": motion_per_hour_px[0] * deg_per_px_lat,
-        "dlon": motion_per_hour_px[1] * deg_per_px_lon,
-    }
-    log.info(
-        "motion (px/h)=(%.1f, %.1f), (deg/h)=(%.4f, %.4f)",
-        motion_per_hour_px[0], motion_per_hour_px[1],
-        motion_per_hour_deg["dlat"], motion_per_hour_deg["dlon"],
-    )
-
-    # 3) 초단기예보 격자 RN1 3장 (+2h/+4h/+6h) 병렬 fetch.
+    # 2) 초단기예보 RN1 6장 (+1h ~ +6h) 병렬 fetch.
     rn1_tmfc = latest_grid_tmfc()
-    rn1_offsets = [2, 4, 6]
+    rn1_offsets = list(range(1, 7))
     rn1_results = await asyncio.gather(
         *(
             fetch_vsrt_grid(var="RN1", tmfc=rn1_tmfc, tmef=grid_tmef(rn1_tmfc, h))
@@ -408,7 +365,7 @@ async def _refresh_radar_frames(
         return_exceptions=True,
     )
 
-    # 4) WebP 렌더 + 파일 저장.
+    # 3) WebP 렌더 + 저장. 모두 같은 HSR bbox 캔버스에.
     radar_dir = pathlib.Path(docs_root) / "radar"
     radar_dir.mkdir(parents=True, exist_ok=True)
     saved_slots: set[str] = set()
@@ -423,15 +380,21 @@ async def _refresh_radar_frames(
             log.error("RN1 fetch 실패 (+%dh): %s", h, res)
             continue
         grid = res
-        # KmaGrid.values는 tuple, (ny, nx) 형태로 reshape.
         rn1_array = np.array(grid.values, dtype=np.float32).reshape((GRID_NY, GRID_NX))
-        webp = await asyncio.to_thread(render_rn1_webp, rn1_array)
+        webp = await asyncio.to_thread(render_rn1_on_hsr_canvas, rn1_array)
         (radar_dir / f"{slot}.webp").write_bytes(webp)
         saved_slots.add(slot)
 
     log.info("WebP 저장 완료 — %s, slots=%s", radar_dir, sorted(saved_slots))
 
-    # 5) Anchor 매니페스트 — 슬라이더는 클라이언트가 0~360분 자유롭게 그림.
+    # 4) 이전에 사용하던 4-anchor .webp 잔재 정리 (forecast_3h/5h 없었음 → 신경 안 써도 됨).
+    #    하지만 다른 이름 파일이 남아있을 수 있으니 명시적으로 cleanup은 생략.
+
+    # 5) Anchor 매니페스트 — 모두 같은 HSR bbox.
+    common_bounds = {
+        "south": HSR_BBOX_SOUTH, "west": HSR_BBOX_WEST,
+        "north": HSR_BBOX_NORTH, "east": HSR_BBOX_EAST,
+    }
     anchors: list[dict] = []
     if "current" in saved_slots:
         anchors.append({
@@ -440,10 +403,7 @@ async def _refresh_radar_frames(
             "anchor_min": 0,
             "tm": current_tm,
             "url": f"{pages_base_url}/radar/current.webp?v={current_tm}",
-            "bounds": {
-                "south": HSR_BBOX_SOUTH, "west": HSR_BBOX_WEST,
-                "north": HSR_BBOX_NORTH, "east": HSR_BBOX_EAST,
-            },
+            "bounds": common_bounds,
         })
     for h in rn1_offsets:
         slot = f"forecast_{h}h"
@@ -455,16 +415,14 @@ async def _refresh_radar_frames(
             "anchor_min": h * 60,
             "tm": grid_tmef(rn1_tmfc, h),
             "url": f"{pages_base_url}/radar/{slot}.webp?v={current_tm}",
-            "bounds": {
-                "south": RN1_BBOX_SOUTH, "west": RN1_BBOX_WEST,
-                "north": RN1_BBOX_NORTH, "east": RN1_BBOX_EAST,
-            },
+            "bounds": common_bounds,
         })
 
+    # motion vector는 안 쓰지만 호환성 위해 0으로 채워서 manifest에 유지.
     await store.save_radar_manifest({
         "base_tm": current_tm,
-        "motion_per_hour_px": {"dy": motion_per_hour_px[0], "dx": motion_per_hour_px[1]},
-        "motion_per_hour_deg": motion_per_hour_deg,
+        "motion_per_hour_px": {"dy": 0.0, "dx": 0.0},
+        "motion_per_hour_deg": {"dlat": 0.0, "dlon": 0.0},
         "anchors": anchors,
     })
     log.info("레이더 manifest 저장 완료 — %d anchors", len(anchors))
