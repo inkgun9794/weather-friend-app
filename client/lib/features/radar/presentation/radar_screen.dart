@@ -120,19 +120,21 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
                       maxZoom: 15.0,
                     ),
                     children: [
-                      // 1) OSM 베이스 타일
+                      // 1) 다크 베이스 타일 (CartoDB Dark Matter — 비구름 대비 ↑)
                       TileLayer(
                         urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                        subdomains: const ['a', 'b', 'c', 'd'],
                         userAgentPackageName: 'com.weatherfriend.app',
                         maxNativeZoom: 19,
                       ),
                       // 2) anchor PNG overlay — motion shift된 bounds 사용.
+                      //    다크 베이스에 파란색이 잘 살도록 opacity ↑.
                       OverlayImageLayer(
                         overlayImages: [
                           OverlayImage(
                             bounds: current.bounds.toLatLngBounds(),
-                            opacity: 0.82,
+                            opacity: 0.92,
                             imageProvider: NetworkImage(current.anchor.url),
                           ),
                         ],
@@ -151,10 +153,10 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
                         ),
                       const SimpleAttributionWidget(
                         source: Text(
-                          '© OpenStreetMap',
+                          '© OpenStreetMap © CARTO',
                           style: TextStyle(fontSize: 10),
                         ),
-                        backgroundColor: Color(0x99FFFFFF),
+                        backgroundColor: Color(0xCC000000),
                       ),
                     ],
                   ),
