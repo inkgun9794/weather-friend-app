@@ -16,7 +16,9 @@ import zoneinfo
 from datetime import datetime, timedelta
 
 import numpy as np
+from PIL import Image
 
+from adapters.extrapolation import estimate_motion_per_hour_intensity
 from adapters.kma_apihub import NX as GRID_NX
 from adapters.kma_apihub import NY as GRID_NY
 from adapters.kma_apihub import fetch_vsrt_grid
@@ -36,7 +38,14 @@ from adapters.kma_radar import (
     RadarFrame,
     fetch_radar_hsr,
 )
-from adapters.radar_renderer import render_radar_webp, render_rn1_on_hsr_canvas
+from adapters.radar_renderer import (
+    OUT_H,
+    OUT_W,
+    encode_webp,
+    image_alpha_intensity,
+    render_radar_image,
+    render_rn1_image,
+)
 from adapters.store_kma_cache import KmaCacheStore
 from domain.locations import CITIES_KMA
 
@@ -365,32 +374,57 @@ async def _refresh_radar_frames(
         return_exceptions=True,
     )
 
-    # 3) WebP 렌더 + 저장. 모두 같은 HSR bbox 캔버스에.
+    # 3) PIL 렌더 (PIL Image 유지 → motion 추정 + WebP 인코드 둘 다 가능).
     radar_dir = pathlib.Path(docs_root) / "radar"
     radar_dir.mkdir(parents=True, exist_ok=True)
-    saved_slots: set[str] = set()
+    images: dict[str, Image.Image | None] = {}
 
-    current_webp = await asyncio.to_thread(render_radar_webp, current_frame.values)
-    (radar_dir / "current.webp").write_bytes(current_webp)
-    saved_slots.add("current")
-
+    images["current"] = await asyncio.to_thread(render_radar_image, current_frame.values)
     for h, res in zip(rn1_offsets, rn1_results, strict=True):
         slot = f"forecast_{h}h"
         if isinstance(res, BaseException):
             log.error("RN1 fetch 실패 (+%dh): %s", h, res)
+            images[slot] = None
             continue
         grid = res
         rn1_array = np.array(grid.values, dtype=np.float32).reshape((GRID_NY, GRID_NX))
-        webp = await asyncio.to_thread(render_rn1_on_hsr_canvas, rn1_array)
-        (radar_dir / f"{slot}.webp").write_bytes(webp)
-        saved_slots.add(slot)
+        images[slot] = await asyncio.to_thread(render_rn1_image, rn1_array)
 
+    # 4) 각 anchor의 WebP 저장.
+    saved_slots: set[str] = set()
+    for slot, img in images.items():
+        if img is None:
+            continue
+        (radar_dir / f"{slot}.webp").write_bytes(encode_webp(img))
+        saved_slots.add(slot)
     log.info("WebP 저장 완료 — %s, slots=%s", radar_dir, sorted(saved_slots))
 
-    # 4) 이전에 사용하던 4-anchor .webp 잔재 정리 (forecast_3h/5h 없었음 → 신경 안 써도 됨).
-    #    하지만 다른 이름 파일이 남아있을 수 있으니 명시적으로 cleanup은 생략.
+    # 5) 인접 anchor 쌍 motion 추정 (deg/h) — cross-fade 시 morphing 방향.
+    #    HSR 캔버스 픽셀(_OUT_W × _OUT_H)의 alpha 채널 강도로 phase correlation.
+    slot_order = ["current"] + [f"forecast_{h}h" for h in rn1_offsets]
+    out_h, out_w = OUT_H, OUT_W
+    deg_per_px_lon = (HSR_BBOX_EAST - HSR_BBOX_WEST) / out_w
+    deg_per_px_lat = (HSR_BBOX_NORTH - HSR_BBOX_SOUTH) / out_h
+    motion_from_prev: dict[str, dict[str, float]] = {}
+    prev_intensity: np.ndarray | None = None
+    for slot in slot_order:
+        img = images.get(slot)
+        if img is None:
+            prev_intensity = None
+            continue
+        intensity = image_alpha_intensity(img)
+        if prev_intensity is not None:
+            dy_h, dx_h = estimate_motion_per_hour_intensity(
+                prev_intensity, intensity, minutes_apart=60,
+            )
+            motion_from_prev[slot] = {
+                "dlat": dy_h * deg_per_px_lat,
+                "dlon": dx_h * deg_per_px_lon,
+            }
+        prev_intensity = intensity
+    log.info("anchor 쌍 motion = %s", motion_from_prev)
 
-    # 5) Anchor 매니페스트 — 모두 같은 HSR bbox.
+    # 6) Anchor 매니페스트 — 모두 같은 HSR bbox, motion_from_prev_deg 포함.
     common_bounds = {
         "south": HSR_BBOX_SOUTH, "west": HSR_BBOX_WEST,
         "north": HSR_BBOX_NORTH, "east": HSR_BBOX_EAST,
@@ -404,25 +438,26 @@ async def _refresh_radar_frames(
             "tm": current_tm,
             "url": f"{pages_base_url}/radar/current.webp?v={current_tm}",
             "bounds": common_bounds,
+            # current는 이전 anchor 없음 → motion_from_prev_deg 없음
         })
     for h in rn1_offsets:
         slot = f"forecast_{h}h"
         if slot not in saved_slots:
             continue
-        anchors.append({
+        entry: dict = {
             "slot": slot,
             "kind": "fcst",
             "anchor_min": h * 60,
             "tm": grid_tmef(rn1_tmfc, h),
             "url": f"{pages_base_url}/radar/{slot}.webp?v={current_tm}",
             "bounds": common_bounds,
-        })
+        }
+        if slot in motion_from_prev:
+            entry["motion_from_prev_deg"] = motion_from_prev[slot]
+        anchors.append(entry)
 
-    # motion vector는 안 쓰지만 호환성 위해 0으로 채워서 manifest에 유지.
     await store.save_radar_manifest({
         "base_tm": current_tm,
-        "motion_per_hour_px": {"dy": 0.0, "dx": 0.0},
-        "motion_per_hour_deg": {"dlat": 0.0, "dlon": 0.0},
         "anchors": anchors,
     })
     log.info("레이더 manifest 저장 완료 — %d anchors", len(anchors))

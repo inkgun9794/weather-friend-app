@@ -128,19 +128,19 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
                         userAgentPackageName: 'com.weatherfriend.app',
                         maxNativeZoom: 19,
                       ),
-                      // 2) anchor PNG overlay — 두 인접 anchor의 cross-fade morphing.
-                      //    blend=0이면 primary 단독 (full opacity), blend>0이면 두 PNG
-                      //    stack해서 opacity 가중치로 보간.
+                      // 2) anchor PNG overlay — motion-aware cross-fade.
+                      //    motion이 있으면 anchor는 forward, next는 backward shift로
+                      //    "흘러가며 morph" 시각.
                       OverlayImageLayer(
                         overlayImages: [
                           OverlayImage(
-                            bounds: current.anchor.bounds.toLatLngBounds(),
+                            bounds: current.anchorBounds.toLatLngBounds(),
                             opacity: 0.92 * (1.0 - current.blend),
                             imageProvider: NetworkImage(current.anchor.url),
                           ),
-                          if (current.next != null)
+                          if (current.next != null && current.nextBounds != null)
                             OverlayImage(
-                              bounds: current.next!.bounds.toLatLngBounds(),
+                              bounds: current.nextBounds!.toLatLngBounds(),
                               opacity: 0.92 * current.blend,
                               imageProvider: NetworkImage(current.next!.url),
                             ),

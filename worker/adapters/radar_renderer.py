@@ -27,8 +27,10 @@ from .kma_radar import (
 
 # 출력 해상도 — HSR/RN1 모두 같은 캔버스로 통일해서 클라이언트가 cross-fade할 때
 # 두 anchor PNG의 bbox가 동일하게.
-_OUT_W = 1024
-_OUT_H = 1280
+OUT_W = 1024
+OUT_H = 1280
+_OUT_W = OUT_W  # 모듈 내부 호환
+_OUT_H = OUT_H
 _WEBP_QUALITY = 85
 
 # DFS 5km 격자 (149×253)가 덮는 위경도 영역 — KMA Lambert 역변환 결과.
@@ -89,8 +91,8 @@ def _encode_webp(img: Image.Image) -> bytes:
     return buf.getvalue()
 
 
-def render_radar_webp(values: np.ndarray) -> bytes:
-    """HSR 합성 (dBZ×100 int16 2305×2881) → WebP (HSR 전체 bbox 캔버스)."""
+def render_radar_image(values: np.ndarray) -> Image.Image:
+    """HSR 합성 → PIL Image (HSR 전체 bbox 캔버스, _OUT_W×_OUT_H 크기)."""
     if values.shape != (HSR_NY, HSR_NX):
         raise ValueError(f"unexpected shape {values.shape}, expected ({HSR_NY}, {HSR_NX})")
     dbz = values.astype(np.float32) / 100.0
@@ -98,39 +100,50 @@ def render_radar_webp(values: np.ndarray) -> bytes:
     mmhr = dbz_to_mmhr(dbz)
     mmhr[missing] = 0.0
     img = _mmhr_to_image(mmhr)
-    img = img.resize((_OUT_W, _OUT_H), Image.Resampling.LANCZOS)
-    return _encode_webp(img)
+    return img.resize((_OUT_W, _OUT_H), Image.Resampling.LANCZOS)
 
 
-def render_rn1_on_hsr_canvas(values: np.ndarray) -> bytes:
-    """DFS 초단기예보 격자 RN1 (149×253 at 5km) → HSR bbox 캔버스 WebP.
+def render_rn1_image(values: np.ndarray) -> Image.Image:
+    """RN1 (149×253 at 5km) → PIL Image (HSR bbox 캔버스, sub-rectangle에 paste).
 
-    7-anchor cross-fade를 위해 모든 anchor PNG가 같은 bbox(=HSR)에서 정렬돼야 함.
-    RN1 데이터는 그 안의 sub-rectangle에 paste, 나머지는 투명.
+    7-anchor cross-fade를 위해 모든 anchor가 같은 bbox(=HSR)에서 정렬돼야 함.
     """
-    # 1) RN1 → RGBA (149×253 dimensions)
     mmhr = np.where(values < 0, 0.0, values).astype(np.float32)
     rn1_img = _mmhr_to_image(mmhr)
 
-    # 2) HSR 캔버스 안에서의 RN1 sub-rectangle 위치 계산
+    # HSR 캔버스 안에서의 RN1 sub-rectangle 위치 계산
     lon_span = HSR_BBOX_EAST - HSR_BBOX_WEST
     lat_span = HSR_BBOX_NORTH - HSR_BBOX_SOUTH
     x_start = round((RN1_BBOX_WEST - HSR_BBOX_WEST) / lon_span * _OUT_W)
     x_end = round((RN1_BBOX_EAST - HSR_BBOX_WEST) / lon_span * _OUT_W)
-    # y는 위쪽이 north라 invert.
     y_start = round((HSR_BBOX_NORTH - RN1_BBOX_NORTH) / lat_span * _OUT_H)
     y_end = round((HSR_BBOX_NORTH - RN1_BBOX_SOUTH) / lat_span * _OUT_H)
     x_start = max(0, x_start)
     x_end = min(_OUT_W, x_end)
     y_start = max(0, y_start)
     y_end = min(_OUT_H, y_end)
-    sub_w = x_end - x_start
-    sub_h = y_end - y_start
 
-    # 3) RN1을 sub-rectangle 크기로 리샘플
-    rn1_img = rn1_img.resize((sub_w, sub_h), Image.Resampling.LANCZOS)
-
-    # 4) 투명 HSR 캔버스에 paste
+    rn1_img = rn1_img.resize((x_end - x_start, y_end - y_start), Image.Resampling.LANCZOS)
     canvas = Image.new("RGBA", (_OUT_W, _OUT_H), (0, 0, 0, 0))
     canvas.paste(rn1_img, (x_start, y_start), rn1_img)
-    return _encode_webp(canvas)
+    return canvas
+
+
+def encode_webp(img: Image.Image) -> bytes:
+    """PIL Image → WebP bytes (별도 호출 가능, 기존 _encode_webp의 public 버전)."""
+    return _encode_webp(img)
+
+
+def image_alpha_intensity(img: Image.Image) -> np.ndarray:
+    """RGBA PIL Image의 alpha 채널 → 0~1 float 2D — motion 추정용 강도 신호."""
+    alpha = img.split()[-1]
+    return np.array(alpha, dtype=np.float32) / 255.0
+
+
+# 하위 호환 — 이전 함수명 유지 (외부 모듈 import 깨지 않게).
+def render_radar_webp(values: np.ndarray) -> bytes:
+    return encode_webp(render_radar_image(values))
+
+
+def render_rn1_on_hsr_canvas(values: np.ndarray) -> bytes:
+    return encode_webp(render_rn1_image(values))

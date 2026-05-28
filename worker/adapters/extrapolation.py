@@ -42,13 +42,25 @@ def _to_intensity(values: np.ndarray) -> np.ndarray:
 def estimate_motion_per_hour(
     older: np.ndarray, newer: np.ndarray, *, minutes_apart: int
 ) -> tuple[float, float]:
-    """older → newer (minutes_apart 분 경과) 사이의 motion vector를 픽셀/시간 단위로 환산.
+    """HSR dBZ×100 int16 입력용 모션 추정. 풀해상도 픽셀/시간 단위 반환.
 
-    반환: (dy_per_hour, dx_per_hour) — 풀해상도 픽셀 단위.
+    내부적으론 일반 intensity → phase correlation에 위임.
     """
     older_i = _to_intensity(older)
     newer_i = _to_intensity(newer)
+    return estimate_motion_per_hour_intensity(
+        older_i, newer_i, minutes_apart=minutes_apart,
+    )
 
+
+def estimate_motion_per_hour_intensity(
+    older_i: np.ndarray, newer_i: np.ndarray, *, minutes_apart: int
+) -> tuple[float, float]:
+    """이미 0~1 intensity 2D인 두 프레임에서 motion vector 추정.
+
+    PIL Image의 alpha/red 채널 같은 임의 강도 신호에 사용 가능.
+    반환: (dy_per_hour, dx_per_hour) — 입력 해상도 픽셀 단위.
+    """
     # 다운샘플 (블록 평균).
     h, w = older_i.shape
     h2, w2 = h // _DS, w // _DS
@@ -59,8 +71,11 @@ def estimate_motion_per_hour(
     older_ds = older_ds - older_ds.mean()
     newer_ds = newer_ds - newer_ds.mean()
 
-    # 강수가 거의 없으면 motion 추정 불가 → 0.
-    if older_ds.std() < 1e-3 or newer_ds.std() < 1e-3:
+    # 강수가 너무 적거나 분포가 단순하면 phase correlation이 노이즈로 잠겨서
+    # 비현실적 motion을 토함. 두 가지 sanity:
+    # 1) std 임계치 — alpha 채널이 너무 sparse하면 (강수 픽셀 < 0.3%) 0 반환
+    # 2) 양쪽 모두 충분한 상관(corr 피크가 평균 대비 의미 있음)이어야
+    if older_ds.std() < 0.05 or newer_ds.std() < 0.05:
         return (0.0, 0.0)
 
     # Phase correlation (FFT 기반).
@@ -81,7 +96,18 @@ def estimate_motion_per_hour(
     dy_full = py * _DS
     dx_full = px * _DS
     scale = 60.0 / minutes_apart
-    return (dy_full * scale, dx_full * scale)
+    dy_h = dy_full * scale
+    dx_h = dx_full * scale
+
+    # 물리적 sanity — 시간당 너무 큰 이동은 노이즈로 간주.
+    # 일반적인 비구름은 시간당 50km, 태풍이라도 100km/h 정도. 격자 픽셀 단위로
+    # 격자 한 변의 1/10 정도가 그 정도에 해당 → cap = max(input shape) / 10.
+    cap_full = max(older_i.shape) // 10
+    if abs(dy_h) > cap_full or abs(dx_h) > cap_full:
+        log.warning("비현실적 motion (%.1f, %.1f px/h, cap=%d) — 0으로 무시",
+                    dy_h, dx_h, cap_full)
+        return (0.0, 0.0)
+    return (dy_h, dx_h)
 
 
 def shift_frame(values: np.ndarray, dy: float, dx: float) -> np.ndarray:
