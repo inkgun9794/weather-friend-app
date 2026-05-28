@@ -23,6 +23,7 @@ from domain.briefing import (
     DayForecast,
     briefing_type_for_hour,
     is_audio_slot,
+    needs_weather_context,
 )
 from domain.character import CHARACTERS, Character
 
@@ -58,21 +59,22 @@ async def _generate_one(
         return False
 
     btype = briefing_type_for_hour(hour)
+    use_weather = needs_weather_context(hour)
 
     # 1) 스크립트 생성 (Gemini) — 세마포어로 동시 호출 제한
-    #    알람 시간(MORNING/EVENING): (message, voice_script) 둘 다 반환
-    #    그 외(HOURLY): (message, None)
+    #    MORNING/EVENING: (message, voice_script) 둘 다, today/tomorrow 필요
+    #    HOURLY: (message, None), today 필요
+    #    CASUAL: (message, None), today/tomorrow 없음 (google_search로 트렌드 검색)
     async with gemini_sem:
         message_script, voice_script = await gemini.generate(
             character=character,
             briefing_type=btype,
             hour=hour,
-            today=today,
+            today=today if use_weather else None,
             tomorrow=tomorrow if btype == BriefingType.EVENING else None,
         )
 
     # 2) 음성 합성 — 알람 슬롯 + voice_id 지정됐을 때
-    #    TTS 입력은 voice_script (있으면) > message_script (fallback)
     audio_url: str | None = None
     if is_audio_slot(hour) and character.voice_actor_id:
         tts_text = voice_script or message_script
@@ -87,8 +89,18 @@ async def _generate_one(
             extension=synth.extension,
         )
 
-    # 3) Firestore에 메타 저장
-    snap = today.hourly[hour]
+    # 3) Firestore에 메타 저장. CASUAL은 weather_snapshot=None.
+    weather_snapshot: dict | None = None
+    if use_weather:
+        snap = today.hourly[hour]
+        weather_snapshot = {
+            "temperature_c": snap.temperature_c,
+            "feels_like_c": snap.feels_like_c,
+            "condition": snap.condition,
+            "precipitation_prob": snap.precipitation_prob,
+            "wind_speed_kmh": snap.wind_speed_kmh,
+            "humidity": snap.humidity,
+        }
     await store.save(
         BriefingMetadata(
             city=city,
@@ -99,14 +111,7 @@ async def _generate_one(
             transcript=message_script,
             voice_script=voice_script,
             audio_url=audio_url,
-            weather_snapshot={
-                "temperature_c": snap.temperature_c,
-                "feels_like_c": snap.feels_like_c,
-                "condition": snap.condition,
-                "precipitation_prob": snap.precipitation_prob,
-                "wind_speed_kmh": snap.wind_speed_kmh,
-                "humidity": snap.humidity,
-            },
+            weather_snapshot=weather_snapshot,
         )
     )
 

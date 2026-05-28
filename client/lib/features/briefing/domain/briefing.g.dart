@@ -37,9 +37,11 @@ _Briefing _$BriefingFromJson(Map<String, dynamic> json) => _Briefing(
   transcript: json['transcript'] as String,
   voiceScript: json['voice_script'] as String?,
   audioUrl: json['audio_url'] as String?,
-  weatherSnapshot: WeatherSnapshot.fromJson(
-    json['weather_snapshot'] as Map<String, dynamic>,
-  ),
+  weatherSnapshot: json['weather_snapshot'] == null
+      ? null
+      : WeatherSnapshot.fromJson(
+          json['weather_snapshot'] as Map<String, dynamic>,
+        ),
 );
 
 Map<String, dynamic> _$BriefingToJson(_Briefing instance) => <String, dynamic>{
@@ -58,4 +60,5 @@ const _$BriefingTypeEnumMap = {
   BriefingType.morning: 'morning',
   BriefingType.evening: 'evening',
   BriefingType.hourly: 'hourly',
+  BriefingType.casual: 'casual',
 };

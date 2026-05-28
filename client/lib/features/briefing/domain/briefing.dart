@@ -10,6 +10,8 @@ enum BriefingType {
   evening,
   @JsonValue('hourly')
   hourly,
+  @JsonValue('casual')
+  casual,
 }
 
 @freezed
@@ -39,7 +41,8 @@ abstract class Briefing with _$Briefing {
     required String transcript,
     @JsonKey(name: 'voice_script') String? voiceScript,
     @JsonKey(name: 'audio_url') String? audioUrl,
-    @JsonKey(name: 'weather_snapshot') required WeatherSnapshot weatherSnapshot,
+    // casual 타입은 날씨 데이터 없음 — nullable 처리.
+    @JsonKey(name: 'weather_snapshot') WeatherSnapshot? weatherSnapshot,
   }) = _Briefing;
 
   factory Briefing.fromJson(Map<String, Object?> json) =>

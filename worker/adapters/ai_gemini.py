@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from google import genai
 from google.genai import types
@@ -20,6 +22,8 @@ from domain.briefing import (
     RainBlock,
 )
 from domain.character import Character
+
+KST = ZoneInfo("Asia/Seoul")
 
 log = logging.getLogger(__name__)
 
@@ -59,15 +63,19 @@ def _parse_dual_output(raw: str) -> tuple[str, str | None]:
     return message, (voice or None)
 
 # 알람 슬롯(5/21시)은 음성+텍스트 두 버전을 만들고, 사용자가 푸시로 받는 첫인상이라
-# quality 우선 — 한 세대 위 lite를 씀. 나머지 hourly는 짧은 한 줄이라 비용 우선.
-# 둘 다 paid Tier 1. 호출당 약 $0.0007 (alarm) vs $0.0002 (hourly).
+# quality 우선 — 한 세대 위 lite를 씀. 나머지 hourly/casual은 짧은 한 줄이라 비용 우선.
+# 둘 다 paid Tier 1. 호출당 약 $0.0007 (alarm) vs $0.0002 (hourly/casual).
+# CASUAL은 google_search grounding tool이 필요해서 lite도 OK.
 _MODEL_ALARM = "gemini-3.1-flash-lite"
 _MODEL_HOURLY = "gemini-2.5-flash-lite"
+_MODEL_CASUAL = "gemini-2.5-flash-lite"
 
 
 def _model_for(briefing_type: BriefingType) -> str:
     if briefing_type in (BriefingType.MORNING, BriefingType.EVENING):
         return _MODEL_ALARM
+    if briefing_type == BriefingType.CASUAL:
+        return _MODEL_CASUAL
     return _MODEL_HOURLY
 
 
@@ -140,29 +148,44 @@ class GeminiScriptGenerator:
         character: Character,
         briefing_type: BriefingType,
         hour: int,
-        today: DayForecast,
+        today: DayForecast | None = None,
         tomorrow: DayForecast | None = None,
     ) -> tuple[str, str | None]:
         """캐릭터의 메시지/음성 스크립트 생성.
 
         Returns:
             (message_script, voice_script_or_none).
-            HOURLY 타입은 voice_script가 None.
+            HOURLY/CASUAL 타입은 voice_script가 None.
+            CASUAL 타입은 today/tomorrow 불필요 (날씨 무관 잡담).
         """
         semantic = SEMANTIC_INSTRUCTIONS[briefing_type].format(hour=hour)
         system_instruction = (
             f"{character.persona_prompt}\n\n{HUMAN_VOICE_RULES}\n\n{semantic}"
         )
-        contents = _weather_brief(briefing_type, hour, today, tomorrow)
 
-        config = types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            temperature=0.9,
-            max_output_tokens=500,
+        # CASUAL은 날씨 데이터 대신 "지금 핫토픽 찾아서 친구톡 만들어" 요청.
+        # google_search tool로 Gemini가 직접 트렌드 검색하게 함.
+        config_kwargs: dict[str, object] = {
+            "system_instruction": system_instruction,
+            "temperature": 0.9,
+            "max_output_tokens": 500,
             # gemini-2.5-flash는 기본으로 thinking 모드. 짧은 텍스트 생성엔
             # thinking이 토큰 예산을 잡아먹어 응답이 잘리므로 비활성화.
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
-        )
+            "thinking_config": types.ThinkingConfig(thinking_budget=0),
+        }
+        if briefing_type == BriefingType.CASUAL:
+            today_kst = datetime.now(KST).strftime("%Y년 %m월 %d일")
+            contents = (
+                f"오늘은 {today_kst}. 한국에서 지금 화제인 토픽 1개를 google_search로 "
+                f"찾아서, 위 지침에 따라 친구가 카톡 보내듯 짧은 메시지 1개 만들어줘. "
+                f"날씨 얘기 절대 X. 부적절한 토픽은 일반 안부로 대체."
+            )
+            config_kwargs["tools"] = [types.Tool(google_search=types.GoogleSearch())]
+        else:
+            assert today is not None, "weather briefing requires today forecast"
+            contents = _weather_brief(briefing_type, hour, today, tomorrow)
+
+        config = types.GenerateContentConfig(**config_kwargs)
 
         last_exc: Exception | None = None
         for attempt in range(1, _MAX_RETRIES + 1):

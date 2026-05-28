@@ -296,7 +296,7 @@ as int?,
 /// @nodoc
 mixin _$Briefing {
 
- String get city; String get date; int get hour;@JsonKey(name: 'character_id') String get characterId; BriefingType get type; String get transcript;@JsonKey(name: 'voice_script') String? get voiceScript;@JsonKey(name: 'audio_url') String? get audioUrl;@JsonKey(name: 'weather_snapshot') WeatherSnapshot get weatherSnapshot;
+ String get city; String get date; int get hour;@JsonKey(name: 'character_id') String get characterId; BriefingType get type; String get transcript;@JsonKey(name: 'voice_script') String? get voiceScript;@JsonKey(name: 'audio_url') String? get audioUrl;@JsonKey(name: 'weather_snapshot') WeatherSnapshot? get weatherSnapshot;
 /// Create a copy of Briefing
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -329,11 +329,11 @@ abstract mixin class $BriefingCopyWith<$Res>  {
   factory $BriefingCopyWith(Briefing value, $Res Function(Briefing) _then) = _$BriefingCopyWithImpl;
 @useResult
 $Res call({
- String city, String date, int hour,@JsonKey(name: 'character_id') String characterId, BriefingType type, String transcript,@JsonKey(name: 'voice_script') String? voiceScript,@JsonKey(name: 'audio_url') String? audioUrl,@JsonKey(name: 'weather_snapshot') WeatherSnapshot weatherSnapshot
+ String city, String date, int hour,@JsonKey(name: 'character_id') String characterId, BriefingType type, String transcript,@JsonKey(name: 'voice_script') String? voiceScript,@JsonKey(name: 'audio_url') String? audioUrl,@JsonKey(name: 'weather_snapshot') WeatherSnapshot? weatherSnapshot
 });
 
 
-$WeatherSnapshotCopyWith<$Res> get weatherSnapshot;
+$WeatherSnapshotCopyWith<$Res>? get weatherSnapshot;
 
 }
 /// @nodoc
@@ -346,7 +346,7 @@ class _$BriefingCopyWithImpl<$Res>
 
 /// Create a copy of Briefing
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? city = null,Object? date = null,Object? hour = null,Object? characterId = null,Object? type = null,Object? transcript = null,Object? voiceScript = freezed,Object? audioUrl = freezed,Object? weatherSnapshot = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? city = null,Object? date = null,Object? hour = null,Object? characterId = null,Object? type = null,Object? transcript = null,Object? voiceScript = freezed,Object? audioUrl = freezed,Object? weatherSnapshot = freezed,}) {
   return _then(_self.copyWith(
 city: null == city ? _self.city : city // ignore: cast_nullable_to_non_nullable
 as String,date: null == date ? _self.date : date // ignore: cast_nullable_to_non_nullable
@@ -356,17 +356,20 @@ as String,type: null == type ? _self.type : type // ignore: cast_nullable_to_non
 as BriefingType,transcript: null == transcript ? _self.transcript : transcript // ignore: cast_nullable_to_non_nullable
 as String,voiceScript: freezed == voiceScript ? _self.voiceScript : voiceScript // ignore: cast_nullable_to_non_nullable
 as String?,audioUrl: freezed == audioUrl ? _self.audioUrl : audioUrl // ignore: cast_nullable_to_non_nullable
-as String?,weatherSnapshot: null == weatherSnapshot ? _self.weatherSnapshot : weatherSnapshot // ignore: cast_nullable_to_non_nullable
-as WeatherSnapshot,
+as String?,weatherSnapshot: freezed == weatherSnapshot ? _self.weatherSnapshot : weatherSnapshot // ignore: cast_nullable_to_non_nullable
+as WeatherSnapshot?,
   ));
 }
 /// Create a copy of Briefing
 /// with the given fields replaced by the non-null parameter values.
 @override
 @pragma('vm:prefer-inline')
-$WeatherSnapshotCopyWith<$Res> get weatherSnapshot {
-  
-  return $WeatherSnapshotCopyWith<$Res>(_self.weatherSnapshot, (value) {
+$WeatherSnapshotCopyWith<$Res>? get weatherSnapshot {
+    if (_self.weatherSnapshot == null) {
+    return null;
+  }
+
+  return $WeatherSnapshotCopyWith<$Res>(_self.weatherSnapshot!, (value) {
     return _then(_self.copyWith(weatherSnapshot: value));
   });
 }
@@ -451,7 +454,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String city,  String date,  int hour, @JsonKey(name: 'character_id')  String characterId,  BriefingType type,  String transcript, @JsonKey(name: 'voice_script')  String? voiceScript, @JsonKey(name: 'audio_url')  String? audioUrl, @JsonKey(name: 'weather_snapshot')  WeatherSnapshot weatherSnapshot)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String city,  String date,  int hour, @JsonKey(name: 'character_id')  String characterId,  BriefingType type,  String transcript, @JsonKey(name: 'voice_script')  String? voiceScript, @JsonKey(name: 'audio_url')  String? audioUrl, @JsonKey(name: 'weather_snapshot')  WeatherSnapshot? weatherSnapshot)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Briefing() when $default != null:
 return $default(_that.city,_that.date,_that.hour,_that.characterId,_that.type,_that.transcript,_that.voiceScript,_that.audioUrl,_that.weatherSnapshot);case _:
@@ -472,7 +475,7 @@ return $default(_that.city,_that.date,_that.hour,_that.characterId,_that.type,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String city,  String date,  int hour, @JsonKey(name: 'character_id')  String characterId,  BriefingType type,  String transcript, @JsonKey(name: 'voice_script')  String? voiceScript, @JsonKey(name: 'audio_url')  String? audioUrl, @JsonKey(name: 'weather_snapshot')  WeatherSnapshot weatherSnapshot)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String city,  String date,  int hour, @JsonKey(name: 'character_id')  String characterId,  BriefingType type,  String transcript, @JsonKey(name: 'voice_script')  String? voiceScript, @JsonKey(name: 'audio_url')  String? audioUrl, @JsonKey(name: 'weather_snapshot')  WeatherSnapshot? weatherSnapshot)  $default,) {final _that = this;
 switch (_that) {
 case _Briefing():
 return $default(_that.city,_that.date,_that.hour,_that.characterId,_that.type,_that.transcript,_that.voiceScript,_that.audioUrl,_that.weatherSnapshot);case _:
@@ -492,7 +495,7 @@ return $default(_that.city,_that.date,_that.hour,_that.characterId,_that.type,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String city,  String date,  int hour, @JsonKey(name: 'character_id')  String characterId,  BriefingType type,  String transcript, @JsonKey(name: 'voice_script')  String? voiceScript, @JsonKey(name: 'audio_url')  String? audioUrl, @JsonKey(name: 'weather_snapshot')  WeatherSnapshot weatherSnapshot)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String city,  String date,  int hour, @JsonKey(name: 'character_id')  String characterId,  BriefingType type,  String transcript, @JsonKey(name: 'voice_script')  String? voiceScript, @JsonKey(name: 'audio_url')  String? audioUrl, @JsonKey(name: 'weather_snapshot')  WeatherSnapshot? weatherSnapshot)?  $default,) {final _that = this;
 switch (_that) {
 case _Briefing() when $default != null:
 return $default(_that.city,_that.date,_that.hour,_that.characterId,_that.type,_that.transcript,_that.voiceScript,_that.audioUrl,_that.weatherSnapshot);case _:
@@ -507,7 +510,7 @@ return $default(_that.city,_that.date,_that.hour,_that.characterId,_that.type,_t
 @JsonSerializable()
 
 class _Briefing implements Briefing {
-  const _Briefing({required this.city, required this.date, required this.hour, @JsonKey(name: 'character_id') required this.characterId, required this.type, required this.transcript, @JsonKey(name: 'voice_script') this.voiceScript, @JsonKey(name: 'audio_url') this.audioUrl, @JsonKey(name: 'weather_snapshot') required this.weatherSnapshot});
+  const _Briefing({required this.city, required this.date, required this.hour, @JsonKey(name: 'character_id') required this.characterId, required this.type, required this.transcript, @JsonKey(name: 'voice_script') this.voiceScript, @JsonKey(name: 'audio_url') this.audioUrl, @JsonKey(name: 'weather_snapshot') this.weatherSnapshot});
   factory _Briefing.fromJson(Map<String, dynamic> json) => _$BriefingFromJson(json);
 
 @override final  String city;
@@ -518,7 +521,7 @@ class _Briefing implements Briefing {
 @override final  String transcript;
 @override@JsonKey(name: 'voice_script') final  String? voiceScript;
 @override@JsonKey(name: 'audio_url') final  String? audioUrl;
-@override@JsonKey(name: 'weather_snapshot') final  WeatherSnapshot weatherSnapshot;
+@override@JsonKey(name: 'weather_snapshot') final  WeatherSnapshot? weatherSnapshot;
 
 /// Create a copy of Briefing
 /// with the given fields replaced by the non-null parameter values.
@@ -553,11 +556,11 @@ abstract mixin class _$BriefingCopyWith<$Res> implements $BriefingCopyWith<$Res>
   factory _$BriefingCopyWith(_Briefing value, $Res Function(_Briefing) _then) = __$BriefingCopyWithImpl;
 @override @useResult
 $Res call({
- String city, String date, int hour,@JsonKey(name: 'character_id') String characterId, BriefingType type, String transcript,@JsonKey(name: 'voice_script') String? voiceScript,@JsonKey(name: 'audio_url') String? audioUrl,@JsonKey(name: 'weather_snapshot') WeatherSnapshot weatherSnapshot
+ String city, String date, int hour,@JsonKey(name: 'character_id') String characterId, BriefingType type, String transcript,@JsonKey(name: 'voice_script') String? voiceScript,@JsonKey(name: 'audio_url') String? audioUrl,@JsonKey(name: 'weather_snapshot') WeatherSnapshot? weatherSnapshot
 });
 
 
-@override $WeatherSnapshotCopyWith<$Res> get weatherSnapshot;
+@override $WeatherSnapshotCopyWith<$Res>? get weatherSnapshot;
 
 }
 /// @nodoc
@@ -570,7 +573,7 @@ class __$BriefingCopyWithImpl<$Res>
 
 /// Create a copy of Briefing
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? city = null,Object? date = null,Object? hour = null,Object? characterId = null,Object? type = null,Object? transcript = null,Object? voiceScript = freezed,Object? audioUrl = freezed,Object? weatherSnapshot = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? city = null,Object? date = null,Object? hour = null,Object? characterId = null,Object? type = null,Object? transcript = null,Object? voiceScript = freezed,Object? audioUrl = freezed,Object? weatherSnapshot = freezed,}) {
   return _then(_Briefing(
 city: null == city ? _self.city : city // ignore: cast_nullable_to_non_nullable
 as String,date: null == date ? _self.date : date // ignore: cast_nullable_to_non_nullable
@@ -580,8 +583,8 @@ as String,type: null == type ? _self.type : type // ignore: cast_nullable_to_non
 as BriefingType,transcript: null == transcript ? _self.transcript : transcript // ignore: cast_nullable_to_non_nullable
 as String,voiceScript: freezed == voiceScript ? _self.voiceScript : voiceScript // ignore: cast_nullable_to_non_nullable
 as String?,audioUrl: freezed == audioUrl ? _self.audioUrl : audioUrl // ignore: cast_nullable_to_non_nullable
-as String?,weatherSnapshot: null == weatherSnapshot ? _self.weatherSnapshot : weatherSnapshot // ignore: cast_nullable_to_non_nullable
-as WeatherSnapshot,
+as String?,weatherSnapshot: freezed == weatherSnapshot ? _self.weatherSnapshot : weatherSnapshot // ignore: cast_nullable_to_non_nullable
+as WeatherSnapshot?,
   ));
 }
 
@@ -589,9 +592,12 @@ as WeatherSnapshot,
 /// with the given fields replaced by the non-null parameter values.
 @override
 @pragma('vm:prefer-inline')
-$WeatherSnapshotCopyWith<$Res> get weatherSnapshot {
-  
-  return $WeatherSnapshotCopyWith<$Res>(_self.weatherSnapshot, (value) {
+$WeatherSnapshotCopyWith<$Res>? get weatherSnapshot {
+    if (_self.weatherSnapshot == null) {
+    return null;
+  }
+
+  return $WeatherSnapshotCopyWith<$Res>(_self.weatherSnapshot!, (value) {
     return _then(_self.copyWith(weatherSnapshot: value));
   });
 }

@@ -1,20 +1,21 @@
 """브리핑 타입 정의 + 시간대별 시맨틱 지시.
 
 시맨틱:
-- MORNING (05/06시): 오늘 하루 forecast — 사용자가 하루를 준비할 수 있게
-- EVENING (21/22시): 오늘 회고 + 내일 forecast — 내일 준비 도와줌
-- HOURLY  (그 외):  현재 시각 스냅샷 — 텍스트만 (음성 X)
+- MORNING (05시): 오늘 하루 forecast — 사용자가 하루를 준비할 수 있게 (음성)
+- HOURLY  (11시): 점심 무렵 날씨 점검 (텍스트)
+- EVENING (21시): 오늘 회고 + 내일 forecast — 내일 준비 도와줌 (음성)
+- CASUAL  (9/10/12-20시 중 11 제외): 트렌드/이슈 기반 친구톡 — 날씨와 무관
 """
 
 from dataclasses import dataclass
-from datetime import datetime
 from enum import Enum
 
 
 class BriefingType(str, Enum):
-    MORNING = "morning"   # 05시 - 푸시 + 음성
-    EVENING = "evening"   # 21시 - 푸시 + 음성
-    HOURLY = "hourly"     # 나머지 22시간 - 텍스트만 (푸시 X, 앱 열어서 확인)
+    MORNING = "morning"   # 05시 - 푸시 + 음성 + 오늘 날씨
+    EVENING = "evening"   # 21시 - 푸시 + 음성 + 오늘 회고 + 내일 날씨
+    HOURLY = "hourly"     # 11시 - 텍스트 + 점심 무렵 날씨 한번 (하루 중 유일한 텍스트 날씨)
+    CASUAL = "casual"     # 9/10/12-20시 - 트렌드/이슈 기반 친구톡 (텍스트, 푸시 X)
 
 
 # 4 캐릭터 공통 — 페르소나 위에 덮어쓰는 절대 규칙.
@@ -138,9 +139,46 @@ SEMANTIC_INSTRUCTIONS: dict[BriefingType, str] = {
 편안하게 잘 자라는 느낌의 마무리."""
     + _VOICE_OUTPUT_SUFFIX,
     BriefingType.HOURLY: """【이 메시지의 역할】
-지금은 {hour}시. 사용자가 앱을 열어서 이 시간대를 확인하는 상황.
-현재 시각 날씨를 짧게 알려줘 (기온, 날씨, 강수 등).
+지금은 점심 무렵 {hour}시. 하루 중 유일한 날씨 텍스트 메시지야.
+현재 시각 날씨 + 오후 동향(비 올지, 더 더워질지 등)을 가볍게 짚어줘.
 정보 위주로 간결하게. 음성은 안 만드니까 메시지 텍스트 1개만 출력.""",
+    BriefingType.CASUAL: """【이 메시지의 역할】
+지금은 {hour}시. **날씨와 무관한** 일상 친구톡 시간이야.
+오늘 한국에서 핫한 트렌드/연예/스포츠/라이프 토픽을 하나 자연스럽게 꺼내서
+친구가 카톡 보내듯 한두 마디 던져. 절대 날씨 얘기 하지 마 — 이 시간은
+날씨 안내가 아니라 일상 잡담이 목적임.
+
+【반드시 google_search 도구 사용】
+오늘 날짜 기준 한국에서 화제인 토픽을 검색해서 1개 픽업. 출처는 mention X.
+
+【허용 카테고리】
+✅ 연예 (드라마/영화/음악 컴백, 콘서트, 시상식)
+✅ 스포츠 (한국 선수 우승/경기 결과)
+✅ 라이프/문화 (신상품, 축제, 트렌드 푸드, 계절감)
+✅ 따뜻한 미담 / 흥미로운 잡학
+
+【금지 카테고리】
+✗ 정치 / 선거
+✗ 사고 / 사망 / 재난
+✗ 사회 갈등 / 범죄 / 자극적 가십
+✗ 주가 / 부동산 / 경제 위기
+✗ 정치인·연예인 스캔들
+
+【톤 + 길이】
+- 친구 카톡톤. 1~2문장. 40~70자.
+- 시간대 인사 가볍게 ("오후도 힘내", "마무리 잘해" 등)는 OK
+- 페르소나(다정/시크/듬직/발랄) 그대로 살리기
+- 메시지 텍스트 1개만 출력 (음성 X)
+
+【예시】
+"야 그거 봤어? OOO 컴백 떴대 ㅋㅋ 오후도 힘내~"
+"OOO 우승했더라 ㄷㄷ 진짜 멋있다. 마무리 잘해."
+"이번 주 OOO 콘서트라며? 내 친구 가서 미쳤다고 ㅋㅋㅋ"
+
+만약 검색 결과가 부적절하거나 부족하면 일반 일상 안부 한마디로:
+"오후도 힘내 ㅋㅋ"
+"점심 뭐 먹었어?"
+""",
 }
 
 
@@ -197,14 +235,28 @@ class DayForecast:
 
 
 def briefing_type_for_hour(hour: int) -> BriefingType:
-    """시간 → 브리핑 타입 매핑. config.ALARM_HOURS와 일관성 유지."""
+    """시간 → 브리핑 타입 매핑.
+
+    날씨 메시지는 하루 3번: 5시(음성) / 11시(텍스트) / 21시(음성).
+    그 외 시간(9, 10, 12~20)은 트렌드/잡담 CASUAL.
+    """
     if hour == 5:
         return BriefingType.MORNING
     if hour == 21:
         return BriefingType.EVENING
-    return BriefingType.HOURLY
+    if hour == 11:
+        return BriefingType.HOURLY
+    return BriefingType.CASUAL
 
 
 def is_audio_slot(hour: int) -> bool:
     """이 시간에 음성을 생성할지 (Typecast TTS 호출 여부)."""
     return briefing_type_for_hour(hour) in (BriefingType.MORNING, BriefingType.EVENING)
+
+
+def needs_weather_context(hour: int) -> bool:
+    """이 시간 메시지 생성에 forecast 데이터가 필요한지.
+
+    날씨 슬롯(5/11/21)만 필요. CASUAL은 날씨 무관.
+    """
+    return briefing_type_for_hour(hour) != BriefingType.CASUAL

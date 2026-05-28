@@ -149,8 +149,10 @@ WeatherCondition _conditionForCurrent(
   final data = async.value;
   if (data == null) return WeatherCondition.clear;
   final b = data[hour] ?? _nearestPast(data, hour);
-  if (b == null) return WeatherCondition.clear;
-  return _conditionFromString(b.weatherSnapshot.condition);
+  // casual은 날씨 데이터 없음 → 직전 날씨 슬롯에서 condition을 끌어와야 하지만
+  // 일단은 clear로 fallback. 실제 표시에선 weather 영역을 숨기는 게 자연.
+  if (b == null || b.weatherSnapshot == null) return WeatherCondition.clear;
+  return _conditionFromString(b.weatherSnapshot!.condition);
 }
 
 Briefing? _nearestPast(Map<int, Briefing> briefings, int hour) {
@@ -284,9 +286,9 @@ class _BigTemp extends ConsumerWidget {
       _ => null,
     };
     final temp =
-        b?.weatherSnapshot.temperatureC.round() ?? hourly?.temperatureC.round();
-    final feels = b?.weatherSnapshot.feelsLikeC.round();
-    final cond = b?.weatherSnapshot.condition ?? hourly?.condition ?? '—';
+        b?.weatherSnapshot?.temperatureC.round() ?? hourly?.temperatureC.round();
+    final feels = b?.weatherSnapshot?.feelsLikeC.round();
+    final cond = b?.weatherSnapshot?.condition ?? hourly?.condition ?? '—';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
@@ -344,10 +346,10 @@ class _BigTemp extends ConsumerWidget {
                         letterSpacing: -0.1,
                       ),
                     ),
-                    if (b != null) ...[
+                    if (b != null && b.weatherSnapshot != null) ...[
                       const SizedBox(height: 2),
                       Text(
-                        '강수 ${b.weatherSnapshot.precipitationProb}% · 습도 ${b.weatherSnapshot.humidity}%',
+                        '강수 ${b.weatherSnapshot!.precipitationProb}% · 습도 ${b.weatherSnapshot!.humidity}%',
                         style: TextStyle(
                           color: sky.inkSoft,
                           fontSize: 12,
@@ -750,13 +752,14 @@ class _HourSlot extends StatelessWidget {
         ? Character.parseId(briefing!.characterId)
         : null;
     // Briefing 데이터(메시지 있는 hour) 우선, 없으면 Open-Meteo hourly로 fallback.
+    // casual 타입은 weatherSnapshot이 null이라 그땐 hourly fallback 사용.
     final conditionStr =
-        briefing?.weatherSnapshot.condition ?? hourly?.condition;
+        briefing?.weatherSnapshot?.condition ?? hourly?.condition;
     final cond = conditionStr != null
         ? _conditionFromString(conditionStr)
         : WeatherCondition.clear;
     final temp =
-        briefing?.weatherSnapshot.temperatureC.round() ??
+        briefing?.weatherSnapshot?.temperatureC.round() ??
         hourly?.temperatureC.round();
 
     final ink = sky.ink;

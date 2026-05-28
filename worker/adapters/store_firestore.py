@@ -22,7 +22,7 @@ class BriefingMetadata:
     transcript: str  # 메시지 화면용 텍스트 (이모지/ㅋㅋ OK)
     voice_script: str | None  # TTS용 자연 발화 (알람 시간만, 그 외 None)
     audio_url: str | None  # 음성 파일 URL (None = 텍스트만)
-    weather_snapshot: dict
+    weather_snapshot: dict | None  # casual 타입은 None — 날씨 데이터 없음
 
 
 class FirestoreMetadataStore:
