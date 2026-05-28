@@ -755,30 +755,44 @@ class _TimelineSectionState extends State<_TimelineSection> {
                   margin: const EdgeInsets.symmetric(horizontal: 12),
                   color: sky.ink.withValues(alpha: 0.08),
                 ),
-                // 24시간 가로 strip — 슬롯 사이엔 보더 없이 2px 갭만.
-                // 높이는 isNow 슬롯(아이콘 24 + 폰트 19 + 알약 패딩)을 여유 있게
-                // 수용할 만큼.
+                // 24시간 가로 strip — 시간대 그라데이션 배경 + 슬롯 24개.
+                // 새벽→일출→낮→일몰→밤 색이 스크롤과 함께 자연스럽게 흐름.
                 SizedBox(
                   height: 132,
-                  child: ListView.builder(
+                  child: SingleChildScrollView(
                     controller: _controller,
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(
                       horizontal: _stripHPad,
                       vertical: 8,
                     ),
-                    itemCount: 24,
-                    itemBuilder: (context, hour) => _HourSlot(
-                      hour: hour,
-                      briefing: widget.briefings[hour],
-                      hourly: widget.hourlyWeather[hour],
-                      sky: sky,
-                      isNow: hour == widget.currentHour,
-                      isPast: hour < widget.currentHour,
-                      width: _slotWidth,
-                      rightGap: _slotGap,
-                      sunrise: widget.sunrise,
-                      sunset: widget.sunset,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: _hourGradientColors,
+                          stops: _hourGradientStops,
+                        ),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Row(
+                        children: List.generate(
+                          24,
+                          (hour) => _HourSlot(
+                            hour: hour,
+                            briefing: widget.briefings[hour],
+                            hourly: widget.hourlyWeather[hour],
+                            sky: sky,
+                            isNow: hour == widget.currentHour,
+                            isPast: hour < widget.currentHour,
+                            width: _slotWidth,
+                            rightGap: _slotGap,
+                            sunrise: widget.sunrise,
+                            sunset: widget.sunset,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -790,6 +804,40 @@ class _TimelineSectionState extends State<_TimelineSection> {
     );
   }
 }
+
+/// 24h strip 그라데이션 — 새벽(0시) → 일출(6시) → 낮(12-14시) → 일몰(19시) → 밤(23시).
+/// 부모 글래스(흰색 alpha) 위에 얹히므로 alpha 다소 낮춰 톤 다운.
+const _hourGradientColors = [
+  Color(0x991A2358), // 0시  새벽 깊은 네이비
+  Color(0x991E2761), // 4시  여명 전
+  Color(0xAA6B6E8E), // 5시  일출 직전 (분홍보라)
+  Color(0xCCFFA68A), // 6시  일출 (오렌지 핑크)
+  Color(0xBBFFD791), // 8시  아침 (옅은 노랑)
+  Color(0xAAB3DFF7), // 11시 늦은 아침 (옅은 하늘)
+  Color(0xAA7EC0EE), // 14시 낮 (파스텔 블루)
+  Color(0xAAB3D4F0), // 16시 오후
+  Color(0xCCFFB27E), // 18시 오후 늦 (따뜻한 톤)
+  Color(0xCCFF7E6B), // 19시 일몰 (오렌지)
+  Color(0xAA6B4A6E), // 20시 일몰 직후 (보라)
+  Color(0x991E2761), // 22시 밤
+  Color(0x991A2358), // 23시 깊은 네이비
+];
+
+const _hourGradientStops = <double>[
+  0.0,    // 0시
+  0.174,  // 4시
+  0.217,  // 5시
+  0.261,  // 6시
+  0.348,  // 8시
+  0.478,  // 11시
+  0.609,  // 14시
+  0.696,  // 16시
+  0.783,  // 18시
+  0.826,  // 19시
+  0.870,  // 20시
+  0.957,  // 22시
+  1.0,    // 23시
+];
 
 /// 연결형 strip의 한 시간 칸. 개별 카드 보더 없이 부모 글래스 위에 그냥 얹힌다.
 /// 현재 hour만 알약(pill) 배경 + "지금" 라벨 + 굵은 텍스트로 확실히 튀게.

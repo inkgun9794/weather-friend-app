@@ -22,23 +22,16 @@ class WeatherFacade {
   final WeatherSource fallback;  // Open-Meteo
 
   Future<WeatherBundle> fetchBundle({String city = 'seoul'}) async {
+    final sw = Stopwatch()..start();
     // 두 소스 병렬 호출 — KMA는 메인 데이터, Open-Meteo는 보조 (sunrise/sunset, weather_code)
     final results = await Future.wait([
-      primary.fetchBundle(city: city).then<WeatherBundle?>((v) => v).catchError(
-        (Object e) {
-          debugPrint('[weather_facade] ⚠️ ${primary.id} failed: $e');
-          return null;
-        },
-      ),
-      fallback.fetchBundle(city: city).then<WeatherBundle?>((v) => v).catchError(
-        (Object e) {
-          debugPrint('[weather_facade] ⚠️ ${fallback.id} failed: $e');
-          return null;
-        },
-      ),
+      _timed(primary.id, () => primary.fetchBundle(city: city)),
+      _timed(fallback.id, () => fallback.fetchBundle(city: city)),
     ]);
     final kma = results[0];
     final om = results[1];
+    sw.stop();
+    debugPrint('[weather_facade] ⏱ total ${sw.elapsedMilliseconds}ms');
 
     if (kma == null && om == null) {
       throw Exception('All weather sources failed (KMA + Open-Meteo)');
@@ -92,3 +85,21 @@ final weatherFacadeProvider = Provider<WeatherFacade>((ref) {
     fallback: ref.watch(openMeteoWeatherSourceProvider),
   );
 });
+
+/// 단일 source fetch 시간 측정 + 에러는 null 반환.
+Future<WeatherBundle?> _timed(
+  String label,
+  Future<WeatherBundle> Function() task,
+) async {
+  final sw = Stopwatch()..start();
+  try {
+    final result = await task();
+    sw.stop();
+    debugPrint('[weather_facade] ⏱ $label ${sw.elapsedMilliseconds}ms');
+    return result;
+  } catch (e) {
+    sw.stop();
+    debugPrint('[weather_facade] ⚠️ $label failed (${sw.elapsedMilliseconds}ms): $e');
+    return null;
+  }
+}
