@@ -143,14 +143,15 @@ class _UltraSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isRain = hour.precipitationProb > 0;
-    final icon = switch (hour.condition) {
-      '비' || '소나기' => Icons.umbrella_rounded,
-      '비/눈' => Icons.ac_unit_rounded,
-      '눈' => Icons.ac_unit_rounded,
-      '흐림' => Icons.cloud_rounded,
-      '구름많음' => Icons.cloud_queue_rounded,
-      _ => Icons.wb_sunny_rounded,
+    // iOS Apple emoji 컬러 아이콘 — Icon 대신 Text로.
+    final emoji = switch (hour.condition) {
+      '소나기' => '🌦️',
+      '비' => '🌧️',
+      '비/눈' => '🌨️',
+      '눈' => '❄️',
+      '흐림' => '☁️',
+      '구름많음' => '⛅',
+      _ => '☀️',
     };
 
     // 슬롯이 현재 시간대인지 ("지금")
@@ -175,10 +176,9 @@ class _UltraSlot extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Icon(
-            icon,
-            color: isRain ? sky.ink : sky.ink.withValues(alpha: 0.85),
-            size: 22,
+          Text(
+            emoji,
+            style: const TextStyle(fontSize: 20, height: 1.0),
           ),
           const SizedBox(height: 8),
           Text(

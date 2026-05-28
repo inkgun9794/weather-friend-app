@@ -128,16 +128,17 @@ WeatherCondition _conditionFromString(String s) {
   return WeatherCondition.clear;
 }
 
-IconData _weatherIconFor(WeatherCondition c) {
+/// iOS Apple emoji 기반 컬러 날씨 아이콘 — Icon 대신 Text로 렌더링.
+String _weatherEmoji(WeatherCondition c) {
   switch (c) {
     case WeatherCondition.clear:
-      return Icons.wb_sunny;
+      return '☀️';
     case WeatherCondition.cloudy:
-      return Icons.cloud;
+      return '☁️';
     case WeatherCondition.rain:
-      return Icons.umbrella;
+      return '🌧️';
     case WeatherCondition.snow:
-      return Icons.ac_unit;
+      return '❄️';
   }
 }
 
@@ -785,7 +786,10 @@ class _HourSlot extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Icon(_weatherIconFor(cond), color: ink, size: isNow ? 24 : 22),
+          Text(
+            _weatherEmoji(cond),
+            style: TextStyle(fontSize: isNow ? 22 : 20, height: 1.0),
+          ),
           const SizedBox(height: 6),
           Text(
             temp != null ? '$temp°' : '—',
@@ -996,7 +1000,7 @@ class _PartCell extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(_weatherIconFor(cond), color: sky.ink, size: 18),
+        Text(_weatherEmoji(cond), style: const TextStyle(fontSize: 16, height: 1.0)),
         const SizedBox(width: 6),
         Text(
           '${summary.tempC}°',
