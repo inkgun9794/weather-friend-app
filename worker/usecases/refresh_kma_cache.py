@@ -169,16 +169,18 @@ async def refresh_ultra_only(
 ) -> None:
     """초단기만 갱신. grid 워크플로용 (30분 주기).
 
-    - 도시별 카드용 초단기 (`getUltraSrtFcst`)
-    - 비구름 지도용 한반도 격자 (`nph-dfs_vsrt_grd`, RN1) — 도시 무관 1회.
-    - 레이더 PNG (과거 1 + 현재 1 = 2장) — `docs_root/radar/`에 저장 후 GitHub Pages 서빙.
+    - 도시별 카드용 초단기 (`getUltraSrtFcst`) — brief 24h strip에 머지됨
+    - 비구름 지도(/radar) 화면 임시 비활성 — grid_rain·radar_frames 갱신도 함께 중단
+      → GitHub Actions 시간/KMA API 호출/git commit 부담 모두 절감
+      → 라디오 화면 재활성화 시 두 줄 주석만 풀면 복귀
     """
+    _ = docs_root, pages_base_url  # 라디오 비활성 동안 미사용
     store = KmaCacheStore(project_id=project_id)
     try:
         await asyncio.gather(
             _refresh_ultra(city_ids, store),
-            _refresh_grid_rain(store),
-            _refresh_radar_frames(store, docs_root=docs_root, pages_base_url=pages_base_url),
+            # _refresh_grid_rain(store),  # 라디오 화면 재활성 시 복귀
+            # _refresh_radar_frames(store, docs_root=docs_root, pages_base_url=pages_base_url),
         )
     finally:
         await store.close()

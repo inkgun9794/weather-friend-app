@@ -61,10 +61,21 @@ async def _generate_one(
     btype = briefing_type_for_hour(hour)
     use_weather = needs_weather_context(hour)
 
+    # CASUAL: 같은 도시·오늘의 직전 casual 메시지들 fetch → Gemini에 "이미 다룬 토픽" 컨텍스트로 전달.
+    # 같은 BTS·컴백 등 인기 토픽 반복 방지 + 캐릭터끼리도 다양화.
+    recent_topics: list[str] = []
+    if btype == BriefingType.CASUAL:
+        try:
+            recent_topics = await store.recent_casual_transcripts(
+                city=city, date=today.date, before_hour=hour, limit=10,
+            )
+        except Exception as e:
+            log.warning("이전 casual 토픽 fetch 실패 (계속 진행): %s", e)
+
     # 1) 스크립트 생성 (Gemini) — 세마포어로 동시 호출 제한
     #    MORNING/EVENING: (message, voice_script) 둘 다, today/tomorrow 필요
     #    HOURLY: (message, None), today 필요
-    #    CASUAL: (message, None), today/tomorrow 없음 (google_search로 트렌드 검색)
+    #    CASUAL: (message, None), today/tomorrow 없음 + 직전 토픽 list 전달
     async with gemini_sem:
         message_script, voice_script = await gemini.generate(
             character=character,
@@ -72,6 +83,7 @@ async def _generate_one(
             hour=hour,
             today=today if use_weather else None,
             tomorrow=tomorrow if btype == BriefingType.EVENING else None,
+            recent_topics=recent_topics if btype == BriefingType.CASUAL else None,
         )
 
     # 2) 음성 합성 — 알람 슬롯 + voice_id 지정됐을 때

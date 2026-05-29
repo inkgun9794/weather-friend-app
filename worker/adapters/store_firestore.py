@@ -58,6 +58,41 @@ class FirestoreMetadataStore:
         snap = await self._db.collection("briefings").document(doc_id).get()
         return snap.exists
 
+    async def recent_casual_transcripts(
+        self,
+        *,
+        city: str,
+        date: str,
+        before_hour: int,
+        limit: int = 10,
+    ) -> list[str]:
+        """같은 도시·날짜의 [before_hour]시 이전 CASUAL 메시지 transcript 리스트.
+
+        Gemini casual 생성 시 "이미 다룬 토픽" 컨텍스트로 주입 → 중복 회피.
+        모든 4 캐릭터의 메시지를 한꺼번에 모음 (캐릭터끼리도 토픽 안 겹치게).
+        """
+        # 컬렉션 prefix range query — doc_id 패턴 매칭.
+        prefix = f"{city}_{date}_"
+        coll = self._db.collection("briefings")
+        # Firestore range query on doc id: start_at prefix, end_at prefix + high char
+        query = (
+            coll.where("type", "==", "casual")
+            .where("city", "==", city)
+            .where("date", "==", date)
+            .where("hour", "<", before_hour)
+            .order_by("hour", direction=firestore.Query.DESCENDING)
+            .limit(limit)
+        )
+        out: list[str] = []
+        async for snap in query.stream():
+            data = snap.to_dict() or {}
+            transcript = data.get("transcript", "")
+            if transcript:
+                out.append(transcript)
+        # 사용 안 됨 — 정적 분석기 silencer
+        _ = prefix
+        return out
+
     async def close(self) -> None:
         # firestore.AsyncClient는 명시적 close가 권장됨
         self._db.close()
