@@ -227,17 +227,17 @@ Briefing? _nearestPast(Map<int, Briefing> briefings, int hour) {
 
 /// 메인 Hero에 띄울 brief 목록 (시간순).
 /// 메인 Hero에 노출되는 알람 카드 하나.
-/// - 5시~20시: 5시 카드 (음성 + 아침 안부)
-/// - 21시~익일 4시: 21시 카드 (음성 + 잘자) — 5시 카드 자리를 교체
+/// - 6시~20시: 6시 카드 (음성 + 아침 안부)
+/// - 21시~익일 5시: 21시 카드 (텍스트 + 잘자) — 6시 카드 자리를 교체
 /// 9~20시 hourly는 메인이 아니라 대화 화면에서 누적.
-/// kst.todayKstIso()가 0~4시엔 어제 사이클을 반환하므로 어제 21시 카드가 자연스럽게 보임.
+/// kst.todayKstIso()가 0~5시엔 어제 사이클을 반환하므로 어제 21시 카드가 자연스럽게 보임.
 List<Briefing> _mainHeroBriefings(Map<int, Briefing> briefings, int hour) {
-  final isEveningWindow = hour >= 21 || hour < 5;
+  final isEveningWindow = hour >= 21 || hour < 6;
   if (isEveningWindow && briefings[21] != null) {
     return [briefings[21]!];
   }
-  if (hour >= 5 && briefings[5] != null) {
-    return [briefings[5]!];
+  if (hour >= 6 && briefings[6] != null) {
+    return [briefings[6]!];
   }
   return [];
 }
@@ -257,7 +257,7 @@ String _hourLabel(int hour) {
 }
 
 String _alarmLabel(int hour) {
-  if (hour == 5) return '아침 인사';
+  if (hour == 6) return '아침 인사';
   if (hour == 9) return '오늘 시작';
   if (hour == 21) return '저녁 인사';
   return '';
@@ -768,11 +768,9 @@ class _TimelineSectionState extends State<_TimelineSection> {
                     ),
                     child: Container(
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: _hourGradientColors,
-                          stops: _hourGradientStops,
+                        gradient: _hourGradient(
+                          sunrise: widget.sunrise,
+                          sunset: widget.sunset,
                         ),
                         borderRadius: BorderRadius.circular(18),
                       ),
@@ -805,39 +803,43 @@ class _TimelineSectionState extends State<_TimelineSection> {
   }
 }
 
-/// 24h strip 그라데이션 — 새벽(0시) → 일출(6시) → 낮(12-14시) → 일몰(19시) → 밤(23시).
-/// 부모 글래스(흰색 alpha) 위에 얹히므로 alpha 다소 낮춰 톤 다운.
-const _hourGradientColors = [
-  Color(0x991A2358), // 0시  새벽 깊은 네이비
-  Color(0x991E2761), // 4시  여명 전
-  Color(0xAA6B6E8E), // 5시  일출 직전 (분홍보라)
-  Color(0xCCFFA68A), // 6시  일출 (오렌지 핑크)
-  Color(0xBBFFD791), // 8시  아침 (옅은 노랑)
-  Color(0xAAB3DFF7), // 11시 늦은 아침 (옅은 하늘)
-  Color(0xAA7EC0EE), // 14시 낮 (파스텔 블루)
-  Color(0xAAB3D4F0), // 16시 오후
-  Color(0xCCFFB27E), // 18시 오후 늦 (따뜻한 톤)
-  Color(0xCCFF7E6B), // 19시 일몰 (오렌지)
-  Color(0xAA6B4A6E), // 20시 일몰 직후 (보라)
-  Color(0x991E2761), // 22시 밤
-  Color(0x991A2358), // 23시 깊은 네이비
-];
-
-const _hourGradientStops = <double>[
-  0.0,    // 0시
-  0.174,  // 4시
-  0.217,  // 5시
-  0.261,  // 6시
-  0.348,  // 8시
-  0.478,  // 11시
-  0.609,  // 14시
-  0.696,  // 16시
-  0.783,  // 18시
-  0.826,  // 19시
-  0.870,  // 20시
-  0.957,  // 22시
-  1.0,    // 23시
-];
+/// 24h strip 그라데이션 — 실제 일출/일몰 시각에 따라 오렌지 피크 위치가 동적 이동.
+/// 겨울(일몰 17:00)·여름(일몰 19:30) 모두 자연스러운 표현.
+/// Open-Meteo daily의 sunrise/sunset을 받아서 stop 위치 계산.
+LinearGradient _hourGradient({DateTime? sunrise, DateTime? sunset}) {
+  // 시각 → 24h 분수 (0.0 ~ 1.0)
+  double frac(DateTime t) => (t.hour * 60 + t.minute) / (24 * 60);
+  // fallback (sun data 없을 때 — 약 8월 한국 기준)
+  final sr = sunrise != null ? frac(sunrise) : 6 / 24;
+  final ss = sunset != null ? frac(sunset) : 19 / 24;
+  // 색 anchor 8개. 일출/일몰 시각이 좌우로 이동하면 오렌지 피크도 같이 이동.
+  return LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: const [
+      Color(0x991A2358), // 0시           깊은 네이비
+      Color(0xAA6B6E8E), // 일출 -1h      분홍보라 (여명)
+      Color(0xCCFFA68A), // 일출           오렌지 핑크
+      Color(0xBBFFD791), // 일출 +2h      아침 노랑
+      Color(0xAA7EC0EE), // 정오           파스텔 블루
+      Color(0xCCFFB27E), // 일몰 -30min   따뜻한 톤
+      Color(0xCCFF7E6B), // 일몰           오렌지 (sunset)
+      Color(0xAA6B4A6E), // 일몰 +1h      보라
+      Color(0x991A2358), // 23시          깊은 네이비
+    ],
+    stops: [
+      0.0,
+      (sr - 1 / 24).clamp(0.0, 1.0),
+      sr.clamp(0.01, 0.99),
+      (sr + 2 / 24).clamp(0.0, 1.0),
+      0.5,
+      (ss - 0.5 / 24).clamp(0.0, 1.0),
+      ss.clamp(0.01, 0.99),
+      (ss + 1 / 24).clamp(0.0, 1.0),
+      1.0,
+    ],
+  );
+}
 
 /// 연결형 strip의 한 시간 칸. 개별 카드 보더 없이 부모 글래스 위에 그냥 얹힌다.
 /// 현재 hour만 알약(pill) 배경 + "지금" 라벨 + 굵은 텍스트로 확실히 튀게.

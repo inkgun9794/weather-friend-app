@@ -19,7 +19,7 @@ const _channelDescription = '오전 5시 · 오후 9시 알림';
 enum BriefingSlot {
   morning(
     id: 1,
-    hour: 5,
+    hour: 6,
     minute: 5,
     fallbackTitle: '아침 브리핑',
     fallbackBody: '오늘 날씨 브리핑이 준비됐어요',

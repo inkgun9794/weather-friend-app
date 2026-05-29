@@ -7,10 +7,10 @@ import 'package:weather_friend/features/briefing/domain/briefing.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
 import 'package:weather_friend/shared/widgets/audio_bubble.dart';
-import 'package:weather_friend/shared/widgets/char_avatar.dart';
+import 'package:weather_friend/shared/widgets/character_portrait.dart';
 
 /// 오늘 사이클의 모든 메시지를 시간순으로 누적 표시.
-/// 메인 화면에선 5시 또는 9시 카드만 보이고, 그 외(10~21시 포함)는 여기서만.
+/// 카카오톡 스타일 — 같은 발신자 연속 메시지는 프로필/이름 한 번만, 시간은 버블 옆.
 class ConversationScreen extends ConsumerWidget {
   const ConversationScreen({super.key});
 
@@ -19,8 +19,7 @@ class ConversationScreen extends ConsumerWidget {
     final asyncBriefings = ref.watch(todayBriefingsProvider);
     final currentHour = currentHourKst();
 
-    // 하단 글래스 탭 뒤로 ListView가 흘러들어가도록 — 마지막 버블이 가려지지 않게
-    // 바 높이 + 시스템 safe area + 약간의 숨 공간만큼 ListView 바닥 패딩 확보.
+    // 하단 글래스 탭 뒤로 ListView가 흘러들어가도록 — 마지막 버블이 가려지지 않게.
     final bottomInset =
         kGlassNavBarHeight + MediaQuery.paddingOf(context).bottom + 16;
 
@@ -55,12 +54,20 @@ class ConversationScreen extends ConsumerWidget {
 
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(todayBriefingsProvider),
-            child: ListView.separated(
+            child: ListView.builder(
               padding: EdgeInsets.fromLTRB(16, 16, 16, bottomInset),
               itemCount: entries.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 16),
-              itemBuilder: (context, i) =>
-                  _MessageBubble(hour: entries[i].key, briefing: entries[i].value),
+              itemBuilder: (context, i) {
+                final entry = entries[i];
+                final prev = i > 0 ? entries[i - 1].value : null;
+                // 같은 캐릭터 연속이면 헤더 (avatar + name) 생략.
+                final showHeader = prev?.characterId != entry.value.characterId;
+                return _MessageBubble(
+                  hour: entry.key,
+                  briefing: entry.value,
+                  showHeader: showHeader,
+                );
+              },
             ),
           );
         },
@@ -70,10 +77,20 @@ class ConversationScreen extends ConsumerWidget {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.hour, required this.briefing});
+  const _MessageBubble({
+    required this.hour,
+    required this.briefing,
+    required this.showHeader,
+  });
 
   final int hour;
   final Briefing briefing;
+  final bool showHeader;
+
+  static const double _avatarSize = 40;
+  static const double _gap = 10;
+  // 헤더 없는 연속 메시지에서 버블이 시작될 들여쓰기 (avatar 자리만큼).
+  static const double _continuationIndent = _avatarSize + _gap;
 
   @override
   Widget build(BuildContext context) {
@@ -82,90 +99,103 @@ class _MessageBubble extends StatelessWidget {
     final character = Character.byId(charId);
     final v = visualFor(charId);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 50, bottom: 4),
-          child: Text(
-            _timeLabel(hour),
+    final bubble = Container(
+      padding: const EdgeInsets.fromLTRB(14, 11, 14, 12),
+      decoration: BoxDecoration(
+        color: v.colorSoft,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(showHeader ? 4 : 16),
+          topRight: const Radius.circular(16),
+          bottomLeft: const Radius.circular(16),
+          bottomRight: const Radius.circular(16),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            briefing.transcript,
             style: TextStyle(
-              color: AppColors.inkMute,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
+              color: AppColors.ink,
+              fontSize: 14,
+              height: 1.5,
               letterSpacing: -0.1,
             ),
           ),
-        ),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CharAvatar(
-              charId: charId,
-              size: 40,
-              variant: CharAvatarVariant.photo,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    character.displayName.split(' ').last,
-                    style: TextStyle(
-                      color: AppColors.ink,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.1,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(14, 11, 14, 12),
-                    decoration: BoxDecoration(
-                      color: v.colorSoft,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(4),
-                        topRight: Radius.circular(16),
-                        bottomLeft: Radius.circular(16),
-                        bottomRight: Radius.circular(16),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          briefing.transcript,
-                          style: TextStyle(
-                            color: AppColors.ink,
-                            fontSize: 14,
-                            height: 1.5,
-                            letterSpacing: -0.1,
-                          ),
-                        ),
-                        if (briefing.audioUrl != null) ...[
-                          const SizedBox(height: 10),
-                          AudioBubble(
-                            charId: charId,
-                            audioUrl: briefing.audioUrl!,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          if (briefing.audioUrl != null) ...[
+            const SizedBox(height: 10),
+            AudioBubble(charId: charId, audioUrl: briefing.audioUrl!),
           ],
+        ],
+      ),
+    );
+
+    final bubbleRow = Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Flexible(child: bubble),
+        const SizedBox(width: 6),
+        Text(
+          _timeLabel(hour),
+          style: TextStyle(
+            color: AppColors.inkMute,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w500,
+            letterSpacing: -0.1,
+          ),
         ),
       ],
     );
+
+    if (!showHeader) {
+      // 연속 메시지 — avatar/name 생략, 들여쓰기 + 위쪽 짧은 간격.
+      return Padding(
+        padding: const EdgeInsets.only(left: _continuationIndent, top: 4),
+        child: bubbleRow,
+      );
+    }
+
+    // 새 발신자 — avatar + name + 시작 버블. 위쪽 큰 간격.
+    return Padding(
+      padding: const EdgeInsets.only(top: 18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CharacterPortrait(
+            charId: charId,
+            size: _avatarSize,
+            enableTapToExpand: false,
+          ),
+          const SizedBox(width: _gap),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  character.displayName.split(' ').last,
+                  style: TextStyle(
+                    color: AppColors.ink,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.1,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                bubbleRow,
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
+  /// 카카오톡 형식 — "오전 9:00", "오후 2:00".
+  /// 브리핑은 시간 단위 해상도라 분은 항상 :00.
   String _timeLabel(int hour) {
-    if (hour == 0) return '오전 12시';
-    if (hour < 12) return '오전 $hour시';
-    if (hour == 12) return '낮 12시';
-    return '오후 ${hour - 12}시';
+    if (hour == 0) return '오전 12:00';
+    if (hour < 12) return '오전 $hour:00';
+    if (hour == 12) return '낮 12:00';
+    return '오후 ${hour - 12}:00';
   }
 }

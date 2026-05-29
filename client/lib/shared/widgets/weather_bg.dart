@@ -19,13 +19,13 @@ class WeatherBg extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sky = skyFor(hour);
-    final isNight = hour >= 21 || hour < 5;
+    final isNight = hour >= 21 || hour < 6;
 
     Offset? pos;
     if (isNight) {
       pos = const Offset(70, 18);
-    } else if (hour >= 5 && hour <= 21) {
-      final t = (hour - 5) / 16.0;
+    } else if (hour >= 6 && hour <= 21) {
+      final t = (hour - 6) / 15.0;
       pos = Offset(12 + t * 76, 70 - math.sin(t * math.pi) * 60);
     }
 

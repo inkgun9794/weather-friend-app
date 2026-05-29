@@ -59,6 +59,11 @@ dependencies:
   flutter_svg: ^2.0.10+1
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
+  saju: ^0.1.1
+  lunar: ^1.7.8
+
+  flutter_localizations:
+    sdk: flutter
 
 dev_dependencies:
   flutter_test:
@@ -87,6 +92,7 @@ flutter:
   assets:
     - assets/character_intros/
     - assets/maps/
+    - assets/icons/weather/
 
   fonts:
     - family: Pretendard

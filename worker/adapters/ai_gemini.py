@@ -150,6 +150,7 @@ class GeminiScriptGenerator:
         hour: int,
         today: DayForecast | None = None,
         tomorrow: DayForecast | None = None,
+        recent_topics: list[str] | None = None,
     ) -> tuple[str, str | None]:
         """캐릭터의 메시지/음성 스크립트 생성.
 
@@ -157,6 +158,10 @@ class GeminiScriptGenerator:
             (message_script, voice_script_or_none).
             HOURLY/CASUAL 타입은 voice_script가 None.
             CASUAL 타입은 today/tomorrow 불필요 (날씨 무관 잡담).
+
+        Args:
+            recent_topics: CASUAL 전용. 같은 도시·오늘의 이전 casual 메시지들.
+                Gemini가 같은 토픽 안 반복하도록 prompt에 주입.
         """
         semantic = SEMANTIC_INSTRUCTIONS[briefing_type].format(hour=hour)
         system_instruction = (
@@ -175,10 +180,40 @@ class GeminiScriptGenerator:
         }
         if briefing_type == BriefingType.CASUAL:
             today_kst = datetime.now(KST).strftime("%Y년 %m월 %d일")
+            prior_block = ""
+            if recent_topics:
+                # 같은 도시·오늘 이미 다룬 메시지들 — Gemini가 다른 토픽 고르도록.
+                joined = "\n".join(f"  - {t}" for t in recent_topics)
+                prior_block = (
+                    "\n\n【오늘 이미 다룬 메시지들 (같은 토픽·표현 절대 반복 금지)】\n"
+                    f"{joined}\n\n"
+                    "위 메시지에 등장한 인물/그룹/사건과는 *다른* 토픽을 골라야 함. "
+                    "예: 위에 BTS 얘기 있으면 다른 K-팝 그룹이나 다른 카테고리(스포츠/푸드/드라마 등)로."
+                )
             contents = (
                 f"오늘은 {today_kst}. 한국에서 지금 화제인 토픽 1개를 google_search로 "
                 f"찾아서, 위 지침에 따라 친구가 카톡 보내듯 짧은 메시지 1개 만들어줘. "
-                f"날씨 얘기 절대 X. 부적절한 토픽은 일반 안부로 대체."
+                f"날씨 얘기 절대 X.\n\n"
+                f"【허용 토픽 카테고리 — 이 안에서만 골라. 젠지/20대 관심사 위주】\n"
+                f"  - K-pop / 아이돌 (컴백, 콘서트, MV, 멤버 근황·이슈)\n"
+                f"  - 드라마 / 영화 / 웹툰 / 예능 (최근 핫한 거)\n"
+                f"  - 카페 / 디저트 / 맛집 (신상, 핫플, 굿즈 콜라보)\n"
+                f"  - 패션 / 뷰티 (트렌드 아이템, 브랜드, OOTD)\n"
+                f"  - SNS 트렌드 / 밈 (인스타·틱톡·X에서 유행하는 거)\n"
+                f"  - 게임 (롤·발로란트·신작·이스포츠 등)\n"
+                f"  - 연애 / 자취 / 일상 (썸, 데이트, 친구 관계, 직장 썰)\n"
+                f"  - 펫 / 라이프스타일 (강아지·고양이·운동·취미)\n"
+                f"  - 여행 / 핫플레이스 (성수·연남·해외여행 등)\n"
+                f"  - 음악 신곡 / 아티스트 / 페스티벌\n"
+                f"  - 스포츠 가십 (선수 근황·하이라이트 정도, 정치적 X)\n\n"
+                f"【절대 금지 토픽 — 해당하면 다른 카테고리에서 다시 골라】\n"
+                f"  - 정치 (선거·정책·정당·대통령·국회·시위·정치인 발언)\n"
+                f"  - 공부 / 시험 (수능·토픽·토익·자격증·학원·합격발표·입시)\n"
+                f"  - 시사 / 사회 이슈 / 사건사고 / 범죄\n"
+                f"  - 종교 / 군대 / 노동 분쟁\n"
+                f"  - 주식 / 코인 / 부동산 / 투자\n"
+                f"  - 의료 / 질병 / 사망 소식"
+                f"{prior_block}"
             )
             config_kwargs["tools"] = [types.Tool(google_search=types.GoogleSearch())]
         else:

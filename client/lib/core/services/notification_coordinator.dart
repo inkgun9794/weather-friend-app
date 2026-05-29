@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,15 +43,27 @@ class NotificationCoordinator extends ConsumerStatefulWidget {
 
 class _NotificationCoordinatorState
     extends ConsumerState<NotificationCoordinator> with WidgetsBindingObserver {
+  StreamSubscription<RemoteMessage>? _fcmForegroundSub;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // FCM 포그라운드 메시지 도착 → 즉시 브리핑 invalidate.
+    // (앱이 켜진 상태에서 5시/21시 푸시 받으면 화면 자동 갱신.)
+    _fcmForegroundSub = FirebaseMessaging.onMessage.listen((msg) {
+      if (!mounted) return;
+      debugPrint('FCM foreground: ${msg.notification?.title}');
+      ref.invalidate(todayBriefingsProvider);
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
   }
 
   @override
   void dispose() {
+    _fcmForegroundSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -58,6 +72,8 @@ class _NotificationCoordinatorState
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _refresh();
+      // resume 시에도 브리핑 다시 fetch (background에서 도착한 메시지 반영).
+      ref.invalidate(todayBriefingsProvider);
     }
   }
 
