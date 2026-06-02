@@ -26,6 +26,7 @@ from domain.briefing import (
     needs_weather_context,
 )
 from domain.character import CHARACTERS, Character
+from domain.voice_script import normalize_voice_script_for_tts
 
 log = logging.getLogger(__name__)
 
@@ -89,7 +90,9 @@ async def _generate_one(
     # 2) 음성 합성 — 알람 슬롯 + voice_id 지정됐을 때
     audio_url: str | None = None
     if is_audio_slot(hour) and character.voice_actor_id:
-        tts_text = voice_script or message_script
+        tts_text = normalize_voice_script_for_tts(voice_script or message_script)
+        if voice_script:
+            voice_script = tts_text
         async with typecast_sem:
             synth = await typecast.synthesize(tts_text, character.voice_actor_id)
         audio_url = publisher.save_audio(
