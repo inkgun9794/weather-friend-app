@@ -4,8 +4,8 @@
     briefing-{city}-{slot}-{character_id}
 예: briefing-seoul-morning-jiyoung / briefing-seoul-evening-sohee
 
-클라이언트는 선택된 캐릭터의 morning + evening 두 토픽만 구독한다.
-서버는 알람 슬롯(5/21시) 생성 성공 시 4 캐릭터 × 2 슬롯 중 해당 슬롯의 4 토픽에 발사
+클라이언트는 선택된 위치/캐릭터의 morning 토픽만 구독한다.
+서버는 6시 morning 생성 성공 시 해당 위치/캐릭터 토픽에 발사
 — 각 토픽에 그 캐릭터의 transcript를 notification body로 직접 담아 보낸다.
 
 인증은 ADC (WIF 또는 GOOGLE_APPLICATION_CREDENTIALS) — 명시적 키 X.
@@ -51,12 +51,12 @@ class FcmPushClient:
     ) -> str:
         """알람 슬롯 1개 푸시. 성공 시 FCM message ID 반환.
 
-        hour는 5(morning) 또는 21(evening)이어야 함 — 그 외는 ValueError.
+        hour는 6(morning)이어야 함 — 그 외는 ValueError.
         """
         slot = briefing_type_for_hour(hour)
-        if slot not in (BriefingType.MORNING, BriefingType.EVENING):
+        if slot != BriefingType.MORNING:
             raise ValueError(
-                f"hour {hour} is not an alarm slot (morning=5 / evening=21)"
+                f"hour {hour} is not an alarm slot (morning=6)"
             )
 
         topic = _topic_name(city=city, slot=slot, character_id=character_id)

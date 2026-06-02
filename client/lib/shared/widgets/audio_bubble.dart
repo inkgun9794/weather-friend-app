@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/core/services/audio_player_service.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
@@ -18,9 +19,36 @@ final currentlyPlayingProvider =
     );
 
 const _waveformBars = <double>[
-  3, 5, 7, 9, 12, 16, 18, 14, 10, 7,
-  5, 8, 12, 15, 18, 20, 17, 13, 9, 11,
-  14, 17, 15, 12, 8, 5, 4, 6, 9, 11,
+  3,
+  5,
+  7,
+  9,
+  12,
+  16,
+  18,
+  14,
+  10,
+  7,
+  5,
+  8,
+  12,
+  15,
+  18,
+  20,
+  17,
+  13,
+  9,
+  11,
+  14,
+  17,
+  15,
+  12,
+  8,
+  5,
+  4,
+  6,
+  9,
+  11,
 ];
 
 class AudioBubble extends ConsumerWidget {
@@ -43,15 +71,28 @@ class AudioBubble extends ConsumerWidget {
     final playing = ref.watch(currentlyPlayingProvider);
     final isMe = playing == audioUrl;
     final isDark = tone == AudioBubbleTone.dark;
+    final playerState = ref.watch(audioPlayerStateProvider).value;
+    final isActuallyPlaying = isMe && (playerState?.playing ?? false);
+    final position = isMe
+        ? (ref.watch(audioPositionProvider).value ?? Duration.zero)
+        : Duration.zero;
+    final actualDuration = isMe ? ref.watch(audioDurationProvider).value : null;
+    final displayDuration = actualDuration ?? _parseDuration(duration);
+    final progress = _progress(position, displayDuration);
+
+    ref.listen(audioPlayerStateProvider, (_, next) {
+      final state = next.value;
+      if (isMe && state?.processingState == ProcessingState.completed) {
+        ref.read(currentlyPlayingProvider.notifier).stop();
+      }
+    });
 
     final bg = isDark ? AppColors.ink : v.colorSoft;
     final barPlayed = isDark ? const Color(0xFFFAFAFC) : v.colorDeep;
     final barIdle = isDark
         ? const Color(0xFFFFFFFF).withValues(alpha: 0.28)
         : v.colorDeep.withValues(alpha: 0.28);
-    final durationColor = isDark
-        ? const Color(0xFFBDBEC8)
-        : AppColors.inkMute;
+    final durationColor = isDark ? const Color(0xFFBDBEC8) : AppColors.inkMute;
 
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 290),
@@ -69,7 +110,7 @@ class AudioBubble extends ConsumerWidget {
               children: [
                 _PlayButton(
                   color: v.color,
-                  playing: isMe,
+                  playing: isActuallyPlaying,
                   onTap: () async {
                     final service = ref.read(audioPlayerServiceProvider);
                     final notifier = ref.read(
@@ -80,15 +121,27 @@ class AudioBubble extends ConsumerWidget {
                       notifier.stop();
                     } else {
                       notifier.start(audioUrl);
-                      await service.playUrl(audioUrl);
+                      try {
+                        await service.playUrl(audioUrl);
+                      } catch (_) {
+                        notifier.stop();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('음성을 재생할 수 없어요'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      }
                     }
                   },
                 ),
                 const SizedBox(width: 11),
-                _Waveform(played: barPlayed, idle: barIdle, progress: isMe ? 0.35 : 0.0),
+                _Waveform(played: barPlayed, idle: barIdle, progress: progress),
                 const SizedBox(width: 8),
                 Text(
-                  duration ?? '',
+                  _formatDuration(displayDuration),
                   style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w500,
@@ -111,6 +164,32 @@ class AudioBubble extends ConsumerWidget {
       ),
     );
   }
+}
+
+double _progress(Duration position, Duration? duration) {
+  if (duration == null || duration.inMilliseconds <= 0) return 0.0;
+  return (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+}
+
+Duration? _parseDuration(String? value) {
+  if (value == null || value.trim().isEmpty) return null;
+  final parts = value.split(':').map(int.tryParse).toList();
+  if (parts.any((p) => p == null)) return null;
+  if (parts.length == 2) {
+    return Duration(minutes: parts[0]!, seconds: parts[1]!);
+  }
+  if (parts.length == 3) {
+    return Duration(hours: parts[0]!, minutes: parts[1]!, seconds: parts[2]!);
+  }
+  return null;
+}
+
+String _formatDuration(Duration? duration) {
+  if (duration == null) return '--:--';
+  final totalSeconds = duration.inSeconds;
+  final minutes = totalSeconds ~/ 60;
+  final seconds = totalSeconds % 60;
+  return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }
 
 enum AudioBubbleTone { light, dark }

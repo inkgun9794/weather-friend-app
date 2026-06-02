@@ -10,11 +10,9 @@ import 'package:weather_friend/firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // 알림 채널 생성 + timezone 초기화. 매일 5/21시 정기 알림은 FCM 토픽 푸시로 처리;
+  // 알림 채널 생성 + timezone 초기화. 매일 6시 정기 알림은 FCM 토픽 푸시로 처리;
   // 이 서비스는 FCM 푸시가 표시될 Android 채널 사전 생성 + 테스트 알림 발사용.
   final notifications = NotificationService();
   await notifications.init();

@@ -4,7 +4,7 @@
 
 Required env vars:
 - GEMINI_API_KEY
-- TYPECAST_API_KEY (알람 시간만 — 5/6/21/22시)
+- TYPECAST_API_KEY (6시 morning 음성 합성)
 - GCP_PROJECT_ID (default: weather-friend-92281)
 
 Usage:
@@ -159,7 +159,7 @@ def main() -> None:
 
     if args.fill_today:
         # cron 시점 + 15분의 hour까지 처리 — :45 즈음 cron이 다음 hour를 미리 만들도록.
-        # 5시·21시 정각 푸시가 도래할 때 슬롯이 이미 준비돼있어야 하기 때문.
+        # 6시 정각 푸시가 도래할 때 슬롯이 이미 준비돼있어야 하기 때문.
         # idempotent라 이미 만든 hour는 skip — 매 15분 cron이 4번 시도해도 호출 1번.
         upper = _next_target_hour()
         target_hours = [h for h in ALL_HOURS if h <= upper]

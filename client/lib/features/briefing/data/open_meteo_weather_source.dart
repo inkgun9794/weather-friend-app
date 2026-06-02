@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
 import 'package:weather_friend/features/briefing/data/weather_source.dart';
+import 'package:weather_friend/features/location/data/city_catalog.dart';
 
 /// 기존 [OpenMeteoClient]를 [WeatherSource] 인터페이스로 감싸는 어댑터.
 ///
@@ -14,7 +15,7 @@ class OpenMeteoWeatherSource implements WeatherSource {
   String get id => 'open-meteo';
 
   @override
-  Future<WeatherBundle> fetchBundle({String city = 'seoul'}) {
+  Future<WeatherBundle> fetchBundle({String city = WeatherCity.seoulCityId}) {
     return _client.fetchBundle(city: city);
   }
 }

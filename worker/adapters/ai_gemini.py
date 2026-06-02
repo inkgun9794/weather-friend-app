@@ -62,7 +62,7 @@ def _parse_dual_output(raw: str) -> tuple[str, str | None]:
         return raw.strip(), None
     return message, (voice or None)
 
-# 알람 슬롯(5/21시)은 음성+텍스트 두 버전을 만들고, 사용자가 푸시로 받는 첫인상이라
+# morning 알림 슬롯(6시)은 음성+텍스트 두 버전을 만들고, 사용자가 푸시로 받는 첫인상이라
 # quality 우선 — 한 세대 위 lite를 씀. 나머지 hourly/casual은 짧은 한 줄이라 비용 우선.
 # 둘 다 paid Tier 1. 호출당 약 $0.0007 (alarm) vs $0.0002 (hourly/casual).
 # CASUAL은 google_search grounding tool이 필요해서 lite도 OK.
@@ -72,7 +72,7 @@ _MODEL_CASUAL = "gemini-2.5-flash-lite"
 
 
 def _model_for(briefing_type: BriefingType) -> str:
-    if briefing_type in (BriefingType.MORNING, BriefingType.EVENING):
+    if briefing_type == BriefingType.MORNING:
         return _MODEL_ALARM
     if briefing_type == BriefingType.CASUAL:
         return _MODEL_CASUAL

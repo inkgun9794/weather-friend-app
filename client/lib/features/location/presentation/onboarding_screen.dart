@@ -8,6 +8,7 @@ import 'package:weather_friend/core/services/fcm_service.dart';
 import 'package:weather_friend/core/utils/oklch.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
+import 'package:weather_friend/features/location/data/city_catalog.dart';
 import 'package:weather_friend/features/location/data/onboarding_provider.dart';
 import 'package:weather_friend/features/location/data/selected_city_provider.dart';
 import 'package:weather_friend/shared/widgets/character_intro_button.dart';
@@ -15,7 +16,7 @@ import 'package:weather_friend/shared/widgets/character_portrait.dart';
 import 'package:weather_friend/shared/widgets/weather_bg.dart';
 
 /// 온보딩 — 4 step: Welcome → Location → Notification → Character.
-/// (Schedule 단계는 5/21시 고정 정책이라 제외)
+/// (Schedule 단계는 6시 고정 정책이라 제외)
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -330,57 +331,69 @@ class _LocationStepState extends ConsumerState<_LocationStep> {
       final perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.always ||
           perm == LocationPermission.whileInUse) {
-        final city = await _resolveCityLabel();
+        final city = await _resolveCity();
         if (!mounted) return;
-        setState(() => _resultCity = city);
+        setState(() => _resultCity = city.label);
         await ref.read(selectedCityProvider.notifier).set(city);
       }
-    } catch (_) {/* keep default */}
+    } catch (_) {
+      /* keep default */
+    }
   }
 
-  Future<String> _resolveCityLabel() async {
+  Future<WeatherCity> _resolveCity() async {
     final pos = await Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.low,
         timeLimit: Duration(seconds: 8),
       ),
     );
-    final marks =
-        await geocoding.placemarkFromCoordinates(pos.latitude, pos.longitude);
-    if (marks.isEmpty) return '서울';
-    final m = marks.first;
-    // 한국 주소 우선: 서울특별시 → 서울, 광진구 → 그대로
-    final region = (m.administrativeArea ?? '')
-        .replaceAll(RegExp(r'(특별시|광역시|특별자치(시|도)|도)$'), '');
-    final sub = m.subLocality?.trim().isNotEmpty == true
-        ? m.subLocality!.trim()
-        : (m.locality ?? '').trim();
-    final parts = [region, sub].where((s) => s.isNotEmpty).toList();
-    return parts.isEmpty ? '서울' : parts.join(' · ');
+    try {
+      final marks = await geocoding.placemarkFromCoordinates(
+        pos.latitude,
+        pos.longitude,
+      );
+      if (marks.isNotEmpty) {
+        final mark = marks.first;
+        final matched = await CityCatalog.matchAddress(
+          administrativeArea: mark.administrativeArea,
+          locality: mark.locality,
+          subAdministrativeArea: mark.subAdministrativeArea,
+          subLocality: mark.subLocality,
+        );
+        if (matched != null) return matched;
+      }
+    } catch (_) {
+      /* fall through to nearest city */
+    }
+    return CityCatalog.nearest(lat: pos.latitude, lon: pos.longitude);
   }
 
   Future<void> _request() async {
     setState(() => _requesting = true);
-    String? resolved;
+    WeatherCity? resolved;
     try {
       var perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
       }
-      final granted = perm == LocationPermission.always ||
+      final granted =
+          perm == LocationPermission.always ||
           perm == LocationPermission.whileInUse;
       if (granted) {
-        resolved = await _resolveCityLabel();
+        resolved = await _resolveCity();
       }
-    } catch (_) {/* fall through to 서울 fallback */}
+    } catch (_) {
+      /* fall through to 서울 fallback */
+    }
 
     // 거부/실패 시엔 '서울' 폴백을 명시적으로 저장 — 사용자에게도 _resultCity로 표시됨.
-    final finalCity = resolved ?? '서울';
+    final finalCity = resolved ?? WeatherCity.seoul;
     await ref.read(selectedCityProvider.notifier).set(finalCity);
 
     if (!mounted) return;
     setState(() {
-      _resultCity = finalCity;
+      _resultCity = finalCity.label;
       _requesting = false;
       _requested = true;
     });
@@ -464,7 +477,10 @@ class _LocationStepState extends ConsumerState<_LocationStep> {
                       bottom: 18,
                       child: Center(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
                           decoration: BoxDecoration(
                             color: oklch(1, 0, 0, 0.9),
                             borderRadius: BorderRadius.circular(999),
@@ -514,17 +530,12 @@ class _LocationStepState extends ConsumerState<_LocationStep> {
           _PillButton(
             label: _requested ? '계속' : (_requesting ? '확인 중…' : '위치 허용하고 계속'),
             primary: true,
-            onTap: _requesting
-                ? null
-                : (_requested ? widget.onNext : _request),
+            onTap: _requesting ? null : (_requested ? widget.onNext : _request),
           ),
           const SizedBox(height: 14),
           Text(
             '나중에 설정에서 바꿀 수 있어요',
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.inkMute,
-            ),
+            style: TextStyle(fontSize: 13, color: AppColors.inkMute),
           ),
         ],
       ),
@@ -537,7 +548,12 @@ class _MapRingsPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
     final cy = size.height / 2;
-    for (final entry in [(40.0, 0.30), (70.0, 0.22), (100.0, 0.15), (130.0, 0.08)]) {
+    for (final entry in [
+      (40.0, 0.30),
+      (70.0, 0.22),
+      (100.0, 0.15),
+      (130.0, 0.08),
+    ]) {
       final paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1
@@ -647,9 +663,7 @@ class _NotificationStepState extends ConsumerState<_NotificationStep> {
       footer: Column(
         children: [
           _PillButton(
-            label: _granted == null
-                ? (_requesting ? '확인 중…' : '알림 허용')
-                : '계속',
+            label: _granted == null ? (_requesting ? '확인 중…' : '알림 허용') : '계속',
             primary: true,
             onTap: _requesting
                 ? null
@@ -711,11 +725,7 @@ class _NotifPreview extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CharacterPortrait(
-            charId: charId,
-            size: 36,
-            enableTapToExpand: false,
-          ),
+          CharacterPortrait(charId: charId, size: 36, enableTapToExpand: false),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -823,11 +833,7 @@ class _CharacterStep extends ConsumerWidget {
       ),
       footer: Column(
         children: [
-          _PillButton(
-            label: '다음',
-            primary: true,
-            onTap: onFinish,
-          ),
+          _PillButton(label: '다음', primary: true, onTap: onFinish),
           const SizedBox(height: 14),
           Text(
             '언제든지 다른 친구로 바꿀 수 있어요',

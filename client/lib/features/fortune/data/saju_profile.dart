@@ -28,6 +28,7 @@ class SajuProfile {
     required this.month,
     required this.day,
     required this.hour,
+    required this.minute,
     required this.isLunar,
     required this.gender,
   });
@@ -37,7 +38,8 @@ class SajuProfile {
   final int year;
   final int month;
   final int day;
-  final int hour;   // 0~23 (KST 출생시간)
+  final int hour;    // 0~23 (KST 출생시간)
+  final int minute;  // 0~59 (출생 분)
   final bool isLunar;
   final SajuGender gender;
 
@@ -48,11 +50,12 @@ class SajuProfile {
         'month': month,
         'day': day,
         'hour': hour,
+        'minute': minute,
         'isLunar': isLunar,
         'gender': gender.name,
       };
 
-  /// 기존 데이터 호환 — name/relation 없으면 default ('나' / 본인).
+  /// 기존 데이터 호환 — name/relation 없으면 default ('나' / 본인). minute 없으면 0.
   factory SajuProfile.fromJson(Map<String, dynamic> json) => SajuProfile(
         name: json['name'] as String? ?? '나',
         relation: SajuRelation.values.firstWhere(
@@ -63,6 +66,7 @@ class SajuProfile {
         month: json['month'] as int,
         day: json['day'] as int,
         hour: json['hour'] as int,
+        minute: (json['minute'] as int?) ?? 0,
         isLunar: json['isLunar'] as bool,
         gender: SajuGender.values.firstWhere(
           (g) => g.name == json['gender'],
@@ -73,7 +77,7 @@ class SajuProfile {
   SajuProfile copyWith({
     String? name,
     SajuRelation? relation,
-    int? year, int? month, int? day, int? hour,
+    int? year, int? month, int? day, int? hour, int? minute,
     bool? isLunar,
     SajuGender? gender,
   }) =>
@@ -84,18 +88,21 @@ class SajuProfile {
         month: month ?? this.month,
         day: day ?? this.day,
         hour: hour ?? this.hour,
+        minute: minute ?? this.minute,
         isLunar: isLunar ?? this.isLunar,
         gender: gender ?? this.gender,
       );
 
   /// 캐시 키 — 같은 사주 = 같은 키 (라벨은 제외).
   /// 명리학적으로 같은 사주는 같은 운세라서, 같은 키면 캐시 공유 정당.
+  /// minute 포함 (시 경계에 가까운 분이면 시주 달라질 수 있음).
   String get cacheKey {
     final cal = isLunar ? 'L' : 'S';
     return '$cal${year.toString().padLeft(4, '0')}'
         '${month.toString().padLeft(2, '0')}'
         '${day.toString().padLeft(2, '0')}'
         '${hour.toString().padLeft(2, '0')}'
+        '${minute.toString().padLeft(2, '0')}'
         '_${gender.name}';
   }
 }
@@ -170,7 +177,7 @@ saju.SajuResult? computeSajuFor(SajuProfile profile) {
     }
 
     final loc = tz.getLocation('Asia/Seoul');
-    final birth = tz.TZDateTime(loc, y, m, d, profile.hour, 0);
+    final birth = tz.TZDateTime(loc, y, m, d, profile.hour, profile.minute);
 
     return saju.getSaju(
       birth,

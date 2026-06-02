@@ -39,6 +39,8 @@ class FortuneApi {
       'yongShen': result.yongShen.primary.korean,
       'gender': profile.gender == SajuGender.male ? 'male' : 'female',
       'birthYear': profile.year,
+      'birthTime': '${profile.hour.toString().padLeft(2, '0')}:'
+          '${profile.minute.toString().padLeft(2, '0')}',
       'date': '${date.year}-'
           '${date.month.toString().padLeft(2, '0')}-'
           '${date.day.toString().padLeft(2, '0')}',
@@ -107,11 +109,10 @@ final fortuneForProfileProvider =
     viewedAt: DateTime.now(),
   ));
 
-  // 5) 내 프로필이면 점수 시계열에도 추가
-  final myProfile = ref.read(sajuProfileProvider);
-  if (myProfile != null && myProfile.cacheKey == profile.cacheKey) {
-    await ref.read(myScoreHistoryProvider.notifier).addToday(result.score);
-  }
+  // 5) 모든 프로필의 점수 시계열에 추가 (cacheKey별)
+  final scoreRepo = await ref.read(scoreHistoryRepositoryProvider.future);
+  await scoreRepo.addForProfile(profile.cacheKey, result.score);
+  ref.invalidate(scoreHistoryProvider(profile.cacheKey));
 
   return result;
 });

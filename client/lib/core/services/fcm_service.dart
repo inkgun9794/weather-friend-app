@@ -7,25 +7,22 @@ import 'package:weather_friend/features/character/domain/character.dart';
 
 /// 토픽 명명 규칙은 worker/adapters/push_fcm.py의 `_topic_name`과 동일해야 함.
 ///     briefing-{city}-{slot}-{characterId}
-const _topicCity = 'seoul'; // MVP: 단일 도시
 const _slotMorning = 'morning';
-const _slotEvening = 'evening';
 
-/// 마지막으로 토픽 구독한 캐릭터 id. SharedPreferences 키.
-/// `SelectedCharacterNotifier`는 영속화되지 않아 매 launch마다 jiyoung으로
-/// 초기화되므로, FCM 토픽 구독은 별도로 추적해야 stale 구독 leak을 막을 수 있음.
-const _kLastSubscribedCharacterKey = 'fcm_last_subscribed_character';
+/// 마지막으로 토픽 구독한 city/character. SharedPreferences 키.
+const _kLastSubscribedTargetKey = 'fcm_last_subscribed_target';
+const _kLegacyLastSubscribedCharacterKey = 'fcm_last_subscribed_character';
 
 String _topicName({
+  required String city,
   required String slot,
   required CharacterId character,
-}) => 'briefing-$_topicCity-$slot-${character.name}';
+}) => 'briefing-$city-$slot-${character.name}';
 
 /// FCM 푸시 구독/권한 관리.
 ///
-/// 토픽은 캐릭터별 × 슬롯별로 분리되어 있다 (총 8 토픽). 사용자가 선택한
-/// 캐릭터의 morning + evening 두 토픽만 구독한다. 캐릭터를 바꾸면 이전
-/// 캐릭터의 두 토픽은 unsubscribe.
+/// 현재 정책은 오전 6시 음성 브리핑만 푸시한다. 사용자가 선택한 위치/캐릭터의
+/// morning 토픽만 구독하고, 변경 시 이전 토픽은 unsubscribe.
 class FcmService {
   FcmService(this._prefs);
 
@@ -63,41 +60,73 @@ class FcmService {
         settings.authorizationStatus == AuthorizationStatus.provisional;
   }
 
-  /// 캐릭터 변경/온보딩 완료 시 호출. 이전 구독을 정리하고 새 토픽 2개 구독.
+  /// 캐릭터/위치 변경/온보딩 완료 시 호출. 이전 구독을 정리하고 새 토픽 구독.
   ///
   /// 권한이 없으면 no-op. 같은 캐릭터로 다시 호출하면 no-op (idempotent).
-  Future<void> syncSubscriptions(CharacterId current) async {
+  Future<void> syncSubscriptions({
+    required CharacterId current,
+    required String city,
+  }) async {
     if (!await hasPermission()) {
       debugPrint('FcmService: permission denied, skipping subscription');
       return;
     }
 
-    final lastName = _prefs.getString(_kLastSubscribedCharacterKey);
-    final last = lastName == null ? null : Character.parseId(lastName);
+    final next = _SubscriptionTarget(city: city, character: current);
+    final last = _readLastTarget();
 
-    if (last == current) return; // 변경 없음
+    if (last == next) return; // 변경 없음
 
     if (last != null) {
-      // 이전 캐릭터 토픽 해지. 실패해도 진행 — 다음 sync에서 또 시도.
-      await _safeUnsubscribe(_topicName(slot: _slotMorning, character: last));
-      await _safeUnsubscribe(_topicName(slot: _slotEvening, character: last));
+      // 이전 토픽 해지. 실패해도 진행 — 다음 sync에서 또 시도.
+      await _safeUnsubscribe(
+        _topicName(
+          city: last.city,
+          slot: _slotMorning,
+          character: last.character,
+        ),
+      );
+      // 이전 버전은 evening도 구독했으므로 한 번 정리해 둔다.
+      await _safeUnsubscribe(
+        _topicName(city: last.city, slot: 'evening', character: last.character),
+      );
     }
 
-    await _safeSubscribe(_topicName(slot: _slotMorning, character: current));
-    await _safeSubscribe(_topicName(slot: _slotEvening, character: current));
+    await _safeSubscribe(
+      _topicName(city: city, slot: _slotMorning, character: current),
+    );
 
-    await _prefs.setString(_kLastSubscribedCharacterKey, current.name);
+    await _prefs.setString(_kLastSubscribedTargetKey, next.encoded);
+    await _prefs.remove(_kLegacyLastSubscribedCharacterKey);
   }
 
   /// 권한이 박탈됐거나 사용자가 해지한 경우. 저장된 구독을 모두 해지.
   Future<void> unsubscribeAll() async {
-    final lastName = _prefs.getString(_kLastSubscribedCharacterKey);
-    final last = lastName == null ? null : Character.parseId(lastName);
+    final last = _readLastTarget();
     if (last != null) {
-      await _safeUnsubscribe(_topicName(slot: _slotMorning, character: last));
-      await _safeUnsubscribe(_topicName(slot: _slotEvening, character: last));
+      await _safeUnsubscribe(
+        _topicName(
+          city: last.city,
+          slot: _slotMorning,
+          character: last.character,
+        ),
+      );
+      await _safeUnsubscribe(
+        _topicName(city: last.city, slot: 'evening', character: last.character),
+      );
     }
-    await _prefs.remove(_kLastSubscribedCharacterKey);
+    await _prefs.remove(_kLastSubscribedTargetKey);
+    await _prefs.remove(_kLegacyLastSubscribedCharacterKey);
+  }
+
+  _SubscriptionTarget? _readLastTarget() {
+    final raw = _prefs.getString(_kLastSubscribedTargetKey);
+    if (raw != null) return _SubscriptionTarget.decode(raw);
+
+    final legacy = _prefs.getString(_kLegacyLastSubscribedCharacterKey);
+    final legacyCharacter = legacy == null ? null : Character.parseId(legacy);
+    if (legacyCharacter == null) return null;
+    return _SubscriptionTarget(city: 'seoul', character: legacyCharacter);
   }
 
   Future<void> _safeSubscribe(String topic) async {
@@ -117,6 +146,33 @@ class FcmService {
       debugPrint('FcmService: unsubscribe $topic failed: $e');
     }
   }
+}
+
+class _SubscriptionTarget {
+  const _SubscriptionTarget({required this.city, required this.character});
+
+  final String city;
+  final CharacterId character;
+
+  String get encoded => '$city|${character.name}';
+
+  static _SubscriptionTarget? decode(String raw) {
+    final parts = raw.split('|');
+    if (parts.length != 2) return null;
+    final character = Character.parseId(parts[1]);
+    if (character == null || parts[0].isEmpty) return null;
+    return _SubscriptionTarget(city: parts[0], character: character);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is _SubscriptionTarget &&
+        other.city == city &&
+        other.character == character;
+  }
+
+  @override
+  int get hashCode => Object.hash(city, character);
 }
 
 final fcmServiceProvider = Provider<FcmService>((ref) {

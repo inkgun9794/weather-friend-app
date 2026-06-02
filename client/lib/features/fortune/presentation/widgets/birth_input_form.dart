@@ -18,6 +18,7 @@ class BirthInputForm extends ConsumerStatefulWidget {
     required this.onSaved,
     this.waitForFortune = false,
     this.initialProfile,
+    this.style,
   });
 
   final BirthInputMode mode;
@@ -31,8 +32,97 @@ class BirthInputForm extends ConsumerStatefulWidget {
   /// 폼 prefill용 — 없으면 default 값.
   final SajuProfile? initialProfile;
 
+  /// 배경에 맞춘 입력 폼 색상. null이면 종이 배경용 기본 스타일.
+  final BirthInputFormStyle? style;
+
   @override
   ConsumerState<BirthInputForm> createState() => _BirthInputFormState();
+}
+
+class BirthInputFormStyle {
+  const BirthInputFormStyle({
+    required this.labelColor,
+    required this.fieldFill,
+    required this.fieldBorder,
+    required this.fieldFocusedBorder,
+    required this.fieldText,
+    required this.fieldHint,
+    required this.icon,
+    required this.selectedFill,
+    required this.selectedBorder,
+    required this.selectedText,
+    required this.unselectedText,
+    required this.primaryFill,
+    required this.primaryText,
+    required this.shadow,
+    this.labelShadows,
+  });
+
+  factory BirthInputFormStyle.standard() {
+    return BirthInputFormStyle(
+      labelColor: AppColors.inkMute,
+      fieldFill: Colors.white,
+      fieldBorder: AppColors.inkMute.withValues(alpha: 0.25),
+      fieldFocusedBorder: AppColors.ink,
+      fieldText: AppColors.ink,
+      fieldHint: AppColors.inkMute,
+      icon: AppColors.inkMute,
+      selectedFill: AppColors.ink,
+      selectedBorder: AppColors.ink,
+      selectedText: Colors.white,
+      unselectedText: AppColors.ink,
+      primaryFill: AppColors.ink,
+      primaryText: Colors.white,
+      shadow: Colors.black.withValues(alpha: 0.06),
+    );
+  }
+
+  factory BirthInputFormStyle.onSky(SkyPalette sky) {
+    final lightText = sky.ink.computeLuminance() > 0.55;
+    return BirthInputFormStyle(
+      labelColor: sky.inkSoft.withValues(alpha: lightText ? 0.95 : 0.86),
+      fieldFill: Colors.white.withValues(alpha: lightText ? 0.86 : 0.88),
+      fieldBorder: Colors.white.withValues(alpha: lightText ? 0.48 : 0.7),
+      fieldFocusedBorder: lightText
+          ? Colors.white.withValues(alpha: 0.96)
+          : AppColors.ink,
+      fieldText: AppColors.ink,
+      fieldHint: AppColors.inkMute,
+      icon: AppColors.inkSoft,
+      selectedFill: AppColors.ink,
+      selectedBorder: AppColors.ink,
+      selectedText: Colors.white,
+      unselectedText: AppColors.ink,
+      primaryFill: AppColors.ink,
+      primaryText: Colors.white,
+      shadow: Colors.black.withValues(alpha: lightText ? 0.16 : 0.08),
+      labelShadows: [
+        Shadow(
+          color: (lightText ? Colors.black : Colors.white).withValues(
+            alpha: lightText ? 0.22 : 0.18,
+          ),
+          blurRadius: 10,
+          offset: const Offset(0, 1),
+        ),
+      ],
+    );
+  }
+
+  final Color labelColor;
+  final Color fieldFill;
+  final Color fieldBorder;
+  final Color fieldFocusedBorder;
+  final Color fieldText;
+  final Color fieldHint;
+  final Color icon;
+  final Color selectedFill;
+  final Color selectedBorder;
+  final Color selectedText;
+  final Color unselectedText;
+  final Color primaryFill;
+  final Color primaryText;
+  final Color shadow;
+  final List<Shadow>? labelShadows;
 }
 
 class _BirthInputFormState extends ConsumerState<BirthInputForm> {
@@ -40,6 +130,7 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
   late SajuRelation _relation;
   late DateTime _date;
   late int _hour;
+  late int _minute;
   late bool _isLunar;
   late SajuGender _gender;
   bool _saving = false;
@@ -51,7 +142,8 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
     _nameCtrl = TextEditingController(
       text: init?.name ?? (widget.mode == BirthInputMode.primary ? '나' : ''),
     );
-    _relation = init?.relation ??
+    _relation =
+        init?.relation ??
         (widget.mode == BirthInputMode.primary
             ? SajuRelation.self
             : SajuRelation.family);
@@ -59,6 +151,7 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
         ? DateTime(init.year, init.month, init.day)
         : DateTime(1990, 1, 1);
     _hour = init?.hour ?? 12;
+    _minute = init?.minute ?? 0;
     _isLunar = init?.isLunar ?? false;
     _gender = init?.gender ?? SajuGender.male;
   }
@@ -81,23 +174,32 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
   }
 
   Future<void> _pickHour() async {
-    final picked = await showModalBottomSheet<int>(
+    final picked = await showTimePicker(
       context: context,
-      backgroundColor: AppColors.paper,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _HourPickerSheet(initial: _hour),
+      initialTime: TimeOfDay(hour: _hour, minute: _minute),
+      helpText: '태어난 시간',
+      // 24시간 표시 (오전/오후 분리 X).
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+          child: child!,
+        );
+      },
     );
-    if (picked != null) setState(() => _hour = picked);
+    if (picked != null) {
+      setState(() {
+        _hour = picked.hour;
+        _minute = picked.minute;
+      });
+    }
   }
 
   Future<void> _save() async {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('이름을 입력해주세요')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('이름을 입력해주세요')));
       return;
     }
 
@@ -110,6 +212,7 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
       month: _date.month,
       day: _date.day,
       hour: _hour,
+      minute: _minute,
       isLunar: _isLunar,
       gender: _gender,
     );
@@ -135,48 +238,55 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
 
   @override
   Widget build(BuildContext context) {
+    final style = widget.style ?? BirthInputFormStyle.standard();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 이름
-        _SectionLabel(label: '이름'),
+        _SectionLabel(label: '이름', style: style),
         const SizedBox(height: 8),
         TextField(
           controller: _nameCtrl,
           textInputAction: TextInputAction.done,
           maxLength: 20,
+          style: TextStyle(
+            color: style.fieldText,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
           decoration: InputDecoration(
             hintText: widget.mode == BirthInputMode.primary
                 ? '예: 나, 본인'
                 : '예: 엄마, 철수',
+            hintStyle: TextStyle(
+              color: style.fieldHint,
+              fontWeight: FontWeight.w500,
+            ),
             counterText: '',
             filled: true,
-            fillColor: Colors.white,
+            fillColor: style.fieldFill,
             contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16, vertical: 14,
+              horizontal: 18,
+              vertical: 16,
             ),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                color: AppColors.inkMute.withValues(alpha: 0.25),
-              ),
+              borderRadius: BorderRadius.circular(18),
+              borderSide: BorderSide(color: style.fieldBorder),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                color: AppColors.inkMute.withValues(alpha: 0.25),
-              ),
+              borderRadius: BorderRadius.circular(18),
+              borderSide: BorderSide(color: style.fieldBorder),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: AppColors.ink),
+              borderRadius: BorderRadius.circular(18),
+              borderSide: BorderSide(color: style.fieldFocusedBorder),
             ),
           ),
         ),
         const SizedBox(height: 20),
 
         // 관계
-        _SectionLabel(label: '관계'),
+        _SectionLabel(label: '관계', style: style),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -187,13 +297,14 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
                 label: r.label,
                 selected: _relation == r,
                 onTap: () => setState(() => _relation = r),
+                style: style,
               ),
           ],
         ),
         const SizedBox(height: 20),
 
         // 양력/음력
-        _SectionLabel(label: '달력'),
+        _SectionLabel(label: '달력', style: style),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -202,6 +313,7 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
                 label: '양력',
                 selected: !_isLunar,
                 onTap: () => setState(() => _isLunar = false),
+                style: style,
               ),
             ),
             const SizedBox(width: 10),
@@ -210,31 +322,36 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
                 label: '음력',
                 selected: _isLunar,
                 onTap: () => setState(() => _isLunar = true),
+                style: style,
               ),
             ),
           ],
         ),
         const SizedBox(height: 20),
 
-        _SectionLabel(label: '생년월일'),
+        _SectionLabel(label: '생년월일', style: style),
         const SizedBox(height: 8),
         _FieldButton(
           icon: Icons.calendar_today_rounded,
           text: '${_date.year}년 ${_date.month}월 ${_date.day}일',
           onTap: _pickDate,
+          style: style,
         ),
         const SizedBox(height: 20),
 
-        _SectionLabel(label: '태어난 시간'),
+        _SectionLabel(label: '태어난 시간', style: style),
         const SizedBox(height: 8),
         _FieldButton(
           icon: Icons.access_time_rounded,
-          text: _hourLabel(_hour),
+          text:
+              '${_hour.toString().padLeft(2, '0')}:'
+              '${_minute.toString().padLeft(2, '0')}',
           onTap: _pickHour,
+          style: style,
         ),
         const SizedBox(height: 20),
 
-        _SectionLabel(label: '성별'),
+        _SectionLabel(label: '성별', style: style),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -243,6 +360,7 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
                 label: '남성',
                 selected: _gender == SajuGender.male,
                 onTap: () => setState(() => _gender = SajuGender.male),
+                style: style,
               ),
             ),
             const SizedBox(width: 10),
@@ -251,6 +369,7 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
                 label: '여성',
                 selected: _gender == SajuGender.female,
                 onTap: () => setState(() => _gender = SajuGender.female),
+                style: style,
               ),
             ),
           ],
@@ -260,14 +379,17 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
         // 저장 버튼
         SizedBox(
           width: double.infinity,
-          height: 52,
+          height: 56,
           child: FilledButton(
             onPressed: _saving ? null : _save,
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.ink,
-              foregroundColor: Colors.white,
+              backgroundColor: style.primaryFill,
+              foregroundColor: style.primaryText,
+              disabledBackgroundColor: style.primaryFill.withValues(alpha: 0.7),
+              disabledForegroundColor: style.primaryText,
+              elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(18),
               ),
             ),
             child: _saving
@@ -275,16 +397,19 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: const [
                       SizedBox(
-                        width: 18, height: 18,
+                        width: 18,
+                        height: 18,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white,
+                          strokeWidth: 2,
+                          color: Colors.white,
                         ),
                       ),
                       SizedBox(width: 10),
                       Text(
                         '사주 분석 중...',
                         style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ],
@@ -294,7 +419,8 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
                         ? '오늘의 운세 보기'
                         : '운세 보기',
                     style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
           ),
@@ -302,20 +428,13 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
       ],
     );
   }
-
-  static String _hourLabel(int hour) {
-    const branchLabels = [
-      '자', '축', '인', '묘', '진', '사',
-      '오', '미', '신', '유', '술', '해',
-    ];
-    final idx = ((hour + 1) ~/ 2) % 12;
-    return '${hour.toString().padLeft(2, '0')}:00 (${branchLabels[idx]}시)';
-  }
 }
 
 class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.label});
+  const _SectionLabel({required this.label, required this.style});
+
   final String label;
+  final BirthInputFormStyle style;
 
   @override
   Widget build(BuildContext context) {
@@ -323,8 +442,9 @@ class _SectionLabel extends StatelessWidget {
       label,
       style: TextStyle(
         fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: AppColors.inkMute,
+        fontWeight: FontWeight.w700,
+        color: style.labelColor,
+        shadows: style.labelShadows,
       ),
     );
   }
@@ -335,36 +455,45 @@ class _ChoiceChip extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    required this.style,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final BirthInputFormStyle style;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? AppColors.ink : Colors.white,
-      borderRadius: BorderRadius.circular(12),
+      color: selected ? style.selectedFill : style.fieldFill,
+      borderRadius: BorderRadius.circular(16),
+      elevation: selected ? 0 : 1,
+      shadowColor: style.shadow,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          constraints: const BoxConstraints(minHeight: 46),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
             border: Border.all(
-              color: selected
-                  ? AppColors.ink
-                  : AppColors.inkMute.withValues(alpha: 0.25),
+              color: selected ? style.selectedBorder : style.fieldBorder,
             ),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : AppColors.ink,
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? style.selectedText : style.unselectedText,
+                ),
+              ),
             ),
           ),
         ),
@@ -378,37 +507,43 @@ class _ToggleButton extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    required this.style,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final BirthInputFormStyle style;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? AppColors.ink : Colors.white,
-      borderRadius: BorderRadius.circular(14),
+      color: selected ? style.selectedFill : style.fieldFill,
+      borderRadius: BorderRadius.circular(18),
+      elevation: selected ? 0 : 1,
+      shadowColor: style.shadow,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         child: Container(
-          height: 48,
+          height: 54,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             border: Border.all(
-              color: selected
-                  ? AppColors.ink
-                  : AppColors.inkMute.withValues(alpha: 0.25),
+              color: selected ? style.selectedBorder : style.fieldBorder,
             ),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(18),
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : AppColors.ink,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: selected ? style.selectedText : style.unselectedText,
+              ),
             ),
           ),
         ),
@@ -422,108 +557,50 @@ class _FieldButton extends StatelessWidget {
     required this.icon,
     required this.text,
     required this.onTap,
+    required this.style,
   });
 
   final IconData icon;
   final String text;
   final VoidCallback onTap;
+  final BirthInputFormStyle style;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
+      color: style.fieldFill,
+      borderRadius: BorderRadius.circular(18),
+      elevation: 1,
+      shadowColor: style.shadow,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         child: Container(
-          height: 52,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          height: 56,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
           decoration: BoxDecoration(
-            border: Border.all(
-              color: AppColors.inkMute.withValues(alpha: 0.25),
-            ),
-            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: style.fieldBorder),
+            borderRadius: BorderRadius.circular(18),
           ),
           child: Row(
             children: [
-              Icon(icon, color: AppColors.inkMute, size: 20),
+              Icon(icon, color: style.icon, size: 22),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ink,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: style.fieldText,
                   ),
                 ),
               ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: AppColors.inkMute,
-                size: 22,
-              ),
+              Icon(Icons.chevron_right_rounded, color: style.icon, size: 22),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HourPickerSheet extends StatelessWidget {
-  const _HourPickerSheet({required this.initial});
-  final int initial;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: SizedBox(
-        height: 420,
-        child: Column(
-          children: [
-            Container(
-              width: 40, height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.inkMute.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  Text(
-                    '태어난 시간',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.ink,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                itemCount: 24,
-                itemBuilder: (_, hour) {
-                  final selected = hour == initial;
-                  return ListTile(
-                    title: Text(_BirthInputFormState._hourLabel(hour)),
-                    selected: selected,
-                    trailing: selected
-                        ? Icon(Icons.check_rounded, color: AppColors.ink)
-                        : null,
-                    onTap: () => Navigator.of(context).pop(hour),
-                  );
-                },
-              ),
-            ),
-          ],
         ),
       ),
     );

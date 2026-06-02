@@ -26,7 +26,10 @@ class _FakeFcmService extends FcmService {
   @override
   Future<bool> requestPermissions() async => false;
   @override
-  Future<void> syncSubscriptions(CharacterId current) async {}
+  Future<void> syncSubscriptions({
+    required CharacterId current,
+    required String city,
+  }) async {}
   @override
   Future<void> unsubscribeAll() async {}
 }
@@ -62,7 +65,9 @@ void main() {
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           fcmServiceProvider.overrideWithValue(_FakeFcmService(prefs)),
-          notificationServiceProvider.overrideWithValue(_FakeNotificationService()),
+          notificationServiceProvider.overrideWithValue(
+            _FakeNotificationService(),
+          ),
           onboardingCompleteProvider.overrideWith(_FakeOnboardingComplete.new),
           // pumpAndSettle이 hang하지 않게 stream을 한 번만 emit.
           kstDateProvider.overrideWith((ref) => Stream.value('2026-05-23')),

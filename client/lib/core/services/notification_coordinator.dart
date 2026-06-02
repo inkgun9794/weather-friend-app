@@ -12,8 +12,7 @@ import 'package:weather_friend/features/briefing/data/briefing_repository.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
 import 'package:weather_friend/features/location/data/onboarding_provider.dart';
-
-const _defaultCity = 'seoul';
+import 'package:weather_friend/features/location/data/selected_city_provider.dart';
 
 /// 플랫폼별 알림 전달 경로를 동기화.
 ///
@@ -42,7 +41,8 @@ class NotificationCoordinator extends ConsumerStatefulWidget {
 }
 
 class _NotificationCoordinatorState
-    extends ConsumerState<NotificationCoordinator> with WidgetsBindingObserver {
+    extends ConsumerState<NotificationCoordinator>
+    with WidgetsBindingObserver {
   StreamSubscription<RemoteMessage>? _fcmForegroundSub;
 
   @override
@@ -51,7 +51,7 @@ class _NotificationCoordinatorState
     WidgetsBinding.instance.addObserver(this);
 
     // FCM 포그라운드 메시지 도착 → 즉시 브리핑 invalidate.
-    // (앱이 켜진 상태에서 5시/21시 푸시 받으면 화면 자동 갱신.)
+    // (앱이 켜진 상태에서 6시 푸시 받으면 화면 자동 갱신.)
     _fcmForegroundSub = FirebaseMessaging.onMessage.listen((msg) {
       if (!mounted) return;
       debugPrint('FCM foreground: ${msg.notification?.title}');
@@ -85,20 +85,26 @@ class _NotificationCoordinatorState
   Future<void> _refresh() async {
     if (!ref.read(onboardingCompleteProvider)) return;
     final character = ref.read(selectedCharacterProvider);
+    final city = ref.read(selectedCityProvider);
 
     if (_usesFcm) {
-      await ref.read(fcmServiceProvider).syncSubscriptions(character);
+      await ref
+          .read(fcmServiceProvider)
+          .syncSubscriptions(current: character, city: city.briefingCityKey);
     } else {
-      await _syncIosLocalSchedules(character);
+      await _syncIosLocalSchedules(character, city.briefingCityKey);
     }
   }
 
   /// iOS 우회 — 매일 [BriefingSlot.minute]분에 반복 발사되는 로컬 알림을 예약.
   ///
-  /// 발사 시각은 5:05 / 21:05 — 워커 cron이 약간 늦어도 audio가 준비될 마진.
+  /// 발사 시각은 6:05 — 워커 cron이 약간 늦어도 audio가 준비될 마진.
   /// 본문은 오늘 transcript가 Firestore에 있으면 그걸로, 없으면 fallback.
   /// (background에서 발사되므로 본문은 마지막 sync 시점 기준.)
-  Future<void> _syncIosLocalSchedules(CharacterId character) async {
+  Future<void> _syncIosLocalSchedules(
+    CharacterId character,
+    String city,
+  ) async {
     final notifications = ref.read(notificationServiceProvider);
     if (!await notifications.hasPermission()) return;
 
@@ -110,7 +116,7 @@ class _NotificationCoordinatorState
       String body = slot.fallbackBody;
       try {
         final briefing = await repo.fetchOne(
-          city: _defaultCity,
+          city: city,
           date: date,
           hour: slot.hour,
           characterId: character.name,
@@ -133,6 +139,9 @@ class _NotificationCoordinatorState
   Widget build(BuildContext context) {
     ref.listen<CharacterId>(selectedCharacterProvider, (prev, next) {
       if (prev != next) _refresh();
+    });
+    ref.listen(selectedCityProvider, (prev, next) {
+      if (prev?.cityId != next.cityId) _refresh();
     });
     ref.listen<bool>(onboardingCompleteProvider, (prev, next) {
       if (prev != true && next == true) _refresh();

@@ -1,5 +1,6 @@
 import 'package:weather_friend/features/briefing/data/open_meteo_client.dart'
     show WeatherBundle;
+import 'package:weather_friend/features/location/data/city_catalog.dart';
 
 /// 날씨 데이터 소스 추상화.
 ///
@@ -9,6 +10,6 @@ abstract class WeatherSource {
   /// 식별자 — 로깅·디버깅·UI 뱃지용. 예: 'open-meteo', 'kma'.
   String get id;
 
-  /// 도시 라벨로 오늘 + 주간 번들 조회.
-  Future<WeatherBundle> fetchBundle({String city = 'seoul'});
+  /// KMA city id로 오늘 + 주간 번들 조회.
+  Future<WeatherBundle> fetchBundle({String city = WeatherCity.seoulCityId});
 }

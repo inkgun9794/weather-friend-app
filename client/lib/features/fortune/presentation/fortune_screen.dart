@@ -1,14 +1,19 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:weather_friend/app/router/main_shell.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
+import 'package:weather_friend/core/utils/kst.dart';
+import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 import 'package:weather_friend/features/fortune/data/fortune_report.dart';
 import 'package:weather_friend/features/fortune/data/pending_fortune.dart';
 import 'package:weather_friend/features/fortune/data/saju_profile.dart';
 import 'package:weather_friend/features/fortune/presentation/widgets/birth_input_form.dart';
 import 'package:weather_friend/features/fortune/presentation/widgets/fortune_result_card.dart';
 import 'package:weather_friend/features/fortune/presentation/widgets/score_chart_card.dart';
+import 'package:weather_friend/shared/widgets/weather_bg.dart';
 
 /// 운세 탭 메인.
 ///   - 내 프로필 없으면 → 입력 form
@@ -70,33 +75,71 @@ class _FortuneScreenState extends ConsumerState<FortuneScreen> {
 
     final myProfile = ref.watch(sajuProfileProvider);
     final pending = ref.watch(pendingFortuneProvider);
+    final reports = ref.watch(fortuneReportsProvider).asData?.value ?? const [];
+    final hourAsync = ref.watch(kstHourProvider);
+    final currentHour = switch (hourAsync) {
+      AsyncData(:final value) => value,
+      _ => currentHourKst(),
+    };
+    final sky = skyFor(currentHour);
 
     // viewing 우선순위:
     //   진행 중인 pending(loading/ready/seen) 프로필 > 사용자 선택 > 내 프로필
     final pendingProfile =
         (pending.status == PendingFortuneStatus.loading ||
-                pending.status == PendingFortuneStatus.ready ||
-                pending.status == PendingFortuneStatus.seen)
-            ? pending.profile
-            : null;
+            pending.status == PendingFortuneStatus.ready ||
+            pending.status == PendingFortuneStatus.seen)
+        ? pending.profile
+        : null;
     final viewing = pendingProfile ?? _viewingProfile ?? myProfile;
 
+    // viewing의 오늘 운세가 캐시(FortuneReport)에 있나? 또는 pending 진행 중인가?
+    // → 있으면 결과 화면, 없으면 hub 화면 (사용자가 액션 버튼으로 트리거).
+    final hasTodayResult =
+        viewing != null &&
+        reports.any((r) => r.profile.cacheKey == viewing.cacheKey);
+    final isPendingForViewing =
+        viewing != null &&
+        pending.profile?.cacheKey == viewing.cacheKey &&
+        (pending.status == PendingFortuneStatus.loading ||
+            pending.status == PendingFortuneStatus.ready ||
+            pending.status == PendingFortuneStatus.seen);
+    final showResult = hasTodayResult || isPendingForViewing;
+
     return Scaffold(
-      backgroundColor: AppColors.paper,
-      body: SafeArea(
-        bottom: false,
-        child: !_profileLoaded
-            ? const Center(child: CircularProgressIndicator())
-            : viewing == null
-                ? const _IntroAndInput()
-                : _ResultView(
-                    profile: viewing,
-                    isMyProfile: viewing.cacheKey == myProfile?.cacheKey,
-                    onViewOther: () => _showGuestInputSheet(context),
-                    onEditMyProfile: () => _showEditMyProfileSheet(context),
-                    onShowReports: () => context.push('/fortune/report'),
-                    onSwitchToMine: () => setState(() => _viewingProfile = null),
-                  ),
+      // 날씨 탭과 같은 시간대 그라데이션 배경.
+      body: WeatherBg(
+        hour: currentHour,
+        child: SafeArea(
+          bottom: false,
+          child: !_profileLoaded
+              ? Center(child: CircularProgressIndicator(color: sky.ink))
+              : viewing == null
+              ? _IntroAndInput(sky: sky)
+              : showResult
+              ? _ResultView(
+                  profile: viewing,
+                  sky: sky,
+                  isMyProfile: viewing.cacheKey == myProfile?.cacheKey,
+                  onViewOther: () => _showGuestInputSheet(context),
+                  onEditMyProfile: () => _showEditMyProfileSheet(context),
+                  onShowReports: () => context.push('/fortune/report'),
+                  onSwitchToMine: () => setState(() => _viewingProfile = null),
+                )
+              : _HubView(
+                  profile: viewing,
+                  sky: sky,
+                  isMyProfile: viewing.cacheKey == myProfile?.cacheKey,
+                  onFetchFortune: () =>
+                      ref.read(pendingFortuneProvider.notifier).start(viewing),
+                  onViewOther: () => _showGuestInputSheet(context),
+                  onEditMyProfile: () => _showEditMyProfileSheet(context),
+                  onShowReports: () => context.push('/fortune/report'),
+                  onSwitchToMine: () => setState(() => _viewingProfile = null),
+                  hasReports: reports.isNotEmpty,
+                  reportsCount: reports.length,
+                ),
+        ),
       ),
     );
   }
@@ -151,13 +194,19 @@ class _FortuneScreenState extends ConsumerState<FortuneScreen> {
 /// 첫 진입 — 운세 소개 + 생년월일/시 입력 form.
 /// 폼 저장 시 pendingFortuneProvider가 알아서 fetch + 상태 전환 (callback 불필요).
 class _IntroAndInput extends StatelessWidget {
-  const _IntroAndInput();
+  const _IntroAndInput({required this.sky});
+
+  final SkyPalette sky;
 
   @override
   Widget build(BuildContext context) {
+    final formStyle = BirthInputFormStyle.onSky(sky);
+    final textShadows = _readableTextShadows(sky);
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
-        20, 24, 20,
+        20,
+        24,
+        20,
         kGlassNavBarHeight + MediaQuery.paddingOf(context).bottom + 24,
       ),
       child: Column(
@@ -168,8 +217,8 @@ class _IntroAndInput extends StatelessWidget {
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.w800,
-              color: AppColors.ink,
-              letterSpacing: -0.5,
+              color: sky.ink,
+              shadows: textShadows,
             ),
           ),
           const SizedBox(height: 6),
@@ -178,15 +227,207 @@ class _IntroAndInput extends StatelessWidget {
             style: TextStyle(
               fontSize: 14,
               height: 1.5,
-              color: AppColors.inkMute,
+              color: sky.inkSoft,
+              fontWeight: FontWeight.w600,
+              shadows: textShadows,
             ),
           ),
           const SizedBox(height: 28),
           BirthInputForm(
             mode: BirthInputMode.primary,
+            style: formStyle,
             onSaved: (_) {},
           ),
         ],
+      ),
+    );
+  }
+}
+
+List<Shadow> _readableTextShadows(SkyPalette sky) {
+  final lightText = sky.ink.computeLuminance() > 0.55;
+  return [
+    Shadow(
+      color: (lightText ? Colors.black : Colors.white).withValues(
+        alpha: lightText ? 0.2 : 0.16,
+      ),
+      blurRadius: 12,
+      offset: const Offset(0, 1),
+    ),
+  ];
+}
+
+/// Hub 화면 — 오늘 안 본 프로필. 사용자가 액션 버튼으로 운세 트리거.
+/// 자동 LLM 호출 방지 (광고 → 운세 흐름의 진입점).
+class _HubView extends StatelessWidget {
+  const _HubView({
+    required this.profile,
+    required this.sky,
+    required this.isMyProfile,
+    required this.onFetchFortune,
+    required this.onViewOther,
+    required this.onEditMyProfile,
+    required this.onShowReports,
+    required this.onSwitchToMine,
+    required this.hasReports,
+    required this.reportsCount,
+  });
+
+  final SajuProfile profile;
+  final SkyPalette sky;
+  final bool isMyProfile;
+  final VoidCallback onFetchFortune;
+  final VoidCallback onViewOther;
+  final VoidCallback onEditMyProfile;
+  final VoidCallback onShowReports;
+  final VoidCallback onSwitchToMine;
+  final bool hasReports;
+  final int reportsCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomScrollView(
+      slivers: [
+        // 프로필 헤더
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+          sliver: SliverToBoxAdapter(
+            child: _ProfileHeader(
+              profile: profile,
+              sky: sky,
+              isMyProfile: isMyProfile,
+              onEdit: isMyProfile ? onEditMyProfile : null,
+              onBackToMine: isMyProfile ? null : onSwitchToMine,
+            ),
+          ),
+        ),
+        // 메인 액션 — "오늘의 운세 받기" (광고 시청 진입점)
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+          sliver: SliverToBoxAdapter(
+            child: _PrimaryActionCard(
+              name: profile.name,
+              onTap: onFetchFortune,
+            ),
+          ),
+        ),
+        // 보조 액션
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              children: [
+                _ActionButton(
+                  icon: Icons.person_add_alt_1_rounded,
+                  label: '다른 프로필 운세 보기',
+                  onTap: onViewOther,
+                ),
+                if (hasReports) ...[
+                  const SizedBox(height: 10),
+                  _ActionButton(
+                    icon: Icons.list_alt_rounded,
+                    label: '오늘 본 운세 리포트 ($reportsCount)',
+                    onTap: onShowReports,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        // 하단 패딩
+        SliverPadding(
+          padding: EdgeInsets.only(
+            bottom:
+                kGlassNavBarHeight + MediaQuery.paddingOf(context).bottom + 24,
+          ),
+          sliver: const SliverToBoxAdapter(child: SizedBox.shrink()),
+        ),
+      ],
+    );
+  }
+}
+
+/// "오늘의 운세 받기" — 큰 강조 버튼. 광고 시청 진입점.
+class _PrimaryActionCard extends StatelessWidget {
+  const _PrimaryActionCard({required this.name, required this.onTap});
+
+  final String name;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Material(
+          color: AppColors.ink,
+          child: InkWell(
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.auto_awesome_rounded,
+                      size: 22,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$name의 오늘 운세 받기',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '광고 시청 후 결과를 볼 수 있어요',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.white.withValues(alpha: 0.8),
+                    size: 24,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -196,6 +437,7 @@ class _IntroAndInput extends StatelessWidget {
 class _ResultView extends ConsumerWidget {
   const _ResultView({
     required this.profile,
+    required this.sky,
     required this.isMyProfile,
     required this.onViewOther,
     required this.onEditMyProfile,
@@ -204,6 +446,7 @@ class _ResultView extends ConsumerWidget {
   });
 
   final SajuProfile profile;
+  final SkyPalette sky;
   final bool isMyProfile;
   final VoidCallback onViewOther;
   final VoidCallback onEditMyProfile;
@@ -223,30 +466,28 @@ class _ResultView extends ConsumerWidget {
           sliver: SliverToBoxAdapter(
             child: _ProfileHeader(
               profile: profile,
+              sky: sky,
               isMyProfile: isMyProfile,
               onEdit: isMyProfile ? onEditMyProfile : null,
               onBackToMine: isMyProfile ? null : onSwitchToMine,
             ),
           ),
         ),
-        // 점수 + 차트 카드
+        // 점수 + 차트 카드 (프로필별)
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          sliver: SliverToBoxAdapter(
-            child: ScoreChartCard(profile: profile, isMyProfile: isMyProfile),
-          ),
+          sliver: SliverToBoxAdapter(child: ScoreChartCard(profile: profile)),
         ),
-        // 사주 + 일간/오행/운세 카드들
+        // 오늘의 운세 7섹션 (상단)
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          sliver: SliverToBoxAdapter(child: FortuneResultCard(profile: profile)),
+          sliver: SliverToBoxAdapter(
+            child: FortuneTodayCards(profile: profile),
+          ),
         ),
         // 액션 버튼들
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(
-            20, 4, 20,
-            kGlassNavBarHeight + MediaQuery.paddingOf(context).bottom + 24,
-          ),
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
           sliver: SliverToBoxAdapter(
             child: Column(
               children: [
@@ -267,6 +508,18 @@ class _ResultView extends ConsumerWidget {
             ),
           ),
         ),
+        // 참고 — 사주 원국 + 오행 분포 (맨 아래)
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            4,
+            16,
+            kGlassNavBarHeight + MediaQuery.paddingOf(context).bottom + 24,
+          ),
+          sliver: SliverToBoxAdapter(
+            child: SajuReferenceCards(profile: profile),
+          ),
+        ),
       ],
     );
   }
@@ -275,12 +528,14 @@ class _ResultView extends ConsumerWidget {
 class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({
     required this.profile,
+    required this.sky,
     required this.isMyProfile,
     this.onEdit,
     this.onBackToMine,
   });
 
   final SajuProfile profile;
+  final SkyPalette sky;
   final bool isMyProfile;
   final VoidCallback? onEdit;
   final VoidCallback? onBackToMine;
@@ -291,6 +546,16 @@ class _ProfileHeader extends StatelessWidget {
     final birthLine =
         '$cal ${profile.year}.${profile.month.toString().padLeft(2, '0')}.${profile.day.toString().padLeft(2, '0')} '
         '${profile.hour.toString().padLeft(2, '0')}:00 · ${profile.gender.label}';
+    final lightText = sky.ink.computeLuminance() > 0.55;
+    final textShadows = _readableTextShadows(sky);
+    final tagFill = lightText
+        ? Colors.white.withValues(alpha: isMyProfile ? 0.22 : 0.16)
+        : (isMyProfile
+              ? AppColors.ink.withValues(alpha: 0.08)
+              : AppColors.inkMute.withValues(alpha: 0.1));
+    final tagText = lightText
+        ? sky.ink
+        : (isMyProfile ? AppColors.ink : AppColors.inkSoft);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -306,25 +571,30 @@ class _ProfileHeader extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w800,
-                      color: AppColors.ink,
-                      letterSpacing: -0.4,
+                      color: sky.ink,
+                      shadows: textShadows,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
-                      color: isMyProfile
-                          ? AppColors.ink.withValues(alpha: 0.08)
-                          : AppColors.inkMute.withValues(alpha: 0.10),
+                      color: tagFill,
                       borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.18),
+                      ),
                     ),
                     child: Text(
                       profile.relation.label,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: isMyProfile ? AppColors.ink : AppColors.inkSoft,
+                        color: tagText,
+                        shadows: lightText ? textShadows : null,
                       ),
                     ),
                   ),
@@ -335,8 +605,9 @@ class _ProfileHeader extends StatelessWidget {
                 birthLine,
                 style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.inkMute,
-                  fontWeight: FontWeight.w500,
+                  color: sky.inkSoft,
+                  fontWeight: FontWeight.w600,
+                  shadows: textShadows,
                 ),
               ),
             ],
@@ -348,7 +619,7 @@ class _ProfileHeader extends StatelessWidget {
             icon: const Icon(Icons.arrow_back_rounded, size: 16),
             label: const Text('내 운세'),
             style: TextButton.styleFrom(
-              foregroundColor: AppColors.ink,
+              foregroundColor: sky.ink,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -357,7 +628,7 @@ class _ProfileHeader extends StatelessWidget {
         else if (onEdit != null)
           IconButton(
             icon: const Icon(Icons.tune_rounded, size: 22),
-            color: AppColors.inkMute,
+            color: sky.inkSoft,
             tooltip: '사주 정보 변경',
             onPressed: onEdit,
           ),
@@ -379,41 +650,43 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          height: 52,
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: AppColors.inkMute.withValues(alpha: 0.22),
-            ),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: AppColors.ink, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.ink,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Material(
+          color: Colors.white.withValues(alpha: 0.78),
+          child: InkWell(
+            onTap: onTap,
+            child: Container(
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  Icon(icon, color: AppColors.ink, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.ink,
+                      ),
+                    ),
                   ),
-                ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.inkMute,
+                    size: 20,
+                  ),
+                ],
               ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: AppColors.inkMute,
-                size: 20,
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -431,7 +704,9 @@ class _SheetWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(
-        left: 20, right: 20, top: 16,
+        left: 20,
+        right: 20,
+        top: 16,
         bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
       ),
       child: SingleChildScrollView(
@@ -439,7 +714,8 @@ class _SheetWrapper extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
                 color: AppColors.inkMute.withValues(alpha: 0.3),

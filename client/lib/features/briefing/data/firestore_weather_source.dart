@@ -1,9 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:weather_friend/features/briefing/data/open_meteo_client.dart'
-    show DailySummary, DayPartSummary, HourlyWeather, UltraShortForecast,
-        WeatherBundle, WeekDay;
+    show
+        DailySummary,
+        DayPartSummary,
+        HourlyWeather,
+        UltraShortForecast,
+        WeatherBundle,
+        WeekDay;
 import 'package:weather_friend/features/briefing/data/weather_source.dart';
+import 'package:weather_friend/features/location/data/city_catalog.dart';
 
 /// Firestore의 KMA 캐시를 읽어 [WeatherBundle]로 변환하는 [WeatherSource].
 ///
@@ -16,30 +22,20 @@ class FirestoreWeatherSource implements WeatherSource {
 
   final FirebaseFirestore _db;
 
-  // MVP: 서울 고정 매핑. 향후 GPS 기반으로 cities_kma.json 룩업으로 확장.
-  static const _cityMapping = <String, _CityMapping>{
-    'seoul': _CityMapping(
-      cityId: '1100000000',
-      midLandRegId: '11B00000',
-      midTempRegId: '11B10101',
-    ),
-  };
-
   @override
   String get id => 'kma-firestore';
 
   @override
-  Future<WeatherBundle> fetchBundle({String city = 'seoul'}) async {
-    final m = _cityMapping[city];
-    if (m == null) {
-      throw StateError('Unsupported city: $city');
-    }
+  Future<WeatherBundle> fetchBundle({
+    String city = WeatherCity.seoulCityId,
+  }) async {
+    final selected = await CityCatalog.findById(city);
 
     final results = await Future.wait([
-      _db.collection('kma_short').doc(m.cityId).get(),
-      _db.collection('kma_mid_land').doc(m.midLandRegId).get(),
-      _db.collection('kma_mid_temp').doc(m.midTempRegId).get(),
-      _db.collection('kma_ultra').doc(m.cityId).get(),
+      _db.collection('kma_short').doc(selected.cityId).get(),
+      _db.collection('kma_mid_land').doc(selected.midLandRegId).get(),
+      _db.collection('kma_mid_temp').doc(selected.midTempRegId).get(),
+      _db.collection('kma_ultra').doc(selected.cityId).get(),
     ]);
     final short = results[0];
     final midLand = results[1];
@@ -61,17 +57,6 @@ class FirestoreWeatherSource implements WeatherSource {
       ultraData: ultra.exists ? ultra.data() : null,
     );
   }
-}
-
-class _CityMapping {
-  const _CityMapping({
-    required this.cityId,
-    required this.midLandRegId,
-    required this.midTempRegId,
-  });
-  final String cityId;
-  final String midLandRegId;
-  final String midTempRegId;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -105,14 +90,16 @@ class _KmaMapper {
       final tmp = (h['t1h'] as num?)?.toDouble();
       if (tmp == null) continue;
       final hour = _parseHour(h['fcst_time'] as String);
-      out.add(HourlyWeather(
-        hour: hour,
-        temperatureC: tmp,
-        condition: _kmaCondition(h['sky'] as int?, h['pty'] as int?),
-        // 초단기는 강수확률(POP) 대신 강수형태(PTY)·강수량(RN1).
-        // 카드 표시 단순화 — PTY > 0이면 100, 아니면 0.
-        precipitationProb: ((h['pty'] as num?)?.toInt() ?? 0) > 0 ? 100 : 0,
-      ));
+      out.add(
+        HourlyWeather(
+          hour: hour,
+          temperatureC: tmp,
+          condition: _kmaCondition(h['sky'] as int?, h['pty'] as int?),
+          // 초단기는 강수확률(POP) 대신 강수형태(PTY)·강수량(RN1).
+          // 카드 표시 단순화 — PTY > 0이면 100, 아니면 0.
+          precipitationProb: ((h['pty'] as num?)?.toInt() ?? 0) > 0 ? 100 : 0,
+        ),
+      );
     }
 
     if (out.isEmpty) return null;
@@ -164,7 +151,8 @@ class _KmaMapper {
 
     // 2) 초단기예보가 커버하는 시각은 덮어쓰기 (더 신선한 기온/하늘/강수형태).
     final ultraHours =
-        (ultraData?['hours'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+        (ultraData?['hours'] as List?)?.cast<Map<String, dynamic>>() ??
+        const [];
     for (final h in ultraHours) {
       if (h['fcst_date'] != todayStr) continue;
       final tmp = (h['t1h'] as num?)?.toDouble();
@@ -235,13 +223,15 @@ class _KmaMapper {
           .toList();
       if (dayHours.isEmpty) continue;
 
-      out.add(WeekDay(
-        date: _toIsoDateFromDateTime(d),
-        weekday: d.weekday,
-        morning: _partFromHours(dayHours, 6, 12),
-        afternoon: _partFromHours(dayHours, 12, 18),
-        evening: _partFromHours(dayHours, 18, 24),
-      ));
+      out.add(
+        WeekDay(
+          date: _toIsoDateFromDateTime(d),
+          weekday: d.weekday,
+          morning: _partFromHours(dayHours, 6, 12),
+          afternoon: _partFromHours(dayHours, 12, 18),
+          evening: _partFromHours(dayHours, 18, 24),
+        ),
+      );
     }
 
     // Day 4~7: 중기예보 (오전/오후만 + 최저/최고)
@@ -266,17 +256,19 @@ class _KmaMapper {
       final taMax = (temp['ta_max'] as num?)?.toInt();
       if (taMin == null || taMax == null) continue;
 
-      out.add(WeekDay(
-        date: _toIsoDateFromDateTime(d),
-        weekday: d.weekday,
-        morning: DayPartSummary(condition: amCond, tempC: taMin),
-        afternoon: DayPartSummary(condition: pmCond, tempC: taMax),
-        // 중기엔 저녁 구분 없음 — 오후 컨디션 + 평균 기온으로 대체.
-        evening: DayPartSummary(
-          condition: pmCond,
-          tempC: ((taMin + taMax) / 2).round(),
+      out.add(
+        WeekDay(
+          date: _toIsoDateFromDateTime(d),
+          weekday: d.weekday,
+          morning: DayPartSummary(condition: amCond, tempC: taMin),
+          afternoon: DayPartSummary(condition: pmCond, tempC: taMax),
+          // 중기엔 저녁 구분 없음 — 오후 컨디션 + 평균 기온으로 대체.
+          evening: DayPartSummary(
+            condition: pmCond,
+            tempC: ((taMin + taMax) / 2).round(),
+          ),
         ),
-      ));
+      );
     }
 
     return out;

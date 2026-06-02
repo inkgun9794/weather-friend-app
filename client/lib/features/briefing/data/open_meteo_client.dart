@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:weather_friend/core/utils/kst.dart';
 import 'package:weather_friend/features/briefing/data/weather_facade.dart'
     show weatherFacadeProvider;
+import 'package:weather_friend/features/location/data/city_catalog.dart';
+import 'package:weather_friend/features/location/data/selected_city_provider.dart';
 
 /// Open-Meteo는 무료·무제한·인증 X. worker가 사용하는 것과 동일한 endpoint.
 /// 클라이언트가 직접 호출해서:
@@ -76,8 +78,8 @@ class WeekDay {
     required this.afternoon,
     required this.evening,
   });
-  final String date;     // ISO "2026-05-26"
-  final int weekday;     // DateTime.weekday: 1=Mon, 7=Sun
+  final String date; // ISO "2026-05-26"
+  final int weekday; // DateTime.weekday: 1=Mon, 7=Sun
   final DayPartSummary morning;
   final DayPartSummary afternoon;
   final DayPartSummary evening;
@@ -86,10 +88,7 @@ class WeekDay {
 /// 초단기 6시간 예측 — KMA만 제공. OpenMeteo 폴백 시 null.
 /// "초단기" 섹션 카드 + (선택) 비구름 지도용 데이터의 토대.
 class UltraShortForecast {
-  const UltraShortForecast({
-    required this.baseTime,
-    required this.hours,
-  });
+  const UltraShortForecast({required this.baseTime, required this.hours});
 
   /// 발표시각 (해당 데이터 정확도/신선도 표시용).
   final DateTime baseTime;
@@ -155,17 +154,15 @@ const _weatherCodeKo = <int, String>{
 /// 우산 알림 의도와 충돌하지 않음. (강도 구분은 안 함 — 작은 아이콘에서 큰 정보 X.)
 int _wmoSeverity(int code) {
   if (code >= 95) return 6; // 천둥번개
-  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 5; // 비/이슬비/소나기
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
+    return 5; // 비/이슬비/소나기
+  }
   if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) return 4; // 눈
   if (code == 45 || code == 48) return 3; // 안개
   if (code == 3) return 2; // 흐림
   if (code == 2) return 1; // 구름 조금
   return 0; // 맑음 / 대체로 맑음
 }
-
-const _cityCoords = <String, (double, double)>{
-  'seoul': (37.5665, 126.9780),
-};
 
 class OpenMeteoClient {
   OpenMeteoClient(this._http);
@@ -175,12 +172,12 @@ class OpenMeteoClient {
   /// 오늘 ~ 다음 주 월요일까지 한 번에 받는다.
   /// 호출 1회로 hourly(전체 일수 × 24시간) + daily(전체 일수) 모두 채움 —
   /// Open-Meteo는 forecast_days 파라미터 하나로 다중 일 조회 지원.
-  Future<WeatherBundle> fetchBundle({String city = 'seoul'}) async {
-    final coords = _cityCoords[city];
-    if (coords == null) {
-      throw ArgumentError('Unsupported city: $city');
-    }
-    final (lat, lng) = coords;
+  Future<WeatherBundle> fetchBundle({
+    String city = WeatherCity.seoulCityId,
+  }) async {
+    final selected = await CityCatalog.findById(city);
+    final lat = selected.lat;
+    final lng = selected.lon;
 
     final daysCount = _daysUntilNextMonday(nowKst());
 
@@ -188,7 +185,8 @@ class OpenMeteoClient {
       'latitude': lat.toString(),
       'longitude': lng.toString(),
       'hourly': 'temperature_2m,precipitation_probability,weather_code',
-      'daily': 'temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,sunrise,sunset',
+      'daily':
+          'temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,sunrise,sunset',
       'timezone': 'Asia/Seoul',
       'forecast_days': daysCount.toString(),
     });
@@ -216,7 +214,8 @@ class OpenMeteoClient {
     final maxs = (daily?['temperature_2m_max'] as List?) ?? const [];
     final mins = (daily?['temperature_2m_min'] as List?) ?? const [];
     final dCodes = (daily?['weather_code'] as List?) ?? const [];
-    final dProbs = (daily?['precipitation_probability_max'] as List?) ?? const [];
+    final dProbs =
+        (daily?['precipitation_probability_max'] as List?) ?? const [];
     final sunrises = (daily?['sunrise'] as List?) ?? const [];
     final sunsets = (daily?['sunset'] as List?) ?? const [];
 
@@ -339,10 +338,13 @@ final openMeteoClientProvider = Provider<OpenMeteoClient>((ref) {
 // 폴백 로직은 weather_facade.dart의 WeatherFacade가 담당.
 final weatherBundleProvider = FutureProvider<WeatherBundle>((ref) async {
   final facade = ref.watch(weatherFacadeProvider);
-  return facade.fetchBundle();
+  final city = ref.watch(selectedCityProvider);
+  return facade.fetchBundle(city: city.cityId);
 });
 
-final todayHourlyWeatherProvider = FutureProvider<Map<int, HourlyWeather>>((ref) async {
+final todayHourlyWeatherProvider = FutureProvider<Map<int, HourlyWeather>>((
+  ref,
+) async {
   return (await ref.watch(weatherBundleProvider.future)).today;
 });
 
@@ -355,8 +357,9 @@ final weekDaysProvider = FutureProvider<List<WeekDay>>((ref) async {
 });
 
 /// 오늘 일출/일몰 시각 — 날씨 아이콘 낮/밤 결정용. fetch 실패 시 null.
-final todaySunriseSunsetProvider =
-    FutureProvider<(DateTime?, DateTime?)>((ref) async {
+final todaySunriseSunsetProvider = FutureProvider<(DateTime?, DateTime?)>((
+  ref,
+) async {
   final bundle = await ref.watch(weatherBundleProvider.future);
   return (bundle.sunriseToday, bundle.sunsetToday);
 });

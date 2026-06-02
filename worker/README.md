@@ -6,7 +6,7 @@
 
 1. Open-Meteo에서 오늘/내일 날씨 조회
 2. Gemini로 캐릭터 × 시간대별 스크립트 생성
-3. Typecast로 알람 슬롯(05/06/21/22시) × 4 캐릭터 = 16개 음성 합성
+3. Typecast로 6시 morning 슬롯 × 4 캐릭터 = 4개 음성 합성
 4. 결과를 `../docs/`에 저장 → GitHub Pages 배포
 5. 메타데이터를 Firestore에 저장
 

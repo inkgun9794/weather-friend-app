@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
@@ -5,38 +7,35 @@ import 'package:weather_friend/features/fortune/data/fortune_api.dart';
 import 'package:weather_friend/features/fortune/data/fortune_score_history.dart';
 import 'package:weather_friend/features/fortune/data/saju_profile.dart';
 
-/// 점수 + 미니 꺾은선 차트 카드.
-/// - 점수: 어떤 프로필이든 표시
-/// - 차트: 내 프로필일 때만 (시계열 의미 있는 건 본인 운세 변화)
+/// 점수 + 미니 꺾은선 차트 카드. 프로필별로 독립된 시계열 표시.
 class ScoreChartCard extends ConsumerWidget {
-  const ScoreChartCard({
-    super.key,
-    required this.profile,
-    required this.isMyProfile,
-  });
+  const ScoreChartCard({super.key, required this.profile});
 
   final SajuProfile profile;
-  final bool isMyProfile;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncFortune = ref.watch(fortuneForProfileProvider(profile));
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.inkMute.withValues(alpha: 0.12)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.025),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.88),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: asyncFortune.when(
+          child: asyncFortune.when(
         loading: () => const SizedBox(
           height: 100,
           child: Center(child: CircularProgressIndicator()),
@@ -49,11 +48,11 @@ class ScoreChartCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _ScoreDisplay(score: fortune.score),
-            if (isMyProfile) ...[
-              const SizedBox(height: 18),
-              const _MiniChart(days: 14),
-            ],
+            const SizedBox(height: 18),
+            _MiniChart(cacheKey: profile.cacheKey, days: 14),
           ],
+        ),
+      ),
         ),
       ),
     );
@@ -148,14 +147,15 @@ class _ScoreDisplay extends StatelessWidget {
   }
 }
 
-/// 미니 꺾은선 차트 — 본 날만 vertex, 안 본 날은 X축 위에 표시 X.
+/// 미니 꺾은선 차트 — 본 날만 vertex. cacheKey 단위 (프로필별).
 class _MiniChart extends ConsumerWidget {
-  const _MiniChart({required this.days});
+  const _MiniChart({required this.cacheKey, required this.days});
+  final String cacheKey;
   final int days;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final asyncHistory = ref.watch(myScoreHistoryProvider);
+    final asyncHistory = ref.watch(scoreHistoryProvider(cacheKey));
     final entries = asyncHistory.value ?? const <ScoreEntry>[];
 
     if (entries.isEmpty) {

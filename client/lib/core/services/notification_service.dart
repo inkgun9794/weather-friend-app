@@ -7,7 +7,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 const _channelId = 'daily_briefing';
 const _channelName = '하루 브리핑';
-const _channelDescription = '오전 5시 · 오후 9시 알림';
+const _channelDescription = '오전 6시 알림';
 
 /// 하루 알람 슬롯 — 로컬 알림 ID·발사 시각·fallback 본문.
 ///
@@ -23,13 +23,6 @@ enum BriefingSlot {
     minute: 5,
     fallbackTitle: '아침 브리핑',
     fallbackBody: '오늘 날씨 브리핑이 준비됐어요',
-  ),
-  evening(
-    id: 2,
-    hour: 21,
-    minute: 5,
-    fallbackTitle: '저녁 브리핑',
-    fallbackBody: '오늘 하루 어땠어요? 내일 날씨 보러 가요',
   );
 
   const BriefingSlot({
@@ -79,8 +72,10 @@ class NotificationService {
     );
     await _plugin.initialize(settings: settings);
 
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     await android?.createNotificationChannel(
       const AndroidNotificationChannel(
         _channelId,
@@ -97,8 +92,10 @@ class NotificationService {
   /// (FcmService 없이 NotificationService만 쓰는 우회 경로일 때).
   /// 내부적으로 OS 권한은 동일.
   Future<bool> requestPermissions() async {
-    final iOS = _plugin.resolvePlatformSpecificImplementation<
-        IOSFlutterLocalNotificationsPlugin>();
+    final iOS = _plugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >();
     if (iOS != null) {
       return await iOS.requestPermissions(
             alert: true,
@@ -107,8 +104,10 @@ class NotificationService {
           ) ??
           false;
     }
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (android != null) {
       return await android.requestNotificationsPermission() ?? false;
     }
@@ -116,14 +115,18 @@ class NotificationService {
   }
 
   Future<bool> hasPermission() async {
-    final iOS = _plugin.resolvePlatformSpecificImplementation<
-        IOSFlutterLocalNotificationsPlugin>();
+    final iOS = _plugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >();
     if (iOS != null) {
       final opts = await iOS.checkPermissions();
       return opts?.isAlertEnabled ?? false;
     }
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (android != null) {
       return await android.areNotificationsEnabled() ?? false;
     }
@@ -176,7 +179,7 @@ class NotificationService {
     await _plugin.show(
       id: 999,
       title: '테스트 알림',
-      body: body ?? '알림이 정상 작동합니다. 매일 오전 5시·오후 9시에 도착해요.',
+      body: body ?? '알림이 정상 작동합니다. 매일 오전 6시에 도착해요.',
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           _channelId,

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:weather_friend/features/fortune/data/saju_profile.dart';
 
-/// 내 운세 점수 시계열 한 entry. 차트 vertex용.
+/// 점수 시계열 한 entry — 차트 vertex.
 class ScoreEntry {
   const ScoreEntry({required this.date, required this.score});
 
@@ -21,49 +21,59 @@ class ScoreEntry {
         score: (j['score'] as num).toInt(),
       );
 
-  /// 같은 날 판별용 키.
   String get dayKey =>
       '${date.year}-${date.month.toString().padLeft(2, '0')}-'
       '${date.day.toString().padLeft(2, '0')}';
 }
 
-/// 내 프로필 운세 점수만 영구 저장. 최근 60일 유지.
-class MyScoreHistoryRepository {
-  MyScoreHistoryRepository(this._prefs);
+/// 프로필별(cacheKey 단위) 점수 시계열을 SharedPreferences에 영구 저장.
+/// 저장 형식: `{ cacheKey1: [...entries], cacheKey2: [...] }` — 한 키에 다 저장.
+/// 최근 60일 유지.
+class ScoreHistoryRepository {
+  ScoreHistoryRepository(this._prefs);
 
-  static const _key = 'my_score_history_v1';
+  static const _key = 'score_history_v2'; // v1은 글로벌 1개였음 — 호환 X (덮어씀)
   static const _retainDays = 60;
 
   final SharedPreferences _prefs;
 
-  List<ScoreEntry> load() {
+  Map<String, List<ScoreEntry>> _loadAll() {
     final raw = _prefs.getString(_key);
-    if (raw == null) return const [];
+    if (raw == null) return {};
     try {
-      final list = (json.decode(raw) as List)
-          .map((e) => ScoreEntry.fromJson(e as Map<String, dynamic>))
-          .toList();
-      list.sort((a, b) => a.date.compareTo(b.date));
-      return list;
+      final data = json.decode(raw) as Map<String, dynamic>;
+      return data.map((cacheKey, list) {
+        final entries = (list as List)
+            .map((e) => ScoreEntry.fromJson(e as Map<String, dynamic>))
+            .toList()
+          ..sort((a, b) => a.date.compareTo(b.date));
+        return MapEntry(cacheKey, entries);
+      });
     } catch (_) {
-      return const [];
+      return {};
     }
   }
 
-  Future<void> saveAll(List<ScoreEntry> entries) async {
-    await _prefs.setString(
-      _key,
-      json.encode(entries.map((e) => e.toJson()).toList()),
+  Future<void> _saveAll(Map<String, List<ScoreEntry>> all) async {
+    final json0 = all.map(
+      (k, entries) => MapEntry(k, entries.map((e) => e.toJson()).toList()),
     );
+    await _prefs.setString(_key, json.encode(json0));
   }
 
-  /// 오늘 entry upsert. 같은 날 여러 번 보면 최근 점수로 덮어씀.
-  Future<List<ScoreEntry>> upsertToday(int score) async {
+  List<ScoreEntry> loadForProfile(String cacheKey) {
+    return _loadAll()[cacheKey] ?? const [];
+  }
+
+  /// 오늘 entry upsert. 같은 날 여러 번 보면 마지막 점수로 덮어씀.
+  /// 60일 넘은 오래된 entry는 제거.
+  Future<List<ScoreEntry>> addForProfile(String cacheKey, int score) async {
+    final all = _loadAll();
     final today = DateTime.now();
     final todayKey = '${today.year}-${today.month.toString().padLeft(2, '0')}-'
         '${today.day.toString().padLeft(2, '0')}';
 
-    final entries = List<ScoreEntry>.from(load());
+    final entries = List<ScoreEntry>.from(all[cacheKey] ?? const []);
     final idx = entries.indexWhere((e) => e.dayKey == todayKey);
     if (idx >= 0) {
       entries[idx] = ScoreEntry(date: today, score: score);
@@ -71,12 +81,13 @@ class MyScoreHistoryRepository {
       entries.add(ScoreEntry(date: today, score: score));
     }
 
-    // 보존 기간 넘은 오래된 entry 제거
+    // 보존 기간 넘은 거 제거
     final cutoff = today.subtract(const Duration(days: _retainDays));
     entries.removeWhere((e) => e.date.isBefore(cutoff));
     entries.sort((a, b) => a.date.compareTo(b.date));
 
-    await saveAll(entries);
+    all[cacheKey] = entries;
+    await _saveAll(all);
     return entries;
   }
 
@@ -85,25 +96,15 @@ class MyScoreHistoryRepository {
   }
 }
 
-final myScoreHistoryRepositoryProvider =
-    FutureProvider<MyScoreHistoryRepository>((ref) async {
+final scoreHistoryRepositoryProvider =
+    FutureProvider<ScoreHistoryRepository>((ref) async {
   final prefs = await ref.watch(sharedPreferencesProvider.future);
-  return MyScoreHistoryRepository(prefs);
+  return ScoreHistoryRepository(prefs);
 });
 
-class MyScoreHistoryNotifier extends AsyncNotifier<List<ScoreEntry>> {
-  @override
-  Future<List<ScoreEntry>> build() async {
-    final repo = await ref.watch(myScoreHistoryRepositoryProvider.future);
-    return repo.load();
-  }
-
-  Future<void> addToday(int score) async {
-    final repo = await ref.read(myScoreHistoryRepositoryProvider.future);
-    final updated = await repo.upsertToday(score);
-    state = AsyncValue.data(updated);
-  }
-}
-
-final myScoreHistoryProvider = AsyncNotifierProvider<MyScoreHistoryNotifier,
-    List<ScoreEntry>>(MyScoreHistoryNotifier.new);
+/// 특정 프로필(cacheKey)의 점수 시계열. add는 외부에서 호출 후 invalidate.
+final scoreHistoryProvider =
+    FutureProvider.family<List<ScoreEntry>, String>((ref, cacheKey) async {
+  final repo = await ref.watch(scoreHistoryRepositoryProvider.future);
+  return repo.loadForProfile(cacheKey);
+});

@@ -22,7 +22,7 @@ GitHub Actions cron (매시간 :50 UTC)
 worker/ Python 코드 실행
    ├─ Open-Meteo: 날씨 forecast (서울)
    ├─ Gemini API: 4 캐릭터 × 시맨틱 텍스트 생성
-   ├─ Typecast API: 알람 시간(5/6/21/22) 4개 음성 합성
+   ├─ Typecast API: 오전 6시 4개 음성 합성
    ↓
 docs/ 자동 commit + push (GitHub Pages 자동 배포)
 Firestore에 메타 저장
@@ -44,7 +44,7 @@ Firestore에 메타 저장
 | Pages base URL | `https://inkgun9794.github.io/weather-friend-app/` |
 | Worker cron | `'50 * * * *'` (매시간 :50 UTC) |
 | Gemini model | `gemini-2.5-flash-lite` |
-| TTS | Typecast Free (30K credits/월) — 음성은 5시·21시만 (하루 8 합성 = 4 캐릭터 × 2 슬롯) |
+| TTS | Typecast Free (30K credits/월) — 음성은 오전 6시만 (하루 4 합성 = 4 캐릭터 × 1 슬롯) |
 
 ### Firestore 스키마
 
@@ -91,9 +91,10 @@ https://inkgun9794.github.io/weather-friend-app/briefings/{city}/{date}/{hour:02
 
 상세 페르소나는 `worker/domain/character.py`.
 
-### 2. 알림 시간 — 고정 5시·21시
+### 2. 알림 시간 — 고정 오전 6시
 
-- **푸시 알림 + 음성**: 오전 5시, 오후 9시 (KST). 사용자가 선택하지 않음.
+- **푸시 알림 + 음성**: 오전 6시 (KST). 사용자가 선택하지 않음.
+- **오후 9시**: 앱 안 텍스트 메시지만, 푸시/음성 없음.
 - 그 외 22시간은 worker가 Firestore에 텍스트 메타만 쓰고, 사용자는 *앱을 열어서* 확인 (푸시 X).
 - 의도: 우리 앱은 알람(깨우는 기계)이 아니라 알림(notification) 정도라 시간 선택 옵션 자체가 의미 없음.
 
@@ -160,7 +161,7 @@ lib/
 │   ├── briefing/                     # 메인 화면, 슬롯 표시, 재생
 │   ├── character/                    # 4 캐릭터 선택 (전용 화면에서만)
 │   ├── location/                     # GPS + 도시 매핑 + 해외 감지
-│   ├── schedule/                     # 알람 시간 (5/6/21/22) 설정
+│   ├── schedule/                     # 알림 시간 (6시 고정) 설정
 │   └── settings/                     # 알림 토글, 캐릭터 진입점
 │
 └── shared/                           # 공용 위젯·확장
@@ -186,9 +187,9 @@ lib/
   - 한국 본토 bounding box 안인지 체크
   - 해외 감지 시 캐릭터별 fallback 메시지 재생
 - [ ] **Schedule feature** (단순화):
-  - 시간 선택 UI **없음** (5시·21시 고정)
+  - 시간 선택 UI **없음** (6시 고정)
   - 알림 받기 on/off 토글만
-  - `flutter_local_notifications`로 5시·21시 푸시 예약 (KST)
+  - `flutter_local_notifications`로 6시 푸시 예약 (KST)
   - `workmanager`로 알림 직전 prefetch (해당 슬롯 미리 다운)
 - [ ] **Onboarding**: 위치 권한 → 알림 권한 → 캐릭터 선택 → 알람 시간 → 완료
 - [ ] **Settings**: 알림 토글, 캐릭터 변경 진입점, 앱 정보
@@ -258,7 +259,7 @@ assets/audio/overseas/
 | 플랫폼 | 경로 | 상태 |
 |---|---|---|
 | Android | FCM 토픽 (서버 push) | 아래 2번만 끝내면 작동 |
-| iOS (현재) | 매일 5:05 / 21:05 로컬 알림 (recurring) | Apple Developer 가입 전까지 우회. OS가 매일 발사 — 워커가 늦어도 5분 마진 후엔 audio 준비돼 있음 |
+| iOS (현재) | 매일 6:05 로컬 알림 (recurring) | Apple Developer 가입 전까지 우회. OS가 매일 발사 — 워커가 늦어도 5분 마진 후엔 audio 준비돼 있음 |
 | iOS (APNs 키 발급 후) | FCM 토픽 | 1·3번 끝낸 뒤 [notification_coordinator.dart](client/lib/core/services/notification_coordinator.dart)의 `_isIosFcmReady = false`를 `true`로 바꾸면 자동 전환 |
 
 코드 변경은 끝. 아래 수동 단계는 Apple Developer 가입(1번)·Xcode 셋업(3번)을 제외하면 Android 작동에는 2번만 필요함.
@@ -310,8 +311,8 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 
 **iOS (Apple Developer 가입 전 — 로컬 알림 우회):**
 - 앱 빌드 → 온보딩에서 알림 권한 허용 → 캐릭터 선택 → 홈 화면 도달.
-- 매일 5:05 / 21:05에 OS가 자동으로 로컬 알림 발사 (앱 종료돼 있어도 OK).
-- 5분 마진을 둔 이유: GitHub Actions cron은 매 15분이고 가끔 dropped, 5:00 정각엔 데이터가 아직 없을 수 있음. 5:05엔 거의 항상 준비돼 있음.
+- 매일 6:05에 OS가 자동으로 로컬 알림 발사 (앱 종료돼 있어도 OK).
+- 5분 마진을 둔 이유: GitHub Actions cron은 매 15분이고 가끔 dropped, 6:00 정각엔 데이터가 아직 없을 수 있음. 6:05엔 거의 항상 준비돼 있음.
 - 알림 본문은 앱이 마지막으로 foreground였을 때 sync한 transcript. 안 됐으면 fallback("오늘 날씨 브리핑이 준비됐어요"). 어차피 탭하면 앱에서 최신 데이터 fetch.
 
 **iOS (Apple Developer 가입 후 → FCM 전환):**

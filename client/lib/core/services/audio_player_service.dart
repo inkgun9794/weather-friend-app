@@ -8,6 +8,7 @@ class AudioPlayerService {
 
   Stream<PlayerState> get playerStateStream => _player.playerStateStream;
   Stream<Duration> get positionStream => _player.positionStream;
+  Stream<Duration?> get durationStream => _player.durationStream;
   Duration? get duration => _player.duration;
 
   Future<void> playUrl(String url) async {
@@ -30,4 +31,16 @@ final audioPlayerServiceProvider = Provider<AudioPlayerService>((ref) {
   final service = AudioPlayerService();
   ref.onDispose(service.dispose);
   return service;
+});
+
+final audioPlayerStateProvider = StreamProvider<PlayerState>((ref) {
+  return ref.watch(audioPlayerServiceProvider).playerStateStream;
+});
+
+final audioPositionProvider = StreamProvider<Duration>((ref) {
+  return ref.watch(audioPlayerServiceProvider).positionStream;
+});
+
+final audioDurationProvider = StreamProvider<Duration?>((ref) {
+  return ref.watch(audioPlayerServiceProvider).durationStream;
 });

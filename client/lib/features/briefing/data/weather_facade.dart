@@ -5,6 +5,7 @@ import 'package:weather_friend/features/briefing/data/open_meteo_client.dart'
     show HourlyWeather, WeatherBundle;
 import 'package:weather_friend/features/briefing/data/open_meteo_weather_source.dart';
 import 'package:weather_friend/features/briefing/data/weather_source.dart';
+import 'package:weather_friend/features/location/data/city_catalog.dart';
 
 /// KMA + Open-Meteo 병행 호출 후 합쳐서 단일 [WeatherBundle] 반환.
 ///
@@ -18,10 +19,12 @@ import 'package:weather_friend/features/briefing/data/weather_source.dart';
 class WeatherFacade {
   WeatherFacade({required this.primary, required this.fallback});
 
-  final WeatherSource primary;   // KMA (Firestore)
-  final WeatherSource fallback;  // Open-Meteo
+  final WeatherSource primary; // KMA (Firestore)
+  final WeatherSource fallback; // Open-Meteo
 
-  Future<WeatherBundle> fetchBundle({String city = 'seoul'}) async {
+  Future<WeatherBundle> fetchBundle({
+    String city = WeatherCity.seoulCityId,
+  }) async {
     final sw = Stopwatch()..start();
     // 두 소스 병렬 호출 — KMA는 메인 데이터, Open-Meteo는 보조 (sunrise/sunset, weather_code)
     final results = await Future.wait([
@@ -41,7 +44,9 @@ class WeatherFacade {
       return om!;
     }
     if (om == null) {
-      debugPrint('[weather_facade] ✅ source=${primary.id} only (Open-Meteo down)');
+      debugPrint(
+        '[weather_facade] ✅ source=${primary.id} only (Open-Meteo down)',
+      );
       return kma;
     }
 
@@ -99,7 +104,9 @@ Future<WeatherBundle?> _timed(
     return result;
   } catch (e) {
     sw.stop();
-    debugPrint('[weather_facade] ⚠️ $label failed (${sw.elapsedMilliseconds}ms): $e');
+    debugPrint(
+      '[weather_facade] ⚠️ $label failed (${sw.elapsedMilliseconds}ms): $e',
+    );
     return null;
   }
 }

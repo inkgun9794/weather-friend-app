@@ -50,7 +50,7 @@ async def amain(doc_id: str, voice_id: str) -> int:
                 f"✗ ERROR: {doc_id}에 voice_script 없음 (type={b_type})",
                 file=sys.stderr,
             )
-            print(f"  (HOURLY 타입은 음성 X. 5/6/21/22시 도큐먼트만 가능)", file=sys.stderr)
+            print(f"  (HOURLY 타입은 음성 X. 6시 morning 도큐먼트만 가능)", file=sys.stderr)
             return 1
 
         print(f"=== {character_id} ({b_type}) ===")

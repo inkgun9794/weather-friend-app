@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:weather_friend/core/services/fcm_service.dart';
 import 'package:weather_friend/core/services/notification_service.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
+import 'package:weather_friend/features/location/data/selected_city_provider.dart';
 
 class ScheduleScreen extends ConsumerStatefulWidget {
   const ScheduleScreen({super.key});
@@ -32,7 +33,10 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     final fcm = ref.read(fcmServiceProvider);
     final ok = await fcm.requestPermissions();
     if (ok) {
-      await fcm.syncSubscriptions(ref.read(selectedCharacterProvider));
+      await fcm.syncSubscriptions(
+        current: ref.read(selectedCharacterProvider),
+        city: ref.read(selectedCityProvider).briefingCityKey,
+      );
     }
     if (!mounted) return;
     setState(() {
@@ -45,7 +49,10 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   Future<void> _resync() async {
     setState(() => _busy = true);
     final fcm = ref.read(fcmServiceProvider);
-    await fcm.syncSubscriptions(ref.read(selectedCharacterProvider));
+    await fcm.syncSubscriptions(
+      current: ref.read(selectedCharacterProvider),
+      city: ref.read(selectedCityProvider).briefingCityKey,
+    );
     if (!mounted) return;
     setState(() => _busy = false);
     _toast('현재 캐릭터 토픽을 다시 구독했어요');
@@ -70,10 +77,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
       appBar: AppBar(title: const Text('알림')),
       body: ListView(
         children: [
-          const ListTile(
-            title: Text('알림 시간'),
-            subtitle: Text('오전 5시 · 오후 9시 (고정)'),
-          ),
+          const ListTile(title: Text('알림 시간'), subtitle: Text('오전 6시 (고정)')),
           const Divider(height: 0),
           ListTile(
             title: const Text('권한 상태'),
@@ -92,7 +96,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           const Divider(height: 0),
           ListTile(
             title: const Text('토픽 재구독'),
-            subtitle: const Text('선택한 캐릭터의 morning/evening 토픽을 다시 구독'),
+            subtitle: const Text('선택한 위치와 캐릭터의 morning 토픽을 다시 구독'),
             onTap: _busy || permission != true ? null : _resync,
             trailing: const Icon(Icons.refresh),
           ),

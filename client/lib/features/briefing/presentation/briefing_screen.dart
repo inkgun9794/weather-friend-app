@@ -281,7 +281,7 @@ class _TopBar extends ConsumerWidget {
               Icon(Icons.location_on, color: sky.ink, size: 14),
               const SizedBox(width: 6),
               Text(
-                city,
+                city.label,
                 style: TextStyle(
                   color: sky.ink,
                   fontSize: 13,
@@ -349,7 +349,8 @@ class _BigTemp extends ConsumerWidget {
       _ => null,
     };
     final temp =
-        b?.weatherSnapshot?.temperatureC.round() ?? hourly?.temperatureC.round();
+        b?.weatherSnapshot?.temperatureC.round() ??
+        hourly?.temperatureC.round();
     final feels = b?.weatherSnapshot?.feelsLikeC.round();
     final cond = b?.weatherSnapshot?.condition ?? hourly?.condition ?? '—';
 
@@ -758,7 +759,7 @@ class _TimelineSectionState extends State<_TimelineSection> {
                 // 24시간 가로 strip — 시간대 그라데이션 배경 + 슬롯 24개.
                 // 새벽→일출→낮→일몰→밤 색이 스크롤과 함께 자연스럽게 흐름.
                 SizedBox(
-                  height: 132,
+                  height: 140,
                   child: SingleChildScrollView(
                     controller: _controller,
                     scrollDirection: Axis.horizontal,
@@ -899,61 +900,68 @@ class _HourSlot extends StatelessWidget {
               border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
             )
           : null,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: ink,
-              fontSize: isNow ? 11.5 : 11,
-              fontWeight: isNow ? FontWeight.w800 : FontWeight.w600,
-              letterSpacing: -0.1,
-            ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: SizedBox(
+          width: width - 4,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: ink,
+                  fontSize: isNow ? 11.5 : 11,
+                  fontWeight: isNow ? FontWeight.w800 : FontWeight.w600,
+                  letterSpacing: -0.1,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Image.asset(
+                _weatherAsset(
+                  cond,
+                  hour,
+                  weatherCode: hourly?.weatherCode,
+                  sunrise: sunrise,
+                  sunset: sunset,
+                ),
+                width: isNow ? 28 : 26,
+                height: isNow ? 28 : 26,
+                filterQuality: FilterQuality.medium,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                temp != null ? '$temp°' : '—',
+                style: TextStyle(
+                  color: ink,
+                  fontSize: isNow ? 19 : 17,
+                  fontWeight: isNow ? FontWeight.w800 : FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 4),
+              // 음성 보유 표시 — 작은 점으로. 슬롯 높이를 일정하게 유지하려고
+              // 점이 없어도 같은 크기 영역을 차지.
+              SizedBox(
+                height: 6,
+                child: hasAudio && charId != null
+                    ? Center(
+                        child: Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: visualFor(charId).color,
+                          ),
+                        ),
+                      )
+                    : null,
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Image.asset(
-            _weatherAsset(
-              cond,
-              hour,
-              weatherCode: hourly?.weatherCode,
-              sunrise: sunrise,
-              sunset: sunset,
-            ),
-            width: isNow ? 28 : 26,
-            height: isNow ? 28 : 26,
-            filterQuality: FilterQuality.medium,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            temp != null ? '$temp°' : '—',
-            style: TextStyle(
-              color: ink,
-              fontSize: isNow ? 19 : 17,
-              fontWeight: isNow ? FontWeight.w800 : FontWeight.w600,
-              fontFeatures: const [FontFeature.tabularFigures()],
-              letterSpacing: -0.3,
-            ),
-          ),
-          const SizedBox(height: 4),
-          // 음성 보유 표시 — 작은 점으로. 슬롯 높이를 일정하게 유지하려고
-          // 점이 없어도 같은 크기 영역을 차지.
-          SizedBox(
-            height: 6,
-            child: hasAudio && charId != null
-                ? Center(
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: visualFor(charId).color,
-                      ),
-                    ),
-                  )
-                : null,
-          ),
-        ],
+        ),
       ),
     );
 
