@@ -34,8 +34,10 @@ class FortuneReportScreen extends ConsumerWidget {
       body: asyncReports.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
-          child: Text('리포트를 불러올 수 없어요: $e',
-              style: TextStyle(color: AppColors.inkSoft)),
+          child: Text(
+            '리포트를 불러올 수 없어요: $e',
+            style: TextStyle(color: AppColors.inkSoft),
+          ),
         ),
         data: (reports) {
           if (reports.isEmpty) {
@@ -44,10 +46,7 @@ class FortuneReportScreen extends ConsumerWidget {
                 padding: const EdgeInsets.all(24),
                 child: Text(
                   '오늘 본 운세가 없어요',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: AppColors.inkMute,
-                  ),
+                  style: TextStyle(fontSize: 14, color: AppColors.inkMute),
                 ),
               ),
             );
@@ -86,7 +85,14 @@ class _ReportTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         // 해당 프로필로 결과 화면 다시 진입 (캐시된 운세 표시)
-        onTap: () => context.go('/fortune', extra: p),
+        onTap: () {
+          final router = GoRouter.of(context);
+          if (router.canPop()) {
+            router.pop(p);
+          } else {
+            router.go('/fortune', extra: p);
+          }
+        },
         borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.all(16),
@@ -117,7 +123,8 @@ class _ReportTile extends StatelessWidget {
                         const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 2,
+                            horizontal: 7,
+                            vertical: 2,
                           ),
                           decoration: BoxDecoration(
                             color: AppColors.inkMute.withValues(alpha: 0.10),

@@ -79,6 +79,10 @@ class BirthInputFormStyle {
 
   factory BirthInputFormStyle.onSky(SkyPalette sky) {
     final lightText = sky.ink.computeLuminance() > 0.55;
+    final primaryFill = sky.ink;
+    final primaryText = primaryFill.computeLuminance() > 0.55
+        ? AppColors.ink
+        : Colors.white;
     return BirthInputFormStyle(
       labelColor: sky.inkSoft.withValues(alpha: lightText ? 0.95 : 0.86),
       fieldFill: Colors.white.withValues(alpha: lightText ? 0.86 : 0.88),
@@ -89,13 +93,13 @@ class BirthInputFormStyle {
       fieldText: AppColors.ink,
       fieldHint: AppColors.inkMute,
       icon: AppColors.inkSoft,
-      selectedFill: AppColors.ink,
-      selectedBorder: AppColors.ink,
-      selectedText: Colors.white,
+      selectedFill: sky.sun.withValues(alpha: lightText ? 0.92 : 0.96),
+      selectedBorder: sky.sun.withValues(alpha: 0.98),
+      selectedText: AppColors.ink,
       unselectedText: AppColors.ink,
-      primaryFill: AppColors.ink,
-      primaryText: Colors.white,
-      shadow: Colors.black.withValues(alpha: lightText ? 0.16 : 0.08),
+      primaryFill: primaryFill,
+      primaryText: primaryText,
+      shadow: Colors.black.withValues(alpha: lightText ? 0.14 : 0.08),
       labelShadows: [
         Shadow(
           color: (lightText ? Colors.black : Colors.white).withValues(
@@ -395,17 +399,17 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
             child: _saving
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
+                    children: [
                       SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: style.primaryText,
                         ),
                       ),
-                      SizedBox(width: 10),
-                      Text(
+                      const SizedBox(width: 10),
+                      const Text(
                         '사주 분석 중...',
                         style: TextStyle(
                           fontSize: 16,

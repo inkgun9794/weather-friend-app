@@ -41,6 +41,19 @@ class _FortuneScreenState extends ConsumerState<FortuneScreen> {
     Future.microtask(_loadProfile);
   }
 
+  @override
+  void didUpdateWidget(covariant FortuneScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final previousKey = oldWidget.initialProfile?.cacheKey;
+    final nextKey = widget.initialProfile?.cacheKey;
+    if (previousKey != nextKey) {
+      if (widget.initialProfile != null) {
+        ref.read(pendingFortuneProvider.notifier).reset();
+      }
+      _viewingProfile = widget.initialProfile;
+    }
+  }
+
   Future<void> _loadProfile() async {
     final repo = await ref.read(sajuProfileRepositoryProvider.future);
     final profile = repo.load();
@@ -123,8 +136,8 @@ class _FortuneScreenState extends ConsumerState<FortuneScreen> {
                   isMyProfile: viewing.cacheKey == myProfile?.cacheKey,
                   onViewOther: () => _showGuestInputSheet(context),
                   onEditMyProfile: () => _showEditMyProfileSheet(context),
-                  onShowReports: () => context.push('/fortune/report'),
-                  onSwitchToMine: () => setState(() => _viewingProfile = null),
+                  onShowReports: () => _showReports(context),
+                  onSwitchToMine: _switchToMyProfile,
                 )
               : _HubView(
                   profile: viewing,
@@ -134,8 +147,8 @@ class _FortuneScreenState extends ConsumerState<FortuneScreen> {
                       ref.read(pendingFortuneProvider.notifier).start(viewing),
                   onViewOther: () => _showGuestInputSheet(context),
                   onEditMyProfile: () => _showEditMyProfileSheet(context),
-                  onShowReports: () => context.push('/fortune/report'),
-                  onSwitchToMine: () => setState(() => _viewingProfile = null),
+                  onShowReports: () => _showReports(context),
+                  onSwitchToMine: _switchToMyProfile,
                   hasReports: reports.isNotEmpty,
                   reportsCount: reports.length,
                 ),
@@ -148,6 +161,8 @@ class _FortuneScreenState extends ConsumerState<FortuneScreen> {
     final guest = await showModalBottomSheet<SajuProfile>(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
       backgroundColor: AppColors.paper,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -171,6 +186,8 @@ class _FortuneScreenState extends ConsumerState<FortuneScreen> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
       backgroundColor: AppColors.paper,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -186,8 +203,21 @@ class _FortuneScreenState extends ConsumerState<FortuneScreen> {
     );
     if (mounted) {
       // 내 프로필이 바뀌었으니 viewing도 초기화 (내 것 다시 보기)
-      setState(() => _viewingProfile = null);
+      _switchToMyProfile();
     }
+  }
+
+  Future<void> _showReports(BuildContext context) async {
+    final selected = await context.push<SajuProfile>('/fortune/report');
+    if (!mounted || selected == null) return;
+
+    ref.read(pendingFortuneProvider.notifier).reset();
+    setState(() => _viewingProfile = selected);
+  }
+
+  void _switchToMyProfile() {
+    ref.read(pendingFortuneProvider.notifier).reset();
+    setState(() => _viewingProfile = null);
   }
 }
 
@@ -307,6 +337,7 @@ class _HubView extends StatelessWidget {
           sliver: SliverToBoxAdapter(
             child: _PrimaryActionCard(
               name: profile.name,
+              sky: sky,
               onTap: onFetchFortune,
             ),
           ),
@@ -349,19 +380,26 @@ class _HubView extends StatelessWidget {
 
 /// "오늘의 운세 받기" — 큰 강조 버튼. 광고 시청 진입점.
 class _PrimaryActionCard extends StatelessWidget {
-  const _PrimaryActionCard({required this.name, required this.onTap});
+  const _PrimaryActionCard({
+    required this.name,
+    required this.sky,
+    required this.onTap,
+  });
 
   final String name;
+  final SkyPalette sky;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final fill = sky.ink;
+    final fg = fill.computeLuminance() > 0.55 ? AppColors.ink : Colors.white;
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Material(
-          color: AppColors.ink,
+          color: fill,
           child: InkWell(
             onTap: onTap,
             child: Container(
@@ -382,13 +420,13 @@ class _PrimaryActionCard extends StatelessWidget {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
+                      color: fg.withValues(alpha: 0.14),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.auto_awesome_rounded,
                       size: 22,
-                      color: Colors.white,
+                      color: fg,
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -399,8 +437,8 @@ class _PrimaryActionCard extends StatelessWidget {
                       children: [
                         Text(
                           '$name의 오늘 운세 받기',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: fg,
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
                           ),
@@ -409,7 +447,7 @@ class _PrimaryActionCard extends StatelessWidget {
                         Text(
                           '광고 시청 후 결과를 볼 수 있어요',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.7),
+                            color: fg.withValues(alpha: 0.72),
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
@@ -420,7 +458,7 @@ class _PrimaryActionCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Icon(
                     Icons.chevron_right_rounded,
-                    color: Colors.white.withValues(alpha: 0.8),
+                    color: fg.withValues(alpha: 0.8),
                     size: 24,
                   ),
                 ],
@@ -707,7 +745,10 @@ class _SheetWrapper extends StatelessWidget {
         left: 20,
         right: 20,
         top: 16,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+        bottom:
+            MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.paddingOf(context).bottom +
+            20,
       ),
       child: SingleChildScrollView(
         child: Column(
