@@ -392,8 +392,8 @@ class _PrimaryActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fill = sky.ink;
-    final fg = fill.computeLuminance() > 0.55 ? AppColors.ink : Colors.white;
+    final fill = sky.sun;
+    final fg = AppColors.ink;
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
       child: BackdropFilter(

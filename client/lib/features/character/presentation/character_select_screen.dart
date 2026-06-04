@@ -24,9 +24,8 @@ class CharacterSelectScreen extends ConsumerWidget {
             _CharacterCard(
               character: char,
               isSelected: char.id == selected,
-              onTap: () => ref
-                  .read(selectedCharacterProvider.notifier)
-                  .set(char.id),
+              onTap: () =>
+                  ref.read(selectedCharacterProvider.notifier).set(char.id),
             ),
         ],
       ),
@@ -107,10 +106,7 @@ class _CharacterCard extends StatelessWidget {
               Positioned(
                 top: 0,
                 right: 0,
-                child: CharacterIntroButton(
-                  charId: character.id,
-                  size: 22,
-                ),
+                child: CharacterIntroButton(charId: character.id, size: 22),
               ),
             ],
           ),
@@ -121,8 +117,8 @@ class _CharacterCard extends StatelessWidget {
 }
 
 String _toneLabel(CharacterId id) => switch (id) {
-  CharacterId.jiyoung => '따뜻한 누나',
-  CharacterId.sohee => '시크한 누나',
-  CharacterId.jihoon => '듬직한 오빠',
-  CharacterId.siwon => '발랄한 동생',
+  CharacterId.jiyoung => '다정한 날사친',
+  CharacterId.sohee => '시크한 날사친',
+  CharacterId.jihoon => '듬직한 날사친',
+  CharacterId.siwon => '상냥한 날사친',
 };

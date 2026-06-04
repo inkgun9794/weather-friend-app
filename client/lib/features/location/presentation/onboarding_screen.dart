@@ -995,10 +995,10 @@ class _OnboardCharCard extends StatelessWidget {
   }
 
   String _tag(CharacterId id) => switch (id) {
-    CharacterId.jiyoung => '다정한 누나',
-    CharacterId.sohee => '시크한 누나',
-    CharacterId.jihoon => '듬직한 오빠',
-    CharacterId.siwon => '활발한 동생',
+    CharacterId.jiyoung => '다정한 날사친',
+    CharacterId.sohee => '시크한 날사친',
+    CharacterId.jihoon => '듬직한 날사친',
+    CharacterId.siwon => '상냥한 날사친',
   };
 
   String _quote(CharacterId id) => switch (id) {

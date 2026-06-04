@@ -18,7 +18,7 @@ class Character {
   static const all = <Character>[
     Character(
       id: CharacterId.jiyoung,
-      displayName: '다정한 지영',
+      displayName: '지영',
       gender: Gender.female,
       overseasMessage:
           '어? 지금 해외에 있는 것 같네! 여행 잘 다녀와~ '
@@ -26,13 +26,13 @@ class Character {
     ),
     Character(
       id: CharacterId.sohee,
-      displayName: '시크한 소희',
+      displayName: '소희',
       gender: Gender.female,
       overseasMessage: '해외야? 거긴 잘 몰라. 직접 검색해. 잘 다녀와.',
     ),
     Character(
       id: CharacterId.jihoon,
-      displayName: '듬직한 지훈',
+      displayName: '지훈',
       gender: Gender.male,
       overseasMessage:
           '현재 위치가 해외로 감지됐어. 여행이라면 잘 다녀와. '
@@ -40,7 +40,7 @@ class Character {
     ),
     Character(
       id: CharacterId.siwon,
-      displayName: '발랄한 시원',
+      displayName: '시원',
       gender: Gender.male,
       overseasMessage:
           '헐 해외 갔어??? 부럽다아ㅏㅏ '
@@ -49,8 +49,7 @@ class Character {
     ),
   ];
 
-  static Character byId(CharacterId id) =>
-      all.firstWhere((c) => c.id == id);
+  static Character byId(CharacterId id) => all.firstWhere((c) => c.id == id);
 
   static CharacterId? parseId(String value) {
     for (final id in CharacterId.values) {

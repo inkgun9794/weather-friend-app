@@ -67,22 +67,19 @@ class BirthInputFormStyle {
       fieldText: AppColors.ink,
       fieldHint: AppColors.inkMute,
       icon: AppColors.inkMute,
-      selectedFill: AppColors.ink,
-      selectedBorder: AppColors.ink,
-      selectedText: Colors.white,
+      selectedFill: AppColors.fortuneAccent,
+      selectedBorder: AppColors.fortuneAccent,
+      selectedText: AppColors.ink,
       unselectedText: AppColors.ink,
-      primaryFill: AppColors.ink,
-      primaryText: Colors.white,
+      primaryFill: AppColors.fortuneAccent,
+      primaryText: AppColors.ink,
       shadow: Colors.black.withValues(alpha: 0.06),
     );
   }
 
   factory BirthInputFormStyle.onSky(SkyPalette sky) {
     final lightText = sky.ink.computeLuminance() > 0.55;
-    final primaryFill = sky.ink;
-    final primaryText = primaryFill.computeLuminance() > 0.55
-        ? AppColors.ink
-        : Colors.white;
+    final primaryFill = sky.sun;
     return BirthInputFormStyle(
       labelColor: sky.inkSoft.withValues(alpha: lightText ? 0.95 : 0.86),
       fieldFill: Colors.white.withValues(alpha: lightText ? 0.86 : 0.88),
@@ -98,7 +95,7 @@ class BirthInputFormStyle {
       selectedText: AppColors.ink,
       unselectedText: AppColors.ink,
       primaryFill: primaryFill,
-      primaryText: primaryText,
+      primaryText: AppColors.ink,
       shadow: Colors.black.withValues(alpha: lightText ? 0.14 : 0.08),
       labelShadows: [
         Shadow(

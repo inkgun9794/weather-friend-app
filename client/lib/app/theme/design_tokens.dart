@@ -14,6 +14,7 @@ class AppColors {
   static final paper3 = oklch(0.93, 0.008, 95);
   static final line = oklch(0.88, 0.008, 95);
   static final hairline = oklch(0.92, 0.006, 95);
+  static final fortuneAccent = oklch(0.82, 0.13, 70);
 }
 
 class CharVisual {
