@@ -17,7 +17,10 @@ class ConversationScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncBriefings = ref.watch(todayBriefingsProvider);
-    final currentHour = currentHourKst();
+    final hour = currentHourKst();
+    // 00~04시는 아직 어제 사이클 — 어제 브리핑(6~21시)은 모두 지났으니 전부 보여준다.
+    // 05시부터는 현재 시각까지만 누적 표시.
+    final cutoff = hour < kstCycleStartHour ? 24 : hour;
 
     // 하단 글래스 탭 뒤로 ListView가 흘러들어가도록 — 마지막 버블이 가려지지 않게.
     final bottomInset =
@@ -39,7 +42,7 @@ class ConversationScreen extends ConsumerWidget {
         data: (briefings) {
           final entries =
               briefings.entries
-                  .where((e) => e.key <= currentHour)
+                  .where((e) => e.key <= cutoff)
                   .toList()
                 ..sort((a, b) => a.key.compareTo(b.key));
 

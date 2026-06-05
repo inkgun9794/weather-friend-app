@@ -8,7 +8,10 @@ import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/core/utils/kst.dart';
 import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
 import 'package:weather_friend/features/briefing/domain/briefing.dart';
+import 'package:weather_friend/features/briefing/domain/outfit_guide.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
+import 'package:weather_friend/features/briefing/presentation/current_weather_display.dart';
+import 'package:weather_friend/features/briefing/presentation/widgets/outfit_recommendation_section.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
 import 'package:weather_friend/features/location/data/selected_city_provider.dart';
 import 'package:weather_friend/shared/widgets/audio_bubble.dart';
@@ -27,11 +30,16 @@ class BriefingScreen extends ConsumerWidget {
       _ => currentHourKst(),
     };
     final sky = skyFor(currentHour);
+    final asyncHourly = ref.watch(todayHourlyWeatherProvider);
 
     return Scaffold(
       body: WeatherBg(
         hour: currentHour,
-        condition: _conditionForCurrent(asyncBriefings, currentHour),
+        condition: _conditionForCurrent(
+          asyncBriefings,
+          asyncHourly,
+          currentHour,
+        ),
         child: asyncBriefings.when(
           loading: () =>
               Center(child: CircularProgressIndicator(color: sky.ink)),
@@ -41,7 +49,14 @@ class BriefingScreen extends ConsumerWidget {
           data: (briefings) => SafeArea(
             bottom: false,
             child: RefreshIndicator(
-              onRefresh: () async => ref.invalidate(todayBriefingsProvider),
+              onRefresh: () async {
+                ref.invalidate(todayBriefingsProvider);
+                ref.invalidate(weatherBundleProvider);
+                await Future.wait([
+                  ref.read(todayBriefingsProvider.future),
+                  ref.read(todayHourlyWeatherProvider.future),
+                ]);
+              },
               // 화면 안 글래스 카드 4종(circle button, hero, timeline, weekly)을
               // 같은 backdrop key로 묶어 백그라운드 샘플링을 1회로 합친다.
               // 네비바(MainShell)는 스크롤 시 카드와 겹치므로 같은 그룹에 넣지
@@ -62,6 +77,13 @@ class BriefingScreen extends ConsumerWidget {
                       child: _HeroCard(
                         briefings: briefings,
                         currentHour: currentHour,
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: _OutfitSectionHost(
+                        briefings: briefings,
+                        currentHour: currentHour,
+                        sky: sky,
                       ),
                     ),
                     // "이전 메시지 보기" 버튼 — 오늘 사이클에 메시지가 하나라도 있을 때만.
@@ -206,23 +228,18 @@ bool _isDaytime(int hour, DateTime? sunrise, DateTime? sunset) {
 }
 
 WeatherCondition _conditionForCurrent(
-  AsyncValue<Map<int, Briefing>> async,
+  AsyncValue<Map<int, Briefing>> briefingsAsync,
+  AsyncValue<Map<int, HourlyWeather>> hourlyAsync,
   int hour,
 ) {
-  final data = async.value;
-  if (data == null) return WeatherCondition.clear;
-  final b = data[hour] ?? _nearestPast(data, hour);
-  // casual은 날씨 데이터 없음 → 직전 날씨 슬롯에서 condition을 끌어와야 하지만
-  // 일단은 clear로 fallback. 실제 표시에선 weather 영역을 숨기는 게 자연.
-  if (b == null || b.weatherSnapshot == null) return WeatherCondition.clear;
-  return _conditionFromString(b.weatherSnapshot!.condition);
-}
-
-Briefing? _nearestPast(Map<int, Briefing> briefings, int hour) {
-  for (var h = hour; h >= 0; h--) {
-    if (briefings[h] != null) return briefings[h];
-  }
-  return null;
+  final display = resolveCurrentWeatherDisplay(
+    hourly: hourlyAsync.value?[hour],
+    exactBriefing: briefingsAsync.value?[hour],
+  );
+  final condition = display.condition;
+  return condition == null
+      ? WeatherCondition.clear
+      : _conditionFromString(condition);
 }
 
 /// 메인 Hero에 띄울 brief 목록 (시간순).
@@ -341,18 +358,18 @@ class _BigTemp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Briefing(메시지 있는 hour) 우선, 없으면 Open-Meteo hourly 데이터로 fallback.
-    final b = briefings[currentHour] ?? _nearestPast(briefings, currentHour);
     final hourlyAsync = ref.watch(todayHourlyWeatherProvider);
     final hourly = switch (hourlyAsync) {
       AsyncData(:final value) => value[currentHour],
       _ => null,
     };
-    final temp =
-        b?.weatherSnapshot?.temperatureC.round() ??
-        hourly?.temperatureC.round();
-    final feels = b?.weatherSnapshot?.feelsLikeC.round();
-    final cond = b?.weatherSnapshot?.condition ?? hourly?.condition ?? '—';
+    final display = resolveCurrentWeatherDisplay(
+      hourly: hourly,
+      exactBriefing: briefings[currentHour],
+    );
+    final temp = display.temperatureC?.round();
+    final feels = display.feelsLikeC?.round();
+    final cond = display.condition ?? '—';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
@@ -410,10 +427,16 @@ class _BigTemp extends ConsumerWidget {
                         letterSpacing: -0.1,
                       ),
                     ),
-                    if (b != null && b.weatherSnapshot != null) ...[
+                    if (display.precipitationProb != null ||
+                        display.humidity != null) ...[
                       const SizedBox(height: 2),
                       Text(
-                        '강수 ${b.weatherSnapshot!.precipitationProb}% · 습도 ${b.weatherSnapshot!.humidity}%',
+                        [
+                          if (display.precipitationProb != null)
+                            '강수 ${display.precipitationProb}%',
+                          if (display.humidity != null)
+                            '습도 ${display.humidity}%',
+                        ].join(' · '),
                         style: TextStyle(
                           color: sky.inkSoft,
                           fontSize: 12,
@@ -470,13 +493,14 @@ class _HeroBriefingCard extends StatelessWidget {
     if (charId == null) return const SizedBox.shrink();
     final v = visualFor(charId);
     final character = Character.byId(charId);
+    final hasAudio = briefing.audioUrl != null;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
       child: BackdropFilter.grouped(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.88),
             borderRadius: BorderRadius.circular(22),
@@ -494,7 +518,7 @@ class _HeroBriefingCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  CharacterPortrait(charId: charId, size: 36),
+                  CharacterPortrait(charId: charId, size: 34),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -510,7 +534,7 @@ class _HeroBriefingCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '${character.displayName.split(' ').first} · ${_hourLabel(briefing.hour)}:00 전송',
+                          '${_hourLabel(briefing.hour)}:00 전송',
                           style: TextStyle(
                             color: AppColors.inkMute,
                             fontSize: 11,
@@ -542,25 +566,70 @@ class _HeroBriefingCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
-              Text(
-                briefing.transcript,
-                style: TextStyle(
-                  color: AppColors.ink,
-                  fontSize: 14.5,
-                  height: 1.55,
-                  fontWeight: FontWeight.w400,
-                  letterSpacing: -0.1,
-                ),
-              ),
-              if (briefing.audioUrl != null) ...[
-                const SizedBox(height: 14),
+              if (hasAudio) ...[
+                const SizedBox(height: 12),
                 AudioBubble(charId: charId, audioUrl: briefing.audioUrl!),
+              ] else ...[
+                const SizedBox(height: 12),
+                Text(
+                  briefing.transcript,
+                  style: TextStyle(
+                    color: AppColors.ink,
+                    fontSize: 14.5,
+                    height: 1.55,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: -0.1,
+                  ),
+                ),
               ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _OutfitSectionHost extends ConsumerWidget {
+  const _OutfitSectionHost({
+    required this.briefings,
+    required this.currentHour,
+    required this.sky,
+  });
+
+  final Map<int, Briefing> briefings;
+  final int currentHour;
+  final SkyPalette sky;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hourlyAsync = ref.watch(todayHourlyWeatherProvider);
+    final hourly = switch (hourlyAsync) {
+      AsyncData(:final value) => value[currentHour],
+      _ => null,
+    };
+    final display = resolveCurrentWeatherDisplay(
+      hourly: hourly,
+      exactBriefing: briefings[currentHour],
+    );
+    final feelsLike = display.feelsLikeC ?? display.temperatureC;
+    if (feelsLike == null) return const SizedBox.shrink();
+
+    final dateAsync = ref.watch(kstDateProvider);
+    final date = switch (dateAsync) {
+      AsyncData(:final value) => value,
+      _ => todayKstIso(),
+    };
+    final city = ref.watch(selectedCityProvider);
+    final temperature = feelsLike.round();
+    final guide = outfitGuideFor(temperature);
+    final recommendation = guide.recommendationFor('$date|${city.cityId}');
+
+    return OutfitRecommendationSection(
+      temperature: temperature,
+      guide: guide,
+      recommendation: recommendation,
+      sky: sky,
     );
   }
 }

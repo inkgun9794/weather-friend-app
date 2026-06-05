@@ -22,13 +22,17 @@ class HourlyWeather {
     required this.temperatureC,
     required this.condition,
     required this.precipitationProb,
+    this.feelsLikeC,
+    this.humidity,
     this.weatherCode,
   });
 
   final int hour;
   final double temperatureC;
+  final double? feelsLikeC;
   final String condition;
   final int precipitationProb;
+  final int? humidity;
 
   /// 원본 WMO weather code (Open-Meteo). 강도/세부 condition 매핑용.
   /// null이면 KMA 출처 등으로 코드 없음.
@@ -184,7 +188,8 @@ class OpenMeteoClient {
     final uri = Uri.https('api.open-meteo.com', '/v1/forecast', {
       'latitude': lat.toString(),
       'longitude': lng.toString(),
-      'hourly': 'temperature_2m,precipitation_probability,weather_code',
+      'hourly':
+          'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,weather_code',
       'daily':
           'temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,sunrise,sunset',
       'timezone': 'Asia/Seoul',
@@ -199,13 +204,22 @@ class OpenMeteoClient {
     final data = json.decode(resp.body) as Map<String, dynamic>;
     final hourly = data['hourly'] as Map<String, dynamic>;
     final temps = (hourly['temperature_2m'] as List);
+    final feelsLike = (hourly['apparent_temperature'] as List);
+    final humidity = (hourly['relative_humidity_2m'] as List);
     final probs = (hourly['precipitation_probability'] as List);
     final codes = (hourly['weather_code'] as List);
 
     // 오늘 24시간만 hourly map으로 (연결형 strip용).
     final today = <int, HourlyWeather>{};
     for (var h = 0; h < 24 && h < temps.length; h++) {
-      today[h] = _snapshot(h, temps[h], probs[h], codes[h]);
+      today[h] = _snapshot(
+        h,
+        temps[h],
+        feelsLike[h],
+        humidity[h],
+        probs[h],
+        codes[h],
+      );
     }
 
     // 일별 요약.
@@ -297,11 +311,20 @@ class OpenMeteoClient {
     );
   }
 
-  HourlyWeather _snapshot(int hour, Object? temp, Object? prob, Object? code) {
+  HourlyWeather _snapshot(
+    int hour,
+    Object? temp,
+    Object? feelsLike,
+    Object? humidity,
+    Object? prob,
+    Object? code,
+  ) {
     final codeInt = (code as num).toInt();
     return HourlyWeather(
       hour: hour,
       temperatureC: (temp as num).toDouble(),
+      feelsLikeC: (feelsLike as num).toDouble(),
+      humidity: (humidity as num).toInt(),
       condition: _weatherCodeKo[codeInt] ?? '알 수 없음',
       precipitationProb: ((prob as num?) ?? 0).toInt(),
       weatherCode: codeInt,

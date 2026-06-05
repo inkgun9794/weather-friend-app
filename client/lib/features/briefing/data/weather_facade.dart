@@ -50,22 +50,24 @@ class WeatherFacade {
       return kma;
     }
 
-    // 둘 다 성공 — KMA 데이터 위에 Open-Meteo의 보조 데이터(일출/일몰, weather_code) 덮어씀.
+    // 둘 다 성공 — KMA 데이터 위에 Open-Meteo 보조 데이터를 덮어씀.
     debugPrint('[weather_facade] ✅ KMA + Open-Meteo 병합');
     return _mergeKmaWithOpenMeteoAux(kma, om);
   }
 
   /// KMA bundle을 base로 두고 Open-Meteo에서 다음만 보강:
   /// - sunriseToday / sunsetToday (KMA는 안 줌)
-  /// - 각 hourlyWeather의 weatherCode (강도 매핑용)
+  /// - 각 hourlyWeather의 체감온도, 습도, weatherCode
   WeatherBundle _mergeKmaWithOpenMeteoAux(WeatherBundle kma, WeatherBundle om) {
-    // KMA의 hourly에 Open-Meteo의 weatherCode만 보강 (조건/기온은 KMA 유지)
+    // 조건/기온은 KMA를 유지하고 KMA가 제공하지 않는 현재 지표만 보강.
     final mergedHourly = <int, HourlyWeather>{};
     kma.today.forEach((hour, kmaHour) {
       final omHour = om.today[hour];
       mergedHourly[hour] = HourlyWeather(
         hour: kmaHour.hour,
         temperatureC: kmaHour.temperatureC,
+        feelsLikeC: omHour?.feelsLikeC ?? kmaHour.feelsLikeC,
+        humidity: omHour?.humidity ?? kmaHour.humidity,
         condition: kmaHour.condition,
         precipitationProb: kmaHour.precipitationProb,
         // KMA 조건 유지. Open-Meteo의 weather_code만 가져와서 강도 보강용 (UI는 KMA condition 우선)

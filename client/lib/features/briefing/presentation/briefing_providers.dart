@@ -33,11 +33,11 @@ final selectedCharacterProvider =
       SelectedCharacterNotifier.new,
     );
 
-/// KST 자정마다 새 ISO date를 emit. 0시 도래 시 date 의존 provider들 자동 invalidate.
+/// 사이클 경계(KST 05시)마다 새 ISO date를 emit. 05시 도래 시 date 의존 provider들 자동 invalidate.
 final kstDateProvider = StreamProvider<String>((ref) async* {
   yield todayKstIso();
   while (true) {
-    await Future<void>.delayed(untilNextKstMidnight());
+    await Future<void>.delayed(untilNextKstCycleStart());
     yield todayKstIso();
   }
 });
@@ -76,12 +76,12 @@ final todayBriefingsProvider = FutureProvider<Map<int, Briefing>>((ref) async {
   return const <int, Briefing>{};
 });
 
-/// weatherBundleProvider를 wrap — kstDateProvider watch해서 자정에 새로 fetch.
+/// weatherBundleProvider를 wrap — kstDateProvider watch해서 사이클 경계(05시)에 새로 fetch.
 /// (open_meteo_client.dart의 raw provider는 그대로 두고, 여기서 시간 의존성 추가.)
 final reactiveWeatherBundleProvider = FutureProvider<WeatherBundle>((
   ref,
 ) async {
-  ref.watch(kstDateProvider); // 자정에 새 fetch 트리거
+  ref.watch(kstDateProvider); // 05시 경계에 새 fetch 트리거
   ref.invalidate(weatherBundleProvider);
   return ref.watch(weatherBundleProvider.future);
 });
