@@ -5,7 +5,6 @@ import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
 import 'package:weather_friend/features/briefing/domain/briefing.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
 import 'package:weather_friend/core/services/shared_prefs_provider.dart';
-import 'package:weather_friend/features/location/data/selected_city_provider.dart';
 
 const _defaultCity = 'seoul';
 const _selectedCharacterKey = 'selected_character_id';
@@ -59,21 +58,13 @@ final todayBriefingsProvider = FutureProvider<Map<int, Briefing>>((ref) async {
   };
   final repo = ref.watch(briefingRepositoryProvider);
   final character = ref.watch(selectedCharacterProvider);
-  final city = ref.watch(selectedCityProvider);
-  final briefingCity = city.briefingCityKey;
-  final selectedCityBriefings = await repo.fetchDay(
-    city: briefingCity,
+  // 브리핑(텍스트·음성)은 서울 특화 — 사용자가 어느 지역에 있든 항상 서울 기준으로 제공.
+  // (날씨 카드는 선택한 KMA 도시를 그대로 쓰므로 지역 날씨는 정상 표시된다.)
+  return repo.fetchDay(
+    city: _defaultCity,
     date: date,
     characterId: character.name,
   );
-  if (selectedCityBriefings.isNotEmpty || briefingCity == _defaultCity) {
-    return selectedCityBriefings;
-  }
-
-  // The worker currently generates AI/audio briefings for Seoul only. Weather
-  // cards still use the selected KMA city; this avoids showing Seoul text for
-  // a non-Seoul location until per-city briefings are generated server-side.
-  return const <int, Briefing>{};
 });
 
 /// weatherBundleProvider를 wrap — kstDateProvider watch해서 사이클 경계(05시)에 새로 fetch.

@@ -385,55 +385,67 @@ class _OutfitGalleryItem extends StatelessWidget {
       children: [
         AspectRatio(
           aspectRatio: 0.8,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: const Color(0xFFF3F2EE),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isRecommended
-                    ? const Color(0xFF5F8E6C)
-                    : const Color(0xFFE5E3DD),
-                width: isRecommended ? 1.5 : 1,
-              ),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(7),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: Image.asset(
-                      option.assetPath,
-                      fit: BoxFit.contain,
-                      filterQuality: FilterQuality.medium,
-                    ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3F2EE),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  if (isRecommended)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3E6B4B),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          '오늘 추천',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0,
-                          ),
-                        ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.asset(
+                        option.assetPath,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.medium,
                       ),
                     ),
-                ],
+                  ),
+                ),
               ),
-            ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isRecommended
+                            ? const Color(0xFF4F805D)
+                            : const Color(0xFFD9D7D0),
+                        width: isRecommended ? 1.5 : 1,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (isRecommended)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3E6B4B),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      '오늘 추천',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         const SizedBox(height: 9),
