@@ -155,14 +155,23 @@ class CityCatalog {
     }.where((s) => s.isNotEmpty).toList();
 
     final cities = await load();
+
+    // 1) 정확 일치 우선 — 가장 구체적인 후보부터.
     for (final candidate in candidates) {
       for (final city in cities) {
-        final label = _normalizePlace(city.label);
-        if (label == candidate || label.startsWith(candidate)) {
-          return city;
-        }
+        if (_normalizePlace(city.label) == candidate) return city;
       }
     }
+
+    // 2) 접두 일치 — 한 후보가 여러 도시에 걸리면(예: "경기성남시" → 수정·중원·분당구)
+    //    모호하므로 임의로 첫 항목을 고르지 않고 건너뛴다. caller가 nearest()로 폴백.
+    for (final candidate in candidates) {
+      final matches = cities
+          .where((c) => _normalizePlace(c.label).startsWith(candidate))
+          .toList();
+      if (matches.length == 1) return matches.first;
+    }
+
     return null;
   }
 

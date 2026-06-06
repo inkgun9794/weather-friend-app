@@ -424,7 +424,7 @@ class _OutfitGalleryItem extends StatelessWidget {
               if (isRecommended)
                 Positioned(
                   top: 8,
-                  left: 8,
+                  right: 8,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
