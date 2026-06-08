@@ -80,9 +80,6 @@ class BriefingScreen extends ConsumerWidget {
                         currentHour: currentHour,
                       ),
                     ),
-                    // "이전 메시지 보기" 버튼 — 오늘 사이클에 메시지가 하나라도 있을 때만.
-                    if (briefings.isNotEmpty)
-                      SliverToBoxAdapter(child: _ConversationLink(sky: sky)),
                     // 초단기 섹션(UltraShortSection)·라디오 진입 제거 — 24h strip에
                     // 이미 초단기 데이터가 머지되어 있어 정보 손실 X.
                     SliverToBoxAdapter(
@@ -364,8 +361,6 @@ class _BigTemp extends ConsumerWidget {
     final temp = display.temperatureC?.round();
     final feels = display.feelsLikeC?.round();
     final cond = display.condition ?? '—';
-    final outfitTemp = feels ?? temp;
-    final outfitGuide = outfitTemp != null ? outfitGuideFor(outfitTemp) : null;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
@@ -446,35 +441,45 @@ class _BigTemp extends ConsumerWidget {
               ),
             ],
           ),
-          if (outfitGuide != null) ...[
-            const SizedBox(height: 16),
-            OutfitRecommendationSection(guide: outfitGuide, sky: sky),
-          ],
         ],
       ),
     );
   }
 }
 
-class _HeroCard extends StatelessWidget {
+class _HeroCard extends ConsumerWidget {
   const _HeroCard({required this.briefings, required this.currentHour});
 
   final Map<int, Briefing> briefings;
   final int currentHour;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final heroes = _mainHeroBriefings(briefings, currentHour);
     if (heroes.isEmpty) {
       return const SizedBox.shrink();
     }
+    final hourlyAsync = ref.watch(todayHourlyWeatherProvider);
+    final hourly = switch (hourlyAsync) {
+      AsyncData(:final value) => value[currentHour],
+      _ => null,
+    };
+    final display = resolveCurrentWeatherDisplay(
+      hourly: hourly,
+      exactBriefing: briefings[currentHour],
+    );
+    final outfitTemp = display.feelsLikeC ?? display.temperatureC;
+    final outfitGuide = outfitTemp != null
+        ? outfitGuideFor(outfitTemp.round())
+        : null;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
       child: Column(
         children: [
           for (var i = 0; i < heroes.length; i++) ...[
             if (i > 0) const SizedBox(height: 10),
-            _HeroBriefingCard(briefing: heroes[i]),
+            _HeroBriefingCard(briefing: heroes[i], outfitGuide: outfitGuide),
           ],
         ],
       ),
@@ -483,9 +488,10 @@ class _HeroCard extends StatelessWidget {
 }
 
 class _HeroBriefingCard extends StatelessWidget {
-  const _HeroBriefingCard({required this.briefing});
+  const _HeroBriefingCard({required this.briefing, required this.outfitGuide});
 
   final Briefing briefing;
+  final OutfitGuide? outfitGuide;
 
   @override
   Widget build(BuildContext context) {
@@ -569,6 +575,19 @@ class _HeroBriefingCard extends StatelessWidget {
               if (hasAudio) ...[
                 const SizedBox(height: 12),
                 AudioBubble(charId: charId, audioUrl: briefing.audioUrl!),
+                if (outfitGuide != null) ...[
+                  const SizedBox(height: 13),
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: AppColors.ink.withValues(alpha: 0.07),
+                  ),
+                  const SizedBox(height: 12),
+                  OutfitRecommendationSection(
+                    guide: outfitGuide!,
+                    characterId: charId,
+                  ),
+                ],
               ] else ...[
                 const SizedBox(height: 12),
                 Text(
@@ -583,51 +602,6 @@ class _HeroBriefingCard extends StatelessWidget {
                 ),
               ],
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ConversationLink extends StatelessWidget {
-  const _ConversationLink({required this.sky});
-
-  final SkyPalette sky;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-      child: Material(
-        color: Colors.white.withValues(alpha: 0.28),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () => context.go('/messages'),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Icon(Icons.chat_bubble_outline, color: sky.ink, size: 16),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '이전 메시지 보기',
-                    style: TextStyle(
-                      color: sky.ink,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.1,
-                    ),
-                  ),
-                ),
-                Icon(Icons.chevron_right, color: sky.inkSoft, size: 18),
-              ],
-            ),
           ),
         ),
       ),
@@ -720,7 +694,6 @@ class _TimelineSectionState extends State<_TimelineSection> {
     }
     final hasGraph = temperatures.length >= 2;
     final stripHeight = hasGraph ? _stripHeightWithGraph : 140.0;
-    final contentHeight = stripHeight - 16;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -791,82 +764,87 @@ class _TimelineSectionState extends State<_TimelineSection> {
                     ],
                   ),
                 ),
-                // 헤더와 strip을 가르는 얇은 디바이더 (잉크 8% — 거의 안 보이지만
-                // 시각적 구분은 됨).
-                Container(
-                  height: 1,
-                  margin: const EdgeInsets.symmetric(horizontal: 12),
-                  color: sky.ink.withValues(alpha: 0.08),
-                ),
                 // 실제 시간별 기온 곡선과 24시간 슬롯이 같은 가로축을 공유한다.
-                // 새벽→일출→낮→일몰→밤 그라데이션도 스크롤과 함께 이어진다.
+                // 구분선부터 카드 하단까지 그라데이션이 빈틈없이 이어진다.
                 SizedBox(
                   height: stripHeight,
                   child: SingleChildScrollView(
                     controller: _controller,
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: _stripHPad,
-                      vertical: 8,
-                    ),
                     child: Container(
+                      width: _stripContentWidth + (_stripHPad * 2),
+                      height: stripHeight,
                       decoration: BoxDecoration(
                         gradient: _hourGradient(
                           sunrise: widget.sunrise,
                           sunset: widget.sunset,
                         ),
-                        borderRadius: BorderRadius.circular(18),
                       ),
-                      child: SizedBox(
-                        width: _stripContentWidth,
-                        height: contentHeight,
-                        child: Stack(
-                          children: [
-                            if (hasGraph)
-                              Positioned(
-                                left: 0,
-                                right: 0,
-                                bottom: 3,
-                                height: _graphHeight,
-                                child: Semantics(
-                                  image: true,
-                                  label: '시간별 기온 변화 그래프',
-                                  child: CustomPaint(
-                                    key: const Key('temperature-curve'),
-                                    painter: _TemperatureCurvePainter(
-                                      temperatures: temperatures,
-                                      currentHour: widget.currentHour,
-                                      slotPitch: _slotPitch,
-                                      slotWidth: _slotWidth,
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            child: Container(
+                              height: 1,
+                              color: sky.ink.withValues(alpha: 0.08),
+                            ),
+                          ),
+                          Positioned(
+                            top: 1,
+                            bottom: 0,
+                            left: _stripHPad,
+                            right: _stripHPad,
+                            child: Stack(
+                              children: [
+                                if (hasGraph)
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 3,
+                                    height: _graphHeight,
+                                    child: Semantics(
+                                      image: true,
+                                      label: '시간별 기온 변화 그래프',
+                                      child: CustomPaint(
+                                        key: const Key('temperature-curve'),
+                                        painter: _TemperatureCurvePainter(
+                                          temperatures: temperatures,
+                                          currentHour: widget.currentHour,
+                                          slotPitch: _slotPitch,
+                                          slotWidth: _slotWidth,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  top: 0,
+                                  height: _slotsHeight,
+                                  child: Row(
+                                    children: List.generate(
+                                      24,
+                                      (hour) => _HourSlot(
+                                        hour: hour,
+                                        briefing: widget.briefings[hour],
+                                        hourly: widget.hourlyWeather[hour],
+                                        sky: sky,
+                                        isNow: hour == widget.currentHour,
+                                        isPast: hour < widget.currentHour,
+                                        width: _slotWidth,
+                                        rightGap: _slotGap,
+                                        sunrise: widget.sunrise,
+                                        sunset: widget.sunset,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              top: 0,
-                              height: _slotsHeight,
-                              child: Row(
-                                children: List.generate(
-                                  24,
-                                  (hour) => _HourSlot(
-                                    hour: hour,
-                                    briefing: widget.briefings[hour],
-                                    hourly: widget.hourlyWeather[hour],
-                                    sky: sky,
-                                    isNow: hour == widget.currentHour,
-                                    isPast: hour < widget.currentHour,
-                                    width: _slotWidth,
-                                    rightGap: _slotGap,
-                                    sunrise: widget.sunrise,
-                                    sunset: widget.sunset,
-                                  ),
-                                ),
-                              ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -1082,10 +1060,6 @@ class _HourSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasAudio = briefing?.audioUrl != null;
-    final charId = briefing != null
-        ? Character.parseId(briefing!.characterId)
-        : null;
     // Briefing 데이터(메시지 있는 hour) 우선, 없으면 Open-Meteo hourly로 fallback.
     // casual 타입은 weatherSnapshot이 null이라 그땐 hourly fallback 사용.
     final conditionStr =
@@ -1151,24 +1125,6 @@ class _HourSlot extends StatelessWidget {
                   fontFeatures: const [FontFeature.tabularFigures()],
                   letterSpacing: -0.3,
                 ),
-              ),
-              const SizedBox(height: 4),
-              // 음성 보유 표시 — 작은 점으로. 슬롯 높이를 일정하게 유지하려고
-              // 점이 없어도 같은 크기 영역을 차지.
-              SizedBox(
-                height: 6,
-                child: hasAudio && charId != null
-                    ? Center(
-                        child: Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: visualFor(charId).color,
-                          ),
-                        ),
-                      )
-                    : null,
               ),
             ],
           ),

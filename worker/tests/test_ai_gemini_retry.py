@@ -6,7 +6,7 @@ retry storm 재발 방지의 핵심: 429(일일 quota 소진 / 선불 고갈)는
 
 import unittest
 
-from adapters.ai_gemini import _is_retryable
+from adapters.ai_gemini import _is_quota_exhausted, _is_retryable
 
 # 실제 GitHub Actions 로그에서 가져온 429 메시지들
 DAILY_QUOTA_429 = (
@@ -31,6 +31,18 @@ class RetryableClassificationTest(unittest.TestCase):
         for msg in ("503 UNAVAILABLE", "500 INTERNAL", "502", "504",
                     "DEADLINE_EXCEEDED", "request timeout"):
             self.assertTrue(_is_retryable(Exception(msg)), msg)
+
+
+class QuotaExhaustedClassificationTest(unittest.TestCase):
+    """폴백 트리거: 429(일일 quota/선불 고갈)는 quota 소진으로 분류돼야 다음 모델로 넘어감."""
+
+    def test_429_is_quota_exhausted(self) -> None:
+        self.assertTrue(_is_quota_exhausted(Exception(DAILY_QUOTA_429)))
+        self.assertTrue(_is_quota_exhausted(Exception(PREPAY_DEPLETED_429)))
+
+    def test_transient_is_not_quota_exhausted(self) -> None:
+        for msg in ("503 UNAVAILABLE", "500 INTERNAL", "request timeout"):
+            self.assertFalse(_is_quota_exhausted(Exception(msg)), msg)
 
 
 if __name__ == "__main__":

@@ -52,6 +52,15 @@ def _is_retryable(error: Exception) -> bool:
     )
 
 
+def _is_quota_exhausted(error: Exception) -> bool:
+    """429 RESOURCE_EXHAUSTED (일일 quota 소진 / 선불 고갈).
+
+    같은 모델을 재시도해봐야 소용없으니, 폴백 모델로 넘어가라는 신호로 쓴다.
+    """
+    s = str(error)
+    return "RESOURCE_EXHAUSTED" in s or "429" in s
+
+
 def _parse_dual_output(raw: str) -> tuple[str, str | None]:
     """Gemini 응답에서 (메시지, 음성) 추출.
 
@@ -69,21 +78,22 @@ def _parse_dual_output(raw: str) -> tuple[str, str | None]:
         return raw.strip(), None
     return message, (voice or None)
 
-# morning 알림 슬롯(6시)은 음성+텍스트 두 버전을 만들고, 사용자가 푸시로 받는 첫인상이라
-# quality 우선 — 한 세대 위 lite를 씀. 나머지 hourly/casual은 짧은 한 줄이라 비용 우선.
-# 둘 다 paid Tier 1. 호출당 약 $0.0007 (alarm) vs $0.0002 (hourly/casual).
-# CASUAL은 google_search grounding tool이 필요해서 lite도 OK.
-_MODEL_ALARM = "gemini-3.1-flash-lite"
-_MODEL_HOURLY = "gemini-2.5-flash-lite"
-_MODEL_CASUAL = "gemini-2.5-flash-lite"
+# 슬롯 타입별 모델 폴백 체인 — 1순위 모델이 일일 quota(per-model-per-day) 소진되면
+# 자동으로 다음 모델로 넘어간다. 평소엔 1순위만 쓰지만, storm/스파이크로 한 모델이
+# 막혀도 생성이 안 끊기게 함. (일일 한도: 3.1-lite 50 / 2.5-lite 200 / 2.5-flash 100)
+# morning(6시)은 음성+푸시 첫인상이라 quality 우선 3.1-lite, 나머지는 비용 우선 2.5-lite.
+# CASUAL은 google_search grounding이 필요한데 두 모델 다 지원.
+_MODELS_ALARM = ("gemini-3.1-flash-lite", "gemini-2.5-flash")
+_MODELS_HOURLY = ("gemini-2.5-flash-lite", "gemini-2.5-flash")
+_MODELS_CASUAL = ("gemini-2.5-flash-lite", "gemini-2.5-flash")
 
 
-def _model_for(briefing_type: BriefingType) -> str:
+def _models_for(briefing_type: BriefingType) -> tuple[str, ...]:
     if briefing_type == BriefingType.MORNING:
-        return _MODEL_ALARM
+        return _MODELS_ALARM
     if briefing_type == BriefingType.CASUAL:
-        return _MODEL_CASUAL
-    return _MODEL_HOURLY
+        return _MODELS_CASUAL
+    return _MODELS_HOURLY
 
 
 def _format_rain_blocks(blocks: tuple[RainBlock, ...]) -> str:
@@ -229,26 +239,38 @@ class GeminiScriptGenerator:
 
         config = types.GenerateContentConfig(**config_kwargs)
 
-        last_exc: Exception | None = None
-        for attempt in range(1, _MAX_RETRIES + 1):
-            try:
-                response = await self._client.aio.models.generate_content(
-                    model=_model_for(briefing_type),
-                    contents=contents,
-                    config=config,
-                )
-                return _parse_dual_output(response.text or "")
-            except Exception as e:
-                if not _is_retryable(e) or attempt == _MAX_RETRIES:
-                    raise
-                last_exc = e
-                wait = _RETRY_BASE_DELAY_SEC * (2 ** (attempt - 1))
-                log.warning(
-                    "Gemini transient error (attempt %d/%d): %s — retry in %.0fs",
-                    attempt, _MAX_RETRIES, e.__class__.__name__, wait,
-                )
-                await asyncio.sleep(wait)
+        # 모델 폴백 체인: 1순위가 일일 quota 소진(429)되면 다음 모델로 자동 전환.
+        models = _models_for(briefing_type)
+        quota_exc: Exception | None = None
+        for mi, model in enumerate(models):
+            for attempt in range(1, _MAX_RETRIES + 1):
+                try:
+                    response = await self._client.aio.models.generate_content(
+                        model=model,
+                        contents=contents,
+                        config=config,
+                    )
+                    return _parse_dual_output(response.text or "")
+                except Exception as e:
+                    # 일일 quota 소진(429): 같은 모델 재시도 무의미 → 다음 폴백 모델로.
+                    if _is_quota_exhausted(e):
+                        quota_exc = e
+                        if mi < len(models) - 1:
+                            log.warning(
+                                "Gemini '%s' 일일 quota 소진 — 폴백 '%s' 시도",
+                                model, models[mi + 1],
+                            )
+                        break  # 재시도 루프 탈출 → 다음 model
+                    # 진짜 일시적 에러(5xx/timeout)만 같은 모델 재시도, 그 외 즉시 raise.
+                    if not _is_retryable(e) or attempt == _MAX_RETRIES:
+                        raise
+                    wait = _RETRY_BASE_DELAY_SEC * (2 ** (attempt - 1))
+                    log.warning(
+                        "Gemini transient error (attempt %d/%d): %s — retry in %.0fs",
+                        attempt, _MAX_RETRIES, e.__class__.__name__, wait,
+                    )
+                    await asyncio.sleep(wait)
 
-        # 도달 불가능하지만 mypy/타입체커 만족용
-        assert last_exc is not None
-        raise last_exc
+        # 폴백 체인의 모든 모델이 quota 소진.
+        assert quota_exc is not None
+        raise quota_exc
