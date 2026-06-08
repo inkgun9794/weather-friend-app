@@ -11,8 +11,8 @@ import 'package:weather_friend/features/fortune/data/saju_profile.dart';
 // Public widgets
 // ─────────────────────────────────────────────────────────────────
 
-/// 오늘의 운세 7개 섹션 카드 — 화면 상단용.
-///   ## 오늘의 운세 / 관계/대인 / 일/공부 / 재물 / 건강 / 챙길 점 / 한 줄 조언
+/// 날씨 앱에서 빠르게 읽는 세 가지 핵심 운세.
+///   ## 오늘의 운세 / 챙길 점 / 한 줄 조언
 class FortuneTodayCards extends ConsumerWidget {
   const FortuneTodayCards({super.key, required this.profile});
 
@@ -41,14 +41,13 @@ class FortuneTodayCards extends ConsumerWidget {
             const SizedBox(height: 14),
             _ErrorState(
               message: e is FortuneApiException ? e.message : '운세를 불러올 수 없어요',
-              onRetry: () =>
-                  ref.invalidate(fortuneForProfileProvider(profile)),
+              onRetry: () => ref.invalidate(fortuneForProfileProvider(profile)),
             ),
           ],
         ),
       ),
       data: (fortune) {
-        final sections = _parseSections(fortune.text);
+        final sections = _selectConciseSections(fortune.text);
         if (sections.isEmpty) {
           return _GlassCard(
             child: Column(
@@ -61,17 +60,25 @@ class FortuneTodayCards extends ConsumerWidget {
             ),
           );
         }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < sections.length; i++) ...[
-              _SectionCard(
-                section: sections[i],
-                subtitle: i == 0 ? _todayLabel() : null,
-              ),
-              if (i < sections.length - 1) const SizedBox(height: 12),
+        return _GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _CardTitle('오늘의 운세', subtitle: _todayLabel()),
+              const SizedBox(height: 12),
+              for (var i = 0; i < sections.length; i++) ...[
+                _ConciseSection(section: sections[i]),
+                if (i < sections.length - 1) ...[
+                  const SizedBox(height: 14),
+                  Divider(
+                    height: 1,
+                    color: AppColors.ink.withValues(alpha: 0.08),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+              ],
             ],
-          ],
+          ),
         );
       },
     );
@@ -401,7 +408,7 @@ class _Section {
   final String body;
 }
 
-/// `## 제목` 단위로 분리. '총평' → '오늘의 운세' 매핑.
+/// `## 제목` 단위로 분리.
 /// '영역별 운' 같은 wrapper 헤딩 무시. 첫 ## 이전 도입 인사말 무시.
 List<_Section> _parseSections(String raw) {
   final lines = raw.split('\n');
@@ -421,8 +428,7 @@ List<_Section> _parseSections(String raw) {
     final line = raw.trimRight();
     if (line.startsWith('## ')) {
       flush();
-      var title = line.substring(3).trim();
-      if (title == '총평') title = '오늘의 운세';
+      final title = _normalizeSectionTitle(line.substring(3).trim());
       if (title == '영역별 운') {
         currentTitle = null;
         continue;
@@ -439,22 +445,57 @@ List<_Section> _parseSections(String raw) {
   return sections;
 }
 
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.section, this.subtitle});
+String _normalizeSectionTitle(String title) {
+  return switch (title.replaceAll(' ', '')) {
+    '총평' || '오늘의운세' => '오늘의 운세',
+    '챙길점' => '챙길 점',
+    '한줄조언' => '한 줄 조언',
+    _ => title,
+  };
+}
+
+List<_Section> _selectConciseSections(String raw) {
+  const order = ['오늘의 운세', '챙길 점', '한 줄 조언'];
+  final parsed = _parseSections(raw);
+  if (parsed.isEmpty) return const [];
+
+  final byTitle = <String, _Section>{};
+  for (final section in parsed) {
+    final title = _normalizeSectionTitle(section.title);
+    if (order.contains(title) && section.body.trim().isNotEmpty) {
+      byTitle.putIfAbsent(
+        title,
+        () => _Section(title: title, body: section.body),
+      );
+    }
+  }
+  return [for (final title in order) ?byTitle[title]];
+}
+
+class _ConciseSection extends StatelessWidget {
+  const _ConciseSection({required this.section});
   final _Section section;
-  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
-    return _GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _CardTitle(section.title, subtitle: subtitle),
-          const SizedBox(height: 10),
-          _SectionBody(text: section.body),
+    final showTitle = section.title != '오늘의 운세';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (showTitle) ...[
+          Text(
+            section.title,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: AppColors.inkMute,
+              letterSpacing: -0.1,
+            ),
+          ),
+          const SizedBox(height: 6),
         ],
-      ),
+        _SectionBody(text: section.body),
+      ],
     );
   }
 }
@@ -491,12 +532,12 @@ class _SectionBody extends StatelessWidget {
 
     void flushBullets() {
       if (bullets.isNotEmpty) {
-        widgets.add(Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final item in bullets) _BulletItem(text: item),
-          ],
-        ));
+        widgets.add(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [for (final item in bullets) _BulletItem(text: item)],
+          ),
+        );
         bullets.clear();
       }
     }
@@ -549,13 +590,12 @@ class _Paragraph extends StatelessWidget {
       if (m.start > last) {
         spans.add(TextSpan(text: input.substring(last, m.start)));
       }
-      spans.add(TextSpan(
-        text: m.group(1),
-        style: TextStyle(
-          fontWeight: FontWeight.w800,
-          color: AppColors.ink,
+      spans.add(
+        TextSpan(
+          text: m.group(1),
+          style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.ink),
         ),
-      ));
+      );
       last = m.end;
     }
     if (last < input.length) {
@@ -579,7 +619,8 @@ class _BulletItem extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 10, right: 10),
             child: Container(
-              width: 5, height: 5,
+              width: 5,
+              height: 5,
               decoration: BoxDecoration(
                 color: AppColors.inkMute,
                 shape: BoxShape.circle,
@@ -608,7 +649,8 @@ class _LoadingState extends StatelessWidget {
       child: Column(
         children: [
           SizedBox(
-            width: 28, height: 28,
+            width: 28,
+            height: 28,
             child: CircularProgressIndicator(
               strokeWidth: 2.5,
               color: AppColors.ink,
@@ -616,7 +658,7 @@ class _LoadingState extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            '사주를 분석하고 있어요...',
+            '오늘의 운세를 준비하고 있어요...',
             style: TextStyle(
               fontSize: 13,
               color: AppColors.inkMute,
@@ -626,10 +668,7 @@ class _LoadingState extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             '5~10초 정도 걸려요',
-            style: TextStyle(
-              fontSize: 11,
-              color: AppColors.inkFaint,
-            ),
+            style: TextStyle(fontSize: 11, color: AppColors.inkFaint),
           ),
         ],
       ),
@@ -655,8 +694,11 @@ class _ErrorState extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.error_outline_rounded, size: 18,
-                  color: AppColors.inkMute),
+              Icon(
+                Icons.error_outline_rounded,
+                size: 18,
+                color: AppColors.inkMute,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -675,7 +717,10 @@ class _ErrorState extends StatelessWidget {
               label: const Text('다시 시도'),
               style: TextButton.styleFrom(
                 foregroundColor: AppColors.ink,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -707,9 +752,7 @@ class _GlassCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.88),
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.7),
-            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.1),
@@ -784,18 +827,31 @@ Color _elementColor(saju.Element element) {
 
 String _zodiacKo(String en) {
   switch (en) {
-    case 'Rat': return '쥐';
-    case 'Ox': return '소';
-    case 'Tiger': return '호랑이';
-    case 'Rabbit': return '토끼';
-    case 'Dragon': return '용';
-    case 'Snake': return '뱀';
-    case 'Horse': return '말';
-    case 'Goat': return '양';
-    case 'Monkey': return '원숭이';
-    case 'Rooster': return '닭';
-    case 'Dog': return '개';
-    case 'Pig': return '돼지';
-    default: return en;
+    case 'Rat':
+      return '쥐';
+    case 'Ox':
+      return '소';
+    case 'Tiger':
+      return '호랑이';
+    case 'Rabbit':
+      return '토끼';
+    case 'Dragon':
+      return '용';
+    case 'Snake':
+      return '뱀';
+    case 'Horse':
+      return '말';
+    case 'Goat':
+      return '양';
+    case 'Monkey':
+      return '원숭이';
+    case 'Rooster':
+      return '닭';
+    case 'Dog':
+      return '개';
+    case 'Pig':
+      return '돼지';
+    default:
+      return en;
   }
 }

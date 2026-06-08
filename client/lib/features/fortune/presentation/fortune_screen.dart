@@ -253,7 +253,7 @@ class _IntroAndInput extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '생년월일과 태어난 시간으로 사주를 분석해\n매일 새로운 운세를 알려드려요.',
+            '생년월일과 태어난 시간을 바탕으로\n매일 간단한 운세를 알려드려요.',
             style: TextStyle(
               fontSize: 14,
               height: 1.5,
@@ -511,12 +511,12 @@ class _ResultView extends ConsumerWidget {
             ),
           ),
         ),
-        // 점수 + 차트 카드 (프로필별)
+        // 점수와 최근 흐름은 빠르게 읽을 수 있는 요약 정보로 유지.
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           sliver: SliverToBoxAdapter(child: ScoreChartCard(profile: profile)),
         ),
-        // 오늘의 운세 7섹션 (상단)
+        // 날씨 앱에서 빠르게 읽을 수 있는 오늘의 핵심 운세.
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           sliver: SliverToBoxAdapter(
@@ -546,7 +546,7 @@ class _ResultView extends ConsumerWidget {
             ),
           ),
         ),
-        // 참고 — 사주 원국 + 오행 분포 (맨 아래)
+        // 상세 명리 자료는 기존처럼 맨 아래 참고 영역에 유지.
         SliverPadding(
           padding: EdgeInsets.fromLTRB(
             16,

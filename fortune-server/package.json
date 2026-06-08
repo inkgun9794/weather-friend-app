@@ -1,0 +1,13 @@
+{
+  "name": "weather-friend-llm",
+  "version": "1.1.0",
+  "private": true,
+  "main": "index.js",
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.4.0"
+  },
+  "scripts": {
+    "start": "functions-framework --target=fortune",
+    "test": "node --test"
+  }
+}
