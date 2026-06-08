@@ -615,20 +615,12 @@ class _OutfitSectionHost extends ConsumerWidget {
     final feelsLike = display.feelsLikeC ?? display.temperatureC;
     if (feelsLike == null) return const SizedBox.shrink();
 
-    final dateAsync = ref.watch(kstDateProvider);
-    final date = switch (dateAsync) {
-      AsyncData(:final value) => value,
-      _ => todayKstIso(),
-    };
-    final city = ref.watch(selectedCityProvider);
     final temperature = feelsLike.round();
     final guide = outfitGuideFor(temperature);
-    final recommendation = guide.recommendationFor('$date|${city.cityId}');
 
     return OutfitRecommendationSection(
       temperature: temperature,
       guide: guide,
-      recommendation: recommendation,
       sky: sky,
     );
   }

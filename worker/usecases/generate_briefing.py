@@ -12,7 +12,7 @@ import asyncio
 import logging
 from pathlib import Path
 
-from adapters.ai_gemini import GeminiScriptGenerator
+from adapters.ai_gemini import GeminiQuotaExhausted, GeminiScriptGenerator
 from adapters.pages_publisher import PagesPublisher
 from adapters.push_fcm import FcmPushClient
 from adapters.store_firestore import BriefingMetadata, FirestoreMetadataStore
@@ -220,6 +220,9 @@ async def generate_for_city_hour(
         created = sum(1 for r in results if r is True)
         skipped = sum(1 for r in results if r is False)
         failed = sum(1 for r in results if isinstance(r, BaseException))
+        # 한 캐릭터라도 quota/크레딧 고갈이면, 나머지 시간대도 전부 실패할 게
+        # 뻔하므로 caller가 이번 실행을 중단(circuit-break)하도록 신호를 올린다.
+        quota_hit = any(isinstance(r, GeminiQuotaExhausted) for r in results)
         for r in results:
             if isinstance(r, BaseException):
                 log.error("  ✗ failure: %r", r)
@@ -228,6 +231,7 @@ async def generate_for_city_hour(
             "fail": failed,
             "skip": skipped,
             "total": len(results),
+            "quota_exhausted": quota_hit,
         }
     finally:
         await store.close()

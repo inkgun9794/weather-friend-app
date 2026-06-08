@@ -93,15 +93,6 @@ flutter:
     - assets/character_intros/
     - assets/maps/
     - assets/icons/weather/
-    - assets/outfits/minus5/
-    - assets/outfits/minus4_0/
-    - assets/outfits/1_4/
-    - assets/outfits/5_8/
-    - assets/outfits/9_11/
-    - assets/outfits/12_16/
-    - assets/outfits/17_22/
-    - assets/outfits/23_26/
-    - assets/outfits/27_plus/
 
   fonts:
     - family: Pretendard
