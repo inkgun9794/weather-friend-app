@@ -18,6 +18,7 @@ from google.genai import types
 
 from domain.briefing import (
     HUMAN_VOICE_RULES,
+    RAIN_MM_THRESHOLD,
     SEMANTIC_INSTRUCTIONS,
     BriefingType,
     DayForecast,
@@ -142,14 +143,18 @@ def _weather_brief(
             f"- 비 블록: {_format_rain_blocks(tomorrow.rain_blocks)}\n"
         )
 
-    # HOURLY
+    # HOURLY — 비 여부는 강수"확률"이 아니라 실제 강수량(mm)으로 판단.
+    # 확률만 보면 흐린 날 0mm인데도 "비 온다"고 오판함.
     s = today.hourly[hour]
+    if s.precipitation_mm >= RAIN_MM_THRESHOLD:
+        rain = f"강수 {s.precipitation_mm:.1f}mm 예상 (우산 챙길 만함)"
+    else:
+        rain = "강수 없음 (비 안 옴 — 확률은 높아도 실제론 안 와)"
     return (
         f"【지금 {hour}시 날씨】\n"
         f"- {s.condition}, {s.temperature_c:.0f}°C "
         f"(체감 {s.feels_like_c:.0f}°C)\n"
-        f"- 강수확률 {s.precipitation_prob}%, 풍속 {s.wind_speed_kmh:.1f}km/h, "
-        f"습도 {s.humidity}%"
+        f"- {rain}, 풍속 {s.wind_speed_kmh:.1f}km/h, 습도 {s.humidity}%"
     )
 
 

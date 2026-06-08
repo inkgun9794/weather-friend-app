@@ -211,6 +211,11 @@ SEMANTIC_INSTRUCTIONS: dict[BriefingType, str] = {
 }
 
 
+# 비 판단 기준: 실제 예상 강수량(mm). 강수"확률"만 보면 흐린 날 0mm인데도 확률이
+# 60~80%라 "비 온다"는 오탐이 난다 → 실제 강수량을 1차 기준으로 쓴다.
+RAIN_MM_THRESHOLD = 0.1
+
+
 @dataclass(frozen=True)
 class WeatherSnapshot:
     """Gemini에 전달할 날씨 요약 (캐릭터가 자연스럽게 풀어쓸 재료)."""
@@ -219,7 +224,8 @@ class WeatherSnapshot:
     temperature_c: float         # 기온 (°C)
     feels_like_c: float          # 체감온도
     condition: str               # "맑음" | "흐림" | "비" | "눈" 등
-    precipitation_prob: int      # 강수확률 (%)
+    precipitation_prob: int      # 강수확률 (%) — 참고용 (오탐 많음)
+    precipitation_mm: float      # 실제 예상 강수량 (mm) — 비 판단의 진짜 기준
     wind_speed_kmh: float        # 풍속
     humidity: int                # 습도 (%)
     pm10: int | None = None      # 미세먼지 (㎍/㎥), 옵션

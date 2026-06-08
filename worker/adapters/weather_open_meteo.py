@@ -10,7 +10,7 @@ import logging
 
 import httpx
 
-from domain.briefing import DayForecast, RainBlock, WeatherSnapshot
+from domain.briefing import RAIN_MM_THRESHOLD, DayForecast, RainBlock, WeatherSnapshot
 
 log = logging.getLogger(__name__)
 
@@ -73,8 +73,9 @@ async def fetch_two_day_forecast(city: str) -> tuple[DayForecast, DayForecast]:
                         "latitude": lat,
                         "longitude": lng,
                         "hourly": (
-                            "temperature_2m,apparent_temperature,precipitation_probability,"
-                            "wind_speed_10m,relative_humidity_2m,weather_code"
+                            "temperature_2m,apparent_temperature,precipitation,"
+                            "precipitation_probability,wind_speed_10m,"
+                            "relative_humidity_2m,weather_code"
                         ),
                         "daily": (
                             "temperature_2m_max,temperature_2m_min,weather_code,"
@@ -124,6 +125,7 @@ def _parse(data: dict, city: str) -> tuple[DayForecast, DayForecast]:
                 feels_like_c=float(hourly["apparent_temperature"][i]),
                 condition=_condition_text(int(hourly["weather_code"][i])),
                 precipitation_prob=int(hourly["precipitation_probability"][i] or 0),
+                precipitation_mm=float(hourly["precipitation"][i] or 0.0),
                 wind_speed_kmh=float(hourly["wind_speed_10m"][i]),
                 humidity=int(hourly["relative_humidity_2m"][i]),
             )
@@ -145,15 +147,17 @@ def _parse(data: dict, city: str) -> tuple[DayForecast, DayForecast]:
 
 
 def _rain_blocks_from(snapshots: list[WeatherSnapshot]) -> tuple[RainBlock, ...]:
-    """precipitation_prob ≥ 60인 시간들을 연속 블록으로 묶음.
+    """실제 예상 강수량 ≥ RAIN_MM_THRESHOLD(mm)인 시간들을 연속 블록으로 묶음.
 
+    강수"확률"이 아니라 실제 강수량 기준 — 흐린 날 확률만 높고 0mm인 경우를
+    "비"로 오탐하지 않기 위함.
     예: [9, 10] + [14, 15, 16, 17, 18, 19] → 두 블록
     (각각 "잠깐"(2시간) / "지속"(6시간)으로 분류된다.)
     """
     blocks: list[RainBlock] = []
     start: int | None = None
     for s in snapshots:
-        is_rain = s.precipitation_prob >= 60
+        is_rain = s.precipitation_mm >= RAIN_MM_THRESHOLD
         if is_rain and start is None:
             start = s.hour
         elif not is_rain and start is not None:

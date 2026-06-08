@@ -902,20 +902,6 @@ class _TemperatureCurvePainter extends CustomPainter {
       ..sort((a, b) => a.key.compareTo(b.key));
     final points = entries.map(pointFor).toList(growable: false);
 
-    final guidePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.14)
-      ..strokeWidth = 1;
-    canvas.drawLine(
-      Offset(0, graphTop + graphRange * 0.25),
-      Offset(size.width, graphTop + graphRange * 0.25),
-      guidePaint,
-    );
-    canvas.drawLine(
-      Offset(0, graphTop + graphRange * 0.75),
-      Offset(size.width, graphTop + graphRange * 0.75),
-      guidePaint,
-    );
-
     final curve = Path()..moveTo(points.first.dx, points.first.dy);
     for (var i = 1; i < points.length; i++) {
       final previous = points[i - 1];
@@ -945,14 +931,6 @@ class _TemperatureCurvePainter extends CustomPainter {
         ).createShader(Offset.zero & size),
     );
 
-    canvas.drawPath(
-      curve,
-      Paint()
-        ..color = Colors.black.withValues(alpha: 0.18)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 5
-        ..strokeCap = StrokeCap.round,
-    );
     canvas.drawPath(
       curve,
       Paint()
