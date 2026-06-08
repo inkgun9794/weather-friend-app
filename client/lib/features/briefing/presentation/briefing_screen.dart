@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -77,13 +78,6 @@ class BriefingScreen extends ConsumerWidget {
                       child: _HeroCard(
                         briefings: briefings,
                         currentHour: currentHour,
-                      ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: _OutfitSectionHost(
-                        briefings: briefings,
-                        currentHour: currentHour,
-                        sky: sky,
                       ),
                     ),
                     // "이전 메시지 보기" 버튼 — 오늘 사이클에 메시지가 하나라도 있을 때만.
@@ -370,9 +364,11 @@ class _BigTemp extends ConsumerWidget {
     final temp = display.temperatureC?.round();
     final feels = display.feelsLikeC?.round();
     final cond = display.condition ?? '—';
+    final outfitTemp = feels ?? temp;
+    final outfitGuide = outfitTemp != null ? outfitGuideFor(outfitTemp) : null;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -450,6 +446,10 @@ class _BigTemp extends ConsumerWidget {
               ),
             ],
           ),
+          if (outfitGuide != null) ...[
+            const SizedBox(height: 16),
+            OutfitRecommendationSection(guide: outfitGuide, sky: sky),
+          ],
         ],
       ),
     );
@@ -590,42 +590,6 @@ class _HeroBriefingCard extends StatelessWidget {
   }
 }
 
-class _OutfitSectionHost extends ConsumerWidget {
-  const _OutfitSectionHost({
-    required this.briefings,
-    required this.currentHour,
-    required this.sky,
-  });
-
-  final Map<int, Briefing> briefings;
-  final int currentHour;
-  final SkyPalette sky;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final hourlyAsync = ref.watch(todayHourlyWeatherProvider);
-    final hourly = switch (hourlyAsync) {
-      AsyncData(:final value) => value[currentHour],
-      _ => null,
-    };
-    final display = resolveCurrentWeatherDisplay(
-      hourly: hourly,
-      exactBriefing: briefings[currentHour],
-    );
-    final feelsLike = display.feelsLikeC ?? display.temperatureC;
-    if (feelsLike == null) return const SizedBox.shrink();
-
-    final temperature = feelsLike.round();
-    final guide = outfitGuideFor(temperature);
-
-    return OutfitRecommendationSection(
-      temperature: temperature,
-      guide: guide,
-      sky: sky,
-    );
-  }
-}
-
 class _ConversationLink extends StatelessWidget {
   const _ConversationLink({required this.sky});
 
@@ -708,6 +672,10 @@ class _TimelineSectionState extends State<_TimelineSection> {
   static const double _slotGap = 2.0;
   static const double _slotPitch = _slotWidth + _slotGap;
   static const double _stripHPad = 10.0;
+  static const double _graphHeight = 82.0;
+  static const double _slotsHeight = 118.0;
+  static const double _stripHeightWithGraph = 220.0;
+  static const double _stripContentWidth = _slotPitch * 24;
   // 컨테이너 좌우 마진 16씩 → strip viewport = screenW - 32.
   static const double _containerHMargin = 16.0;
 
@@ -741,6 +709,19 @@ class _TimelineSectionState extends State<_TimelineSection> {
   @override
   Widget build(BuildContext context) {
     final sky = widget.sky;
+    final temperatures = <int, double>{};
+    for (var hour = 0; hour < 24; hour++) {
+      final temperature =
+          widget.briefings[hour]?.weatherSnapshot?.temperatureC ??
+          widget.hourlyWeather[hour]?.temperatureC;
+      if (temperature != null) {
+        temperatures[hour] = temperature;
+      }
+    }
+    final hasGraph = temperatures.length >= 2;
+    final stripHeight = hasGraph ? _stripHeightWithGraph : 140.0;
+    final contentHeight = stripHeight - 16;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         _containerHMargin,
@@ -817,10 +798,10 @@ class _TimelineSectionState extends State<_TimelineSection> {
                   margin: const EdgeInsets.symmetric(horizontal: 12),
                   color: sky.ink.withValues(alpha: 0.08),
                 ),
-                // 24시간 가로 strip — 시간대 그라데이션 배경 + 슬롯 24개.
-                // 새벽→일출→낮→일몰→밤 색이 스크롤과 함께 자연스럽게 흐름.
+                // 실제 시간별 기온 곡선과 24시간 슬롯이 같은 가로축을 공유한다.
+                // 새벽→일출→낮→일몰→밤 그라데이션도 스크롤과 함께 이어진다.
                 SizedBox(
-                  height: 140,
+                  height: stripHeight,
                   child: SingleChildScrollView(
                     controller: _controller,
                     scrollDirection: Axis.horizontal,
@@ -836,21 +817,55 @@ class _TimelineSectionState extends State<_TimelineSection> {
                         ),
                         borderRadius: BorderRadius.circular(18),
                       ),
-                      child: Row(
-                        children: List.generate(
-                          24,
-                          (hour) => _HourSlot(
-                            hour: hour,
-                            briefing: widget.briefings[hour],
-                            hourly: widget.hourlyWeather[hour],
-                            sky: sky,
-                            isNow: hour == widget.currentHour,
-                            isPast: hour < widget.currentHour,
-                            width: _slotWidth,
-                            rightGap: _slotGap,
-                            sunrise: widget.sunrise,
-                            sunset: widget.sunset,
-                          ),
+                      child: SizedBox(
+                        width: _stripContentWidth,
+                        height: contentHeight,
+                        child: Stack(
+                          children: [
+                            if (hasGraph)
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: 3,
+                                height: _graphHeight,
+                                child: Semantics(
+                                  image: true,
+                                  label: '시간별 기온 변화 그래프',
+                                  child: CustomPaint(
+                                    key: const Key('temperature-curve'),
+                                    painter: _TemperatureCurvePainter(
+                                      temperatures: temperatures,
+                                      currentHour: widget.currentHour,
+                                      slotPitch: _slotPitch,
+                                      slotWidth: _slotWidth,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              top: 0,
+                              height: _slotsHeight,
+                              child: Row(
+                                children: List.generate(
+                                  24,
+                                  (hour) => _HourSlot(
+                                    hour: hour,
+                                    briefing: widget.briefings[hour],
+                                    hourly: widget.hourlyWeather[hour],
+                                    sky: sky,
+                                    isNow: hour == widget.currentHour,
+                                    isPast: hour < widget.currentHour,
+                                    width: _slotWidth,
+                                    rightGap: _slotGap,
+                                    sunrise: widget.sunrise,
+                                    sunset: widget.sunset,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -862,6 +877,141 @@ class _TimelineSectionState extends State<_TimelineSection> {
         ),
       ),
     );
+  }
+}
+
+class _TemperatureCurvePainter extends CustomPainter {
+  const _TemperatureCurvePainter({
+    required this.temperatures,
+    required this.currentHour,
+    required this.slotPitch,
+    required this.slotWidth,
+  });
+
+  final Map<int, double> temperatures;
+  final int currentHour;
+  final double slotPitch;
+  final double slotWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (temperatures.length < 2) return;
+
+    final values = temperatures.values.toList(growable: false);
+    var minTemp = values.first;
+    var maxTemp = values.first;
+    for (final value in values.skip(1)) {
+      if (value < minTemp) minTemp = value;
+      if (value > maxTemp) maxTemp = value;
+    }
+
+    final rawRange = maxTemp - minTemp;
+    final range = rawRange < 4 ? 4.0 : rawRange;
+    final center = (maxTemp + minTemp) / 2;
+    final low = center - range / 2;
+    const graphTop = 19.0;
+    final graphBottom = size.height - 12;
+    final graphRange = graphBottom - graphTop;
+
+    Offset pointFor(MapEntry<int, double> entry) {
+      final x = entry.key * slotPitch + slotWidth / 2;
+      final normalized = (entry.value - low) / range;
+      final y = graphBottom - normalized.clamp(0.0, 1.0) * graphRange;
+      return Offset(x, y);
+    }
+
+    final entries = temperatures.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    final points = entries.map(pointFor).toList(growable: false);
+
+    final guidePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.14)
+      ..strokeWidth = 1;
+    canvas.drawLine(
+      Offset(0, graphTop + graphRange * 0.25),
+      Offset(size.width, graphTop + graphRange * 0.25),
+      guidePaint,
+    );
+    canvas.drawLine(
+      Offset(0, graphTop + graphRange * 0.75),
+      Offset(size.width, graphTop + graphRange * 0.75),
+      guidePaint,
+    );
+
+    final curve = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 1; i < points.length; i++) {
+      final previous = points[i - 1];
+      final point = points[i];
+      final controlX = (previous.dx + point.dx) / 2;
+      curve.cubicTo(
+        controlX,
+        previous.dy,
+        controlX,
+        point.dy,
+        point.dx,
+        point.dy,
+      );
+    }
+
+    final fill = Path.from(curve)
+      ..lineTo(points.last.dx, size.height)
+      ..lineTo(points.first.dx, size.height)
+      ..close();
+    canvas.drawPath(
+      fill,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x339DEBFF), Color(0x009DEBFF)],
+        ).createShader(Offset.zero & size),
+    );
+
+    canvas.drawPath(
+      curve,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.18)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawPath(
+      curve,
+      Paint()
+        ..color = const Color(0xFFE1F8FF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round,
+    );
+
+    for (var i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      final point = points[i];
+      final isCurrent = entry.key == currentHour;
+
+      if (isCurrent) {
+        canvas.drawCircle(
+          point,
+          6,
+          Paint()..color = Colors.white.withValues(alpha: 0.96),
+        );
+        canvas.drawCircle(point, 4, Paint()..color = const Color(0xFFFF5E73));
+      } else {
+        canvas.drawCircle(
+          point,
+          2.25,
+          Paint()..color = Colors.white.withValues(alpha: 0.92),
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TemperatureCurvePainter oldDelegate) {
+    return !mapEquals(oldDelegate.temperatures, temperatures) ||
+        oldDelegate.currentHour != currentHour ||
+        oldDelegate.slotPitch != slotPitch ||
+        oldDelegate.slotWidth != slotWidth;
   }
 }
 

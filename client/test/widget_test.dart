@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart' show Key;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:weather_friend/app/app.dart';
 import 'package:weather_friend/core/services/fcm_service.dart';
@@ -76,7 +77,15 @@ void main() {
             (ref) => Future.value(<int, Briefing>{}),
           ),
           todayHourlyWeatherProvider.overrideWith(
-            (ref) => Future.value(<int, HourlyWeather>{}),
+            (ref) => Future.value({
+              for (var hour = 0; hour < 24; hour++)
+                hour: HourlyWeather(
+                  hour: hour,
+                  temperatureC: 18 + (hour - 12).abs() * -0.35,
+                  condition: '맑음',
+                  precipitationProb: 0,
+                ),
+            }),
           ),
           todayDailySummaryProvider.overrideWith((ref) => Future.value(null)),
           weekDaysProvider.overrideWith(
@@ -88,5 +97,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(BriefingScreen), findsOneWidget);
+    expect(find.byKey(const Key('temperature-curve')), findsOneWidget);
   });
 }

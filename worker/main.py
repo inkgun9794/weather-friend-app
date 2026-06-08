@@ -65,7 +65,6 @@ async def _amain(
     total_ok = 0
     total_fail = 0
     total_skip = 0
-    quota_exhausted = False
     for city in cities:
         # Open-Meteo는 도시당 한 번만 — fill-today에서 hour마다 같은 forecast를
         # 24번 fetch하던 게 진짜 비효율이었음. 5배 빠르고 ConnectTimeout 노출도 1/24.
@@ -111,18 +110,6 @@ async def _amain(
                 result["fail"],
                 result["total"],
             )
-            # 일일 quota/선불 고갈이면 남은 시간대는 시도할 필요 없음 — 전부 429다.
-            # 즉시 중단해 storm(무의미한 재시도로 quota를 더 태우는 것)을 차단.
-            if result.get("quota_exhausted"):
-                logging.error(
-                    "✗ Gemini 일일 quota/선불 크레딧 고갈 감지 — 이번 실행의 남은 "
-                    "슬롯 생성을 중단합니다 (재시도로 quota를 더 태우지 않도록). "
-                    "다음 일일 리셋 후 자동 재개됨."
-                )
-                quota_exhausted = True
-                break
-        if quota_exhausted:
-            break
 
     logging.info("=" * 60)
     logging.info(

@@ -1,12 +1,12 @@
-"""ai_gemini의 에러 분류 로직 테스트.
+"""ai_gemini의 에러 재시도 분류 테스트.
 
-retry storm 재발 방지의 핵심: 429(일일 quota 소진 / 선불 고갈)는 *재시도하지 않고*
-GeminiQuotaExhausted로 분류돼야 한다. 진짜 일시적 에러(5xx/timeout)만 재시도 대상.
+retry storm 재발 방지의 핵심: 429(일일 quota 소진 / 선불 고갈)는 *재시도 대상이
+아니어야* 한다. 진짜 일시적 에러(5xx/timeout)만 재시도한다.
 """
 
 import unittest
 
-from adapters.ai_gemini import _is_quota_exhausted, _is_retryable
+from adapters.ai_gemini import _is_retryable
 
 # 실제 GitHub Actions 로그에서 가져온 429 메시지들
 DAILY_QUOTA_429 = (
@@ -21,21 +21,9 @@ PREPAY_DEPLETED_429 = (
 )
 
 
-class QuotaExhaustedClassificationTest(unittest.TestCase):
-    def test_daily_quota_is_quota_exhausted(self) -> None:
-        self.assertTrue(_is_quota_exhausted(Exception(DAILY_QUOTA_429)))
-
-    def test_prepay_depleted_is_quota_exhausted(self) -> None:
-        self.assertTrue(_is_quota_exhausted(Exception(PREPAY_DEPLETED_429)))
-
-    def test_transient_errors_are_not_quota_exhausted(self) -> None:
-        for msg in ("503 UNAVAILABLE", "500 INTERNAL", "DEADLINE_EXCEEDED", "timeout"):
-            self.assertFalse(_is_quota_exhausted(Exception(msg)), msg)
-
-
 class RetryableClassificationTest(unittest.TestCase):
-    def test_429_is_no_longer_retryable(self) -> None:
-        # 핵심 회귀 방지: 429를 재시도하면 storm이 재발한다.
+    def test_429_is_not_retryable(self) -> None:
+        # 핵심 회귀 방지: 429를 재시도하면 한정된 일일 요청 quota를 더 태운다.
         self.assertFalse(_is_retryable(Exception(DAILY_QUOTA_429)))
         self.assertFalse(_is_retryable(Exception(PREPAY_DEPLETED_429)))
 

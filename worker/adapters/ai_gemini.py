@@ -1,9 +1,8 @@
 """Gemini API 어댑터 — 캐릭터 페르소나 + 시맨틱으로 스크립트 생성.
 
-진짜 일시적 에러(5xx, timeout)만 자동 재시도. 429(일일 quota 소진 / 선불 크레딧
-고갈)는 재시도하지 않고 GeminiQuotaExhausted로 전파해, 상위 오케스트레이터가
-이번 실행의 남은 슬롯 생성을 즉시 중단(circuit-break)하게 한다 — 무의미한 재시도로
-quota를 더 태우는 'retry storm'을 막기 위함.
+진짜 일시적 에러(5xx, timeout)만 자동 재시도. 429(일일 quota 소진 / 선불 고갈)는
+초 단위 재시도로 회복되지 않으므로(리셋이 몇 시간~24h 뒤) 재시도하지 않고 즉시
+실패시킨다 — 3회 재시도가 한정된 일일 요청 quota를 더 태우는 걸 막기 위함.
 """
 
 from __future__ import annotations
@@ -34,33 +33,13 @@ _MAX_RETRIES = 3
 _RETRY_BASE_DELAY_SEC = 2.0  # 2 → 4 → 8
 
 
-class GeminiQuotaExhausted(Exception):
-    """429 — 일일 quota 소진 또는 선불 크레딧 고갈.
-
-    초 단위 재시도로는 회복 불가(리셋이 몇 시간~24h 뒤). 이 예외가 나면 상위
-    오케스트레이터가 이번 실행의 남은 슬롯 생성을 중단(circuit-break)해, 어차피
-    전부 실패할 호출로 quota를 더 태우지 않도록 한다.
-    """
-
-
-def _is_quota_exhausted(error: Exception) -> bool:
-    """429 중 '일일 quota 소진 / 선불 고갈' 류 — 재시도·backfill로 회복 불가.
-
-    per-minute rate limit도 429지만, 이 워커는 동시성이 낮아(시간대당 ≤4 캐릭터)
-    RPM 한도엔 거의 안 걸린다. 설령 걸려도 다음 15분 cron이 자연히 재시도하므로,
-    모든 429를 '소진'으로 보고 즉시 멈추는 편이 storm 방지에 안전하다.
-    """
-    s = str(error).lower()
-    return (
-        "resource_exhausted" in s
-        or "429" in s
-        or "prepayment credits are depleted" in s
-        or "quota" in s
-    )
-
-
 def _is_retryable(error: Exception) -> bool:
-    """진짜 일시적 에러(5xx, timeout)만 재시도. 429/quota는 _is_quota_exhausted가 분리."""
+    """진짜 일시적 에러(5xx, timeout)만 재시도.
+
+    429/RESOURCE_EXHAUSTED(일일 quota 소진·선불 고갈)는 의도적으로 제외 — 초 단위
+    재시도로는 회복되지 않고, 3회 재시도 × 15분 backfill로 한정된 일일 요청 quota만
+    더 태운다. 즉시 실패시키고 다음 cron에 맡긴다.
+    """
     s = str(error)
     return any(
         token in s
@@ -260,10 +239,6 @@ class GeminiScriptGenerator:
                 )
                 return _parse_dual_output(response.text or "")
             except Exception as e:
-                # 일일 quota 소진 / 선불 고갈 — 재시도 무의미(리셋이 몇 시간~24h 뒤).
-                # 전용 예외로 즉시 전파 → 상위가 이번 실행의 남은 슬롯을 중단(circuit-break).
-                if _is_quota_exhausted(e):
-                    raise GeminiQuotaExhausted(str(e)) from e
                 if not _is_retryable(e) or attempt == _MAX_RETRIES:
                     raise
                 last_exc = e
