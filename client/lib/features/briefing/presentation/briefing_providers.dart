@@ -52,6 +52,7 @@ final kstHourProvider = StreamProvider<int>((ref) async* {
 
 final todayBriefingsProvider = FutureProvider<Map<int, Briefing>>((ref) async {
   final dateAsync = ref.watch(kstDateProvider);
+  ref.watch(kstHourProvider);
   final date = switch (dateAsync) {
     AsyncData(:final value) => value,
     _ => todayKstIso(),
