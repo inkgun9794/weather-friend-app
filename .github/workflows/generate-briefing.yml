@@ -64,6 +64,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TYPECAST_API_KEY: ${{ secrets.TYPECAST_API_KEY }}
+          TYPECAST_API_KEY_B: ${{ secrets.TYPECAST_API_KEY_B }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: |
           if [ -n "${{ inputs.target_hour }}" ]; then

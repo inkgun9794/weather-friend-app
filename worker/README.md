@@ -6,7 +6,7 @@
 
 1. Open-Meteo에서 오늘/내일 날씨 조회
 2. Gemini로 캐릭터 × 시간대별 스크립트 생성
-3. Typecast로 6시 morning 슬롯 × 4 캐릭터 = 4개 음성 합성
+3. Typecast로 6시 morning과 21시 evening 슬롯 음성 합성
 4. 결과를 `../docs/`에 저장 → GitHub Pages 배포
 5. 메타데이터를 Firestore에 저장
 
@@ -23,7 +23,8 @@ uv run python main.py
 ## Required env vars
 
 - `GEMINI_API_KEY` — Gemini Developer API key
-- `TYPECAST_API_KEY` — Typecast API key
+- `TYPECAST_API_KEY` — 6시 morning Typecast API key
+- `TYPECAST_API_KEY_B` — 21시 evening Typecast API key
 - `GOOGLE_APPLICATION_CREDENTIALS` — (로컬만) SA JSON 경로
 
 GitHub Actions에서는 WIF로 GCP 인증, secrets로 API 키 주입.

@@ -3,7 +3,7 @@
 시맨틱:
 - MORNING (06시): 오늘 하루 forecast — 사용자가 하루를 준비할 수 있게 (음성 + 푸시)
 - HOURLY  (11시): 점심 무렵 날씨 점검 (텍스트)
-- EVENING (21시): 오늘 회고 + 내일 forecast — 내일 준비 도와줌 (텍스트)
+- EVENING (21시): 오늘 회고 + 내일 forecast — 내일 준비 도와줌 (음성)
 - CASUAL  (9/10/12-20시 중 11 제외): 트렌드/이슈 기반 친구톡 — 날씨와 무관
 """
 
@@ -13,7 +13,7 @@ from enum import Enum
 
 class BriefingType(str, Enum):
     MORNING = "morning"   # 06시 - 푸시 + 음성 + 오늘 날씨
-    EVENING = "evening"   # 21시 - 텍스트 + 오늘 회고 + 내일 날씨
+    EVENING = "evening"   # 21시 - 음성 + 오늘 회고 + 내일 날씨
     HOURLY = "hourly"     # 11시 - 텍스트 + 점심 무렵 날씨 한번 (하루 중 유일한 텍스트 날씨)
     CASUAL = "casual"     # 9/10/12-20시 - 트렌드/이슈 기반 친구톡 (텍스트, 푸시 X)
 
@@ -57,12 +57,12 @@ HUMAN_VOICE_RULES = """【사람답게 — 4 캐릭터 공통 가드】
 """
 
 
-# 음성 슬롯(MORNING)에 추가되는 출력 형식 지시.
+# 음성 슬롯(MORNING/EVENING)에 추가되는 출력 형식 지시.
 # 메시지/음성 두 스크립트 분리: 화면에는 인터넷 어투, TTS는 자연 발화.
 _VOICE_OUTPUT_SUFFIX = """
 
 【출력 형식 — 반드시 준수】
-이 시간은 음성 알람이야. 다음 두 가지 버전을 *모두* 만들어야 해.
+이 시간은 음성 브리핑이야. 다음 두 가지 버전을 *모두* 만들어야 해.
 정확히 아래 마커로 구분해서 출력:
 
 [메시지]
@@ -141,8 +141,8 @@ SEMANTIC_INSTRUCTIONS: dict[BriefingType, str] = {
 지금은 밤 {hour}시야. 사용자가 하루를 마무리하는 시점.
 오늘 날씨 어땠는지 한 줄 회고 + 내일 날씨 미리 알려줘.
 내일 준비할 것(옷차림, 우산 등)을 가볍게 추천.
-편안하게 잘 자라는 느낌의 마무리.
-음성은 안 만드니까 메시지 텍스트 1개만 출력.""",
+편안하게 잘 자라는 느낌의 마무리."""
+    + _VOICE_OUTPUT_SUFFIX,
     BriefingType.HOURLY: """【이 메시지의 역할】
 지금은 점심 무렵 {hour}시. 하루 중 유일한 날씨 텍스트 메시지야.
 현재 시각 날씨 + 오후 동향(비 올지, 더 더워질지 등)을 가볍게 짚어줘.
@@ -272,7 +272,7 @@ class DayForecast:
 def briefing_type_for_hour(hour: int) -> BriefingType:
     """시간 → 브리핑 타입 매핑.
 
-    날씨 메시지는 하루 3번: 6시(음성) / 11시(텍스트) / 21시(텍스트).
+    날씨 메시지는 하루 3번: 6시(음성) / 11시(텍스트) / 21시(음성).
     그 외 시간(9, 10, 12~20)은 트렌드/잡담 CASUAL.
     """
     if hour == 6:
@@ -287,9 +287,12 @@ def briefing_type_for_hour(hour: int) -> BriefingType:
 def is_audio_slot(hour: int) -> bool:
     """이 시간에 음성을 생성할지 (Typecast TTS 호출 여부).
 
-    6시 MORNING만 음성+푸시. 21시 EVENING은 앱 안 텍스트만 (Typecast 크레딧 절감).
+    6시 MORNING과 21시 EVENING에 음성을 생성한다. 푸시 여부는 별도 정책이다.
     """
-    return briefing_type_for_hour(hour) == BriefingType.MORNING
+    return briefing_type_for_hour(hour) in (
+        BriefingType.MORNING,
+        BriefingType.EVENING,
+    )
 
 
 def needs_weather_context(hour: int) -> bool:

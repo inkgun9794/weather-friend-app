@@ -5,6 +5,7 @@
 Required env vars:
 - GEMINI_API_KEY
 - TYPECAST_API_KEY (6시 morning 음성 합성)
+- TYPECAST_API_KEY_B (21시 evening 음성 합성)
 - GCP_PROJECT_ID (default: weather-friend-92281)
 
 Usage:

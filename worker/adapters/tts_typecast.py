@@ -40,18 +40,25 @@ class TypecastClient:
 
     API 키는 lazy하게 로드 — 인스턴스 생성 시점이 아니라 실제 synthesize 호출 시점에 검증.
     덕분에 보이스 ID가 아직 비어있는 smoke 테스트 단계에서도 인스턴스 생성은 가능.
+    api_key_env로 시간대별 계정의 환경변수를 명시적으로 선택할 수 있다.
     """
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        *,
+        api_key_env: str = "TYPECAST_API_KEY",
+    ) -> None:
         self._api_key_override = api_key
+        self._api_key_env = api_key_env
 
     def _resolve_api_key(self) -> str:
         if self._api_key_override:
             return self._api_key_override
-        key = os.environ.get("TYPECAST_API_KEY")
+        key = os.environ.get(self._api_key_env)
         if not key:
             raise RuntimeError(
-                "TYPECAST_API_KEY environment variable is not set. "
+                f"{self._api_key_env} environment variable is not set. "
                 "Set it before calling synthesize()."
             )
         return key
