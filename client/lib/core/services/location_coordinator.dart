@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart' as geocoding;
@@ -23,33 +25,50 @@ class LocationCoordinator extends ConsumerStatefulWidget {
 
 class _LocationCoordinatorState extends ConsumerState<LocationCoordinator>
     with WidgetsBindingObserver {
-  bool _refreshing = false;
+  static const _distanceFilterMeters = 2000;
+
+  StreamSubscription<Position>? _positionSubscription;
+  bool _startingUpdates = false;
+  bool _resolvingCity = false;
+  bool _isForeground = true;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshCity());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _startLocationUpdates(),
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_stopLocationUpdates());
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _refreshCity();
+      _isForeground = true;
+      _startLocationUpdates();
+    } else {
+      _isForeground = false;
+      unawaited(_stopLocationUpdates());
     }
   }
 
-  Future<void> _refreshCity() async {
-    if (_refreshing || !mounted) return;
+  Future<void> _startLocationUpdates() async {
+    if (_startingUpdates ||
+        _positionSubscription != null ||
+        !_isForeground ||
+        !mounted) {
+      return;
+    }
     if (!ref.read(onboardingCompleteProvider)) return;
 
-    _refreshing = true;
+    _startingUpdates = true;
     try {
       final perm = await Geolocator.checkPermission();
       if (perm != LocationPermission.always &&
@@ -57,20 +76,66 @@ class _LocationCoordinatorState extends ConsumerState<LocationCoordinator>
         return;
       }
 
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.low,
-          timeLimit: Duration(seconds: 8),
-        ),
-      );
+      try {
+        final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.low,
+            timeLimit: Duration(seconds: 8),
+          ),
+        );
+        await _applyPosition(pos);
+      } catch (e) {
+        debugPrint('[location] current position refresh skipped: $e');
+      }
 
+      if (!_isForeground || !mounted || !ref.read(onboardingCompleteProvider)) {
+        return;
+      }
+
+      _positionSubscription =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.low,
+              distanceFilter: _distanceFilterMeters,
+            ),
+          ).listen(
+            (position) => unawaited(_applyPosition(position)),
+            onError: (Object error) {
+              debugPrint('[location] position stream stopped: $error');
+              unawaited(_stopLocationUpdates());
+            },
+          );
+    } catch (e) {
+      debugPrint('[location] location updates unavailable: $e');
+    } finally {
+      _startingUpdates = false;
+    }
+  }
+
+  Future<void> _stopLocationUpdates() async {
+    final subscription = _positionSubscription;
+    _positionSubscription = null;
+    await subscription?.cancel();
+  }
+
+  Future<void> _applyPosition(Position pos) async {
+    if (_resolvingCity || !mounted) return;
+
+    _resolvingCity = true;
+    try {
       final city = await _resolveCity(pos);
+      final current = ref.read(selectedCityProvider);
+      if (current.cityId == city.cityId) return;
+
       await ref.read(selectedCityProvider.notifier).set(city);
-      debugPrint('[location] weather city=${city.label} (${city.cityId})');
+      debugPrint(
+        '[location] weather city changed: '
+        '${current.label} -> ${city.label} (${city.cityId})',
+      );
     } catch (e) {
       debugPrint('[location] city refresh skipped: $e');
     } finally {
-      _refreshing = false;
+      _resolvingCity = false;
     }
   }
 
@@ -99,7 +164,11 @@ class _LocationCoordinatorState extends ConsumerState<LocationCoordinator>
   @override
   Widget build(BuildContext context) {
     ref.listen<bool>(onboardingCompleteProvider, (prev, next) {
-      if (prev != true && next == true) _refreshCity();
+      if (prev != true && next == true) {
+        _startLocationUpdates();
+      } else if (prev == true && next != true) {
+        unawaited(_stopLocationUpdates());
+      }
     });
     return widget.child;
   }
