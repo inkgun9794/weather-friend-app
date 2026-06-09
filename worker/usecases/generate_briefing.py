@@ -33,8 +33,8 @@ log = logging.getLogger(__name__)
 
 # Gemini 무료 한도(15 RPM) 보호용 동시 호출 제한
 GEMINI_CONCURRENCY = 8
-# Typecast Free 플랜 RPM이 낮아서 더 보수적으로
-TYPECAST_CONCURRENCY = 2
+# Typecast Free 플랜은 동시 호출에서 429가 발생하므로 계정별 요청을 직렬화.
+TYPECAST_CONCURRENCY = 1
 
 
 def _typecast_api_key_env_for_hour(hour: int) -> str:
