@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
+import 'package:weather_friend/features/briefing/data/weather_providers.dart';
 import 'package:weather_friend/shared/widgets/weather_icons.dart';
 
 /// "초단기 6시간" 카드 — 오늘 날씨 섹션 위에 표시.

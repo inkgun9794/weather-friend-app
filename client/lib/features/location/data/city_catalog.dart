@@ -76,7 +76,13 @@ class CityCatalog {
 
   static Future<WeatherCity> findById(String cityId) async {
     final cities = await load();
-    for (final city in cities) {
+    return findByIdSync(cityId, cities: cities);
+  }
+
+  static WeatherCity findByIdSync(String cityId, {List<WeatherCity>? cities}) {
+    final loaded = cities ?? _cache;
+    if (loaded == null) return WeatherCity.seoul;
+    for (final city in loaded) {
       if (city.cityId == cityId) return city;
     }
     return WeatherCity.seoul;

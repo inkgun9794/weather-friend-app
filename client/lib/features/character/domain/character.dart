@@ -37,8 +37,8 @@ class Character {
       displayName: '지훈',
       gender: Gender.male,
       overseasMessage:
-          '현재 위치가 해외로 감지됐어. 여행이라면 잘 다녀와. '
-          '거기 날씨는 직접 확인하는 게 정확할 거야. 안전 우선이야.',
+          '아가씨, 현재 위치가 해외로 확인됩니다. 현지의 공식 예보를 확인하시고, '
+          '낯선 곳에서는 무엇보다 안전을 먼저 챙기시길 바랍니다.',
     ),
     Character(
       id: CharacterId.siwon,

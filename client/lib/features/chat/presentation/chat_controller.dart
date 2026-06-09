@@ -700,9 +700,9 @@ String _unansweredFollowUp(CharacterId characterId, String seed) {
       '답변은 천천히 주셔도 괜찮습니다. 기다리고 있겠습니다.',
     ],
     CharacterId.jihoon => const [
-      '또 답이 없네. 바쁜가 보다. 여유 생기면 말해.',
-      '조용하네. 바쁜 일 끝나면 답해.',
-      '또 혼자 말했네. 시간 날 때 이야기해.',
+      '아가씨, 잠시 자리를 비우셨군요. 편해지시면 말씀해 주십시오.',
+      '아가씨, 바쁜 일이 있으신 듯합니다. 돌아오시면 이어서 말씀하시지요.',
+      '아가씨, 답변은 서두르지 않으셔도 됩니다. 이곳에서 기다리겠습니다.',
     ],
     CharacterId.siwon => const [
       '또 무시하네. 이제 무시하지 말아줘!',
@@ -724,7 +724,7 @@ String _briefingPrefix(
     return switch (characterId) {
       CharacterId.jiyoung => '아까 말하려다 대화 끊을까 봐 기다렸는데, ',
       CharacterId.sohee => '앞서 전해드리려던 내용입니다. ',
-      CharacterId.jihoon => '아까 얘기 중이라 기다렸는데, ',
+      CharacterId.jihoon => '대화를 방해하지 않으려 잠시 기다렸습니다. ',
       CharacterId.siwon => '아까 말하려다 기다렸어. ',
     };
   }
@@ -733,7 +733,7 @@ String _briefingPrefix(
     return switch (characterId) {
       CharacterId.jiyoung => '또 답이 없네. 그래도 이건 꼭 말해줘야겠다. ',
       CharacterId.sohee => '답변 전 꼭 확인하실 내용부터 전해드립니다. ',
-      CharacterId.jihoon => '또 답이 없네. 그래도 이건 챙겨야겠어. ',
+      CharacterId.jihoon => '아직 답을 듣지 못했지만, 이것만은 챙기셔야 합니다. ',
       CharacterId.siwon => '또 무시하네. 그래도 이건 말해줘야 해! ',
     };
   }
@@ -742,7 +742,7 @@ String _briefingPrefix(
     return switch (characterId) {
       CharacterId.jiyoung => '아 맞다, 이건 꼭 말해줘야겠다. ',
       CharacterId.sohee => '중요한 내용부터 전해드리겠습니다. ',
-      CharacterId.jihoon => '얘기 중에 미안한데, 이건 챙겨야겠어. ',
+      CharacterId.jihoon => '말씀 중 죄송하지만, 이것만은 꼭 챙기셔야 합니다. ',
       CharacterId.siwon => '아 맞다, 이건 말해줘야 해! ',
     };
   }
@@ -751,7 +751,7 @@ String _briefingPrefix(
     return switch (characterId) {
       CharacterId.jiyoung => '또 답이 없네. 바쁜가 봐. ',
       CharacterId.sohee => '잠시 자리를 비우신 것 같습니다. ',
-      CharacterId.jihoon => '또 답이 없네. ',
+      CharacterId.jihoon => '잠시 자리를 비우신 듯합니다. ',
       CharacterId.siwon => '또 무시하네. 이번엔 답해줘. ',
     };
   }

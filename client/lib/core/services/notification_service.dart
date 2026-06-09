@@ -51,47 +51,57 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+  Future<void>? _initializing;
 
-  Future<void> init() async {
-    if (_initialized) return;
-    tz_data.initializeTimeZones();
+  Future<void> init() {
+    if (_initialized) return Future.value();
+    return _initializing ??= _initialize();
+  }
+
+  Future<void> _initialize() async {
     try {
-      final localName = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(localName));
-    } catch (e) {
-      debugPrint('NotificationService: timezone lookup failed: $e');
+      tz_data.initializeTimeZones();
+      try {
+        final localName = await FlutterTimezone.getLocalTimezone();
+        tz.setLocalLocation(tz.getLocation(localName));
+      } catch (e) {
+        debugPrint('NotificationService: timezone lookup failed: $e');
+      }
+
+      const settings = InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        iOS: DarwinInitializationSettings(
+          requestAlertPermission: false,
+          requestBadgePermission: false,
+          requestSoundPermission: false,
+        ),
+      );
+      await _plugin.initialize(settings: settings);
+
+      final android = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      await android?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _channelId,
+          _channelName,
+          description: _channelDescription,
+          importance: Importance.high,
+        ),
+      );
+
+      _initialized = true;
+    } finally {
+      _initializing = null;
     }
-
-    const settings = InitializationSettings(
-      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-      iOS: DarwinInitializationSettings(
-        requestAlertPermission: false,
-        requestBadgePermission: false,
-        requestSoundPermission: false,
-      ),
-    );
-    await _plugin.initialize(settings: settings);
-
-    final android = _plugin
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
-    await android?.createNotificationChannel(
-      const AndroidNotificationChannel(
-        _channelId,
-        _channelName,
-        description: _channelDescription,
-        importance: Importance.high,
-      ),
-    );
-
-    _initialized = true;
   }
 
   /// iOS는 권한 요청을 FlutterLocalNotifications 경로로도 받을 수 있어야 함
   /// (FcmService 없이 NotificationService만 쓰는 우회 경로일 때).
   /// 내부적으로 OS 권한은 동일.
   Future<bool> requestPermissions() async {
+    await init();
     final iOS = _plugin
         .resolvePlatformSpecificImplementation<
           IOSFlutterLocalNotificationsPlugin
@@ -115,6 +125,7 @@ class NotificationService {
   }
 
   Future<bool> hasPermission() async {
+    await init();
     final iOS = _plugin
         .resolvePlatformSpecificImplementation<
           IOSFlutterLocalNotificationsPlugin
@@ -143,6 +154,7 @@ class NotificationService {
     required String title,
     required String body,
   }) async {
+    await init();
     await _plugin.cancel(id: slot.id);
     await _plugin.zonedSchedule(
       id: slot.id,
@@ -165,10 +177,12 @@ class NotificationService {
   }
 
   Future<void> cancelSlot(BriefingSlot slot) async {
+    await init();
     await _plugin.cancel(id: slot.id);
   }
 
   Future<void> cancelAllSlots() async {
+    await init();
     for (final slot in BriefingSlot.values) {
       await _plugin.cancel(id: slot.id);
     }
@@ -176,6 +190,7 @@ class NotificationService {
 
   /// 디버그용: 즉시 알림 발사.
   Future<void> showTestNotification({String? body}) async {
+    await init();
     await _plugin.show(
       id: 999,
       title: '테스트 알림',
@@ -199,6 +214,7 @@ class NotificationService {
     required String body,
     required DateTime scheduledAt,
   }) async {
+    await init();
     await _plugin.cancel(id: id);
     await _plugin.zonedSchedule(
       id: id,

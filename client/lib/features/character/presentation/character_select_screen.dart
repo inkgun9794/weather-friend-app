@@ -118,7 +118,7 @@ class _CharacterCard extends StatelessWidget {
 
 String _toneLabel(CharacterId id) => switch (id) {
   CharacterId.jiyoung => '다정한 날사친',
-  CharacterId.sohee => '전문 기상캐스터',
-  CharacterId.jihoon => '듬직한 날사친',
+  CharacterId.sohee => '전문 기상캐스터 날사친',
+  CharacterId.jihoon => '가명: 흑표범\n당신의 집사 날사친',
   CharacterId.siwon => '상냥한 날사친',
 };

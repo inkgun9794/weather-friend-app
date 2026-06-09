@@ -100,7 +100,7 @@ Future<WeatherBundle?> _timed(
 ) async {
   final sw = Stopwatch()..start();
   try {
-    final result = await task();
+    final result = await task().timeout(const Duration(seconds: 5));
     sw.stop();
     debugPrint('[weather_facade] ⏱ $label ${sw.elapsedMilliseconds}ms');
     return result;

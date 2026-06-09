@@ -3,10 +3,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:weather_friend/core/utils/kst.dart';
-import 'package:weather_friend/features/briefing/data/weather_facade.dart'
-    show weatherFacadeProvider;
 import 'package:weather_friend/features/location/data/city_catalog.dart';
-import 'package:weather_friend/features/location/data/selected_city_provider.dart';
 
 /// Open-Meteo는 무료·무제한·인증 X. worker가 사용하는 것과 동일한 endpoint.
 /// 클라이언트가 직접 호출해서:
@@ -355,34 +352,4 @@ final httpClientProvider = Provider<http.Client>((ref) {
 
 final openMeteoClientProvider = Provider<OpenMeteoClient>((ref) {
   return OpenMeteoClient(ref.watch(httpClientProvider));
-});
-
-// KMA Firestore 캐시 우선 → 실패 시 OpenMeteo 자동 폴백.
-// 폴백 로직은 weather_facade.dart의 WeatherFacade가 담당.
-final weatherBundleProvider = FutureProvider<WeatherBundle>((ref) async {
-  final facade = ref.watch(weatherFacadeProvider);
-  final city = ref.watch(selectedCityProvider);
-  return facade.fetchBundle(city: city.cityId);
-});
-
-final todayHourlyWeatherProvider = FutureProvider<Map<int, HourlyWeather>>((
-  ref,
-) async {
-  return (await ref.watch(weatherBundleProvider.future)).today;
-});
-
-final todayDailySummaryProvider = FutureProvider<DailySummary?>((ref) async {
-  return (await ref.watch(weatherBundleProvider.future)).todaySummary;
-});
-
-final weekDaysProvider = FutureProvider<List<WeekDay>>((ref) async {
-  return (await ref.watch(weatherBundleProvider.future)).weekDays;
-});
-
-/// 오늘 일출/일몰 시각 — 날씨 아이콘 낮/밤 결정용. fetch 실패 시 null.
-final todaySunriseSunsetProvider = FutureProvider<(DateTime?, DateTime?)>((
-  ref,
-) async {
-  final bundle = await ref.watch(weatherBundleProvider.future);
-  return (bundle.sunriseToday, bundle.sunsetToday);
 });

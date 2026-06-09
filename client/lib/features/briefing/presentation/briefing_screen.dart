@@ -8,6 +8,7 @@ import 'package:weather_friend/app/router/main_shell.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/core/utils/kst.dart';
 import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
+import 'package:weather_friend/features/briefing/data/weather_providers.dart';
 import 'package:weather_friend/features/briefing/domain/briefing.dart';
 import 'package:weather_friend/features/briefing/domain/outfit_guide.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
@@ -33,6 +34,7 @@ class BriefingScreen extends ConsumerWidget {
     };
     final sky = skyFor(currentHour);
     final asyncHourly = ref.watch(todayHourlyWeatherProvider);
+    final briefings = asyncBriefings.value ?? const <int, Briefing>{};
 
     return Scaffold(
       body: WeatherBg(
@@ -42,98 +44,85 @@ class BriefingScreen extends ConsumerWidget {
           asyncHourly,
           currentHour,
         ),
-        child: asyncBriefings.when(
-          loading: () =>
-              Center(child: CircularProgressIndicator(color: sky.ink)),
-          error: (e, _) => Center(
-            child: Text('오류: $e', style: TextStyle(color: sky.ink)),
-          ),
-          data: (briefings) => SafeArea(
-            bottom: false,
-            child: RefreshIndicator(
-              onRefresh: () async {
-                ref.invalidate(todayBriefingsProvider);
-                ref.invalidate(weatherBundleProvider);
-                await Future.wait([
-                  ref.read(todayBriefingsProvider.future),
-                  ref.read(todayHourlyWeatherProvider.future),
-                ]);
-              },
-              // 화면 안 글래스 카드 4종(circle button, hero, timeline, weekly)을
-              // 같은 backdrop key로 묶어 백그라운드 샘플링을 1회로 합친다.
-              // 네비바(MainShell)는 스크롤 시 카드와 겹치므로 같은 그룹에 넣지
-              // 않는다 — 같은 key 공유 영역이 겹치면 한 번만 필터된 것처럼 보임.
-              child: BackdropGroup(
-                child: CustomScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  slivers: [
-                    SliverToBoxAdapter(child: _TopBar(sky: sky)),
-                    SliverToBoxAdapter(
-                      child: _BigTemp(
-                        sky: sky,
-                        briefings: briefings,
-                        currentHour: currentHour,
-                      ),
+        child: SafeArea(
+          bottom: false,
+          child: RefreshIndicator(
+            onRefresh: () => Future.wait([
+              ref.read(todayBriefingsProvider.notifier).refresh(),
+              ref.read(weatherBundleProvider.notifier).refresh(),
+            ]),
+            // 화면 안 글래스 카드 4종(circle button, hero, timeline, weekly)을
+            // 같은 backdrop key로 묶어 백그라운드 샘플링을 1회로 합친다.
+            // 네비바(MainShell)는 스크롤 시 카드와 겹치므로 같은 그룹에 넣지
+            // 않는다 — 같은 key 공유 영역이 겹치면 한 번만 필터된 것처럼 보임.
+            child: BackdropGroup(
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(child: _TopBar(sky: sky)),
+                  SliverToBoxAdapter(
+                    child: _BigTemp(
+                      sky: sky,
+                      briefings: briefings,
+                      currentHour: currentHour,
                     ),
-                    SliverToBoxAdapter(
-                      child: _HeroCard(
-                        briefings: briefings,
-                        currentHour: currentHour,
-                      ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: _HeroCard(
+                      briefings: briefings,
+                      currentHour: currentHour,
                     ),
-                    // 초단기 섹션(UltraShortSection)·라디오 진입 제거 — 24h strip에
-                    // 이미 초단기 데이터가 머지되어 있어 정보 손실 X.
-                    SliverToBoxAdapter(
-                      child: Consumer(
-                        builder: (context, ref, _) {
-                          final todayAsync = ref.watch(
-                            todayHourlyWeatherProvider,
-                          );
-                          final todaySummaryAsync = ref.watch(
-                            todayDailySummaryProvider,
-                          );
-                          final sunAsync = ref.watch(
-                            todaySunriseSunsetProvider,
-                          );
-                          final today = switch (todayAsync) {
-                            AsyncData(:final value) => value,
-                            _ => const <int, HourlyWeather>{},
-                          };
-                          final todaySummary = switch (todaySummaryAsync) {
-                            AsyncData(:final value) => value,
-                            _ => null,
-                          };
-                          final (sunrise, sunset) = switch (sunAsync) {
-                            AsyncData(:final value) => value,
-                            _ => (null, null),
-                          };
-                          return _TimelineSection(
-                            dateLabel: _todayLabel(),
-                            label: '오늘 날씨',
-                            summary: todaySummary?.shortLine(),
-                            sky: sky,
-                            briefings: briefings,
-                            hourlyWeather: today,
-                            currentHour: currentHour,
-                            sunrise: sunrise,
-                            sunset: sunset,
-                          );
-                        },
-                      ),
+                  ),
+                  // 초단기 섹션(UltraShortSection)·라디오 진입 제거 — 24h strip에
+                  // 이미 초단기 데이터가 머지되어 있어 정보 손실 X.
+                  SliverToBoxAdapter(
+                    child: Consumer(
+                      builder: (context, ref, _) {
+                        final todayAsync = ref.watch(
+                          todayHourlyWeatherProvider,
+                        );
+                        final todaySummaryAsync = ref.watch(
+                          todayDailySummaryProvider,
+                        );
+                        final sunAsync = ref.watch(todaySunriseSunsetProvider);
+                        final today = switch (todayAsync) {
+                          AsyncData(:final value) => value,
+                          _ => const <int, HourlyWeather>{},
+                        };
+                        final todaySummary = switch (todaySummaryAsync) {
+                          AsyncData(:final value) => value,
+                          _ => null,
+                        };
+                        final (sunrise, sunset) = switch (sunAsync) {
+                          AsyncData(:final value) => value,
+                          _ => (null, null),
+                        };
+                        return _TimelineSection(
+                          dateLabel: _todayLabel(),
+                          label: '오늘 날씨',
+                          summary: todaySummary?.shortLine(),
+                          sky: sky,
+                          briefings: briefings,
+                          hourlyWeather: today,
+                          currentHour: currentHour,
+                          sunrise: sunrise,
+                          sunset: sunset,
+                        );
+                      },
                     ),
-                    SliverToBoxAdapter(child: _WeeklyForecastCard(sky: sky)),
-                    // 글래스 하단바 뒤로 컨텐츠가 흘러가도록 — 마지막 항목이 가려지지 않게
-                    // 바 높이 + 시스템 safe area + 약간의 숨 공간.
-                    SliverPadding(
-                      padding: EdgeInsets.only(
-                        bottom:
-                            kGlassNavBarHeight +
-                            MediaQuery.paddingOf(context).bottom +
-                            12,
-                      ),
+                  ),
+                  SliverToBoxAdapter(child: _WeeklyForecastCard(sky: sky)),
+                  // 글래스 하단바 뒤로 컨텐츠가 흘러가도록 — 마지막 항목이 가려지지 않게
+                  // 바 높이 + 시스템 safe area + 약간의 숨 공간.
+                  SliverPadding(
+                    padding: EdgeInsets.only(
+                      bottom:
+                          kGlassNavBarHeight +
+                          MediaQuery.paddingOf(context).bottom +
+                          12,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1036,8 +1025,8 @@ class _HourSlot extends StatelessWidget {
                   isSunset:
                       sunset != null && _isWithinHourWindow(hour, sunset!, 30),
                 )),
-                width: isNow ? 36 : 34,
-                height: isNow ? 36 : 34,
+                width: isNow ? 26 : 24,
+                height: isNow ? 26 : 24,
                 filterQuality: FilterQuality.medium,
               ),
               const SizedBox(height: 6),

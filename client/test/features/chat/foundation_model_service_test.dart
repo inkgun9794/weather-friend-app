@@ -17,7 +17,12 @@ void main() {
       expect(characterChatInstructions(CharacterId.sohee), contains('정중한 존댓말'));
       expect(
         characterChatInstructions(CharacterId.jihoon),
-        contains('차분하고 듬직한'),
+        contains('가명은 흑표범'),
+      );
+      expect(characterChatInstructions(CharacterId.jihoon), contains('아가씨'));
+      expect(
+        characterChatInstructions(CharacterId.jihoon),
+        contains('품위 있는 존댓말'),
       );
       expect(characterChatInstructions(CharacterId.siwon), contains('밝고 친근한'));
     });

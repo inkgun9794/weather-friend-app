@@ -700,7 +700,8 @@ class _BriefingConversationScreen extends ConsumerWidget {
           }
 
           return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(todayBriefingsProvider),
+            onRefresh: () =>
+                ref.read(todayBriefingsProvider.notifier).refresh(),
             child: ListView(
               padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset),
               children: [

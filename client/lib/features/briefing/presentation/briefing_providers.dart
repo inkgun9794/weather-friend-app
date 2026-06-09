@@ -1,7 +1,9 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:weather_friend/core/utils/kst.dart';
 import 'package:weather_friend/features/briefing/data/briefing_repository.dart';
-import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
 import 'package:weather_friend/features/briefing/domain/briefing.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
 import 'package:weather_friend/core/services/shared_prefs_provider.dart';
@@ -50,30 +52,85 @@ final kstHourProvider = StreamProvider<int>((ref) async* {
   }
 });
 
-final todayBriefingsProvider = FutureProvider<Map<int, Briefing>>((ref) async {
-  final dateAsync = ref.watch(kstDateProvider);
-  ref.watch(kstHourProvider);
-  final date = switch (dateAsync) {
-    AsyncData(:final value) => value,
-    _ => todayKstIso(),
-  };
-  final repo = ref.watch(briefingRepositoryProvider);
-  final character = ref.watch(selectedCharacterProvider);
-  // 브리핑(텍스트·음성)은 서울 특화 — 사용자가 어느 지역에 있든 항상 서울 기준으로 제공.
-  // (날씨 카드는 선택한 KMA 도시를 그대로 쓰므로 지역 날씨는 정상 표시된다.)
-  return repo.fetchDay(
-    city: _defaultCity,
-    date: date,
-    characterId: character.name,
-  );
-});
+class TodayBriefingsNotifier extends AsyncNotifier<Map<int, Briefing>> {
+  bool _refreshing = false;
 
-/// weatherBundleProvider를 wrap — kstDateProvider watch해서 사이클 경계(05시)에 새로 fetch.
-/// (open_meteo_client.dart의 raw provider는 그대로 두고, 여기서 시간 의존성 추가.)
-final reactiveWeatherBundleProvider = FutureProvider<WeatherBundle>((
-  ref,
-) async {
-  ref.watch(kstDateProvider); // 05시 경계에 새 fetch 트리거
-  ref.invalidate(weatherBundleProvider);
-  return ref.watch(weatherBundleProvider.future);
-});
+  @override
+  Future<Map<int, Briefing>> build() async {
+    final dateAsync = ref.watch(kstDateProvider);
+    ref.watch(kstHourProvider);
+    final date = switch (dateAsync) {
+      AsyncData(:final value) => value,
+      _ => todayKstIso(),
+    };
+    final character = ref.watch(selectedCharacterProvider);
+    final repo = ref.read(briefingRepositoryProvider);
+    final cached = repo.readCachedDay(
+      city: _defaultCity,
+      date: date,
+      characterId: character.name,
+    );
+
+    if (cached != null) {
+      unawaited(
+        Future<void>.microtask(
+          () => _refresh(date: date, character: character, silent: true),
+        ),
+      );
+      return cached;
+    }
+
+    return repo.fetchDay(
+      city: _defaultCity,
+      date: date,
+      characterId: character.name,
+    );
+  }
+
+  Future<void> refresh() async {
+    final dateAsync = ref.read(kstDateProvider);
+    final date = switch (dateAsync) {
+      AsyncData(:final value) => value,
+      _ => todayKstIso(),
+    };
+    await _refresh(
+      date: date,
+      character: ref.read(selectedCharacterProvider),
+      silent: false,
+    );
+  }
+
+  Future<void> _refresh({
+    required String date,
+    required CharacterId character,
+    required bool silent,
+  }) async {
+    if (_refreshing) return;
+    _refreshing = true;
+    try {
+      final fresh = await ref
+          .read(briefingRepositoryProvider)
+          .fetchDay(
+            city: _defaultCity,
+            date: date,
+            characterId: character.name,
+          );
+      if (ref.read(selectedCharacterProvider) == character) {
+        state = AsyncData(fresh);
+      }
+    } catch (error, stackTrace) {
+      if (!silent && state is! AsyncData<Map<int, Briefing>>) {
+        state = AsyncError(error, stackTrace);
+      } else {
+        debugPrint('[briefing_cache] refresh failed, keeping cache: $error');
+      }
+    } finally {
+      _refreshing = false;
+    }
+  }
+}
+
+final todayBriefingsProvider =
+    AsyncNotifierProvider<TodayBriefingsNotifier, Map<int, Briefing>>(
+      TodayBriefingsNotifier.new,
+    );

@@ -691,7 +691,7 @@ class _NotificationStepState extends ConsumerState<_NotificationStep> {
 const _previewData = <(String, String, String, CharacterId)>[
   ('오전 6:00', '지영', '일어났어? 오늘 우산은 안 가져가도 돼.', CharacterId.jiyoung),
   ('오후 10:00', '시원', '내일 정말 추워질 거야. 두꺼운 옷 꺼내!', CharacterId.siwon),
-  ('오전 6:00', '지훈', '오늘 최저 14도, 바람 2m/s. 가볍게 입어도 돼.', CharacterId.jihoon),
+  ('오전 6:00', '지훈', '아가씨, 오늘 최저 14도입니다. 얇은 겉옷을 준비하시지요.', CharacterId.jihoon),
 ];
 
 class _NotifPreview extends StatelessWidget {
@@ -996,15 +996,15 @@ class _OnboardCharCard extends StatelessWidget {
 
   String _tag(CharacterId id) => switch (id) {
     CharacterId.jiyoung => '다정한 날사친',
-    CharacterId.sohee => '전문 기상캐스터',
-    CharacterId.jihoon => '듬직한 날사친',
+    CharacterId.sohee => '전문 기상캐스터 날사친',
+    CharacterId.jihoon => '가명: 흑표범\n당신의 집사 날사친',
     CharacterId.siwon => '상냥한 날사친',
   };
 
   String _quote(CharacterId id) => switch (id) {
     CharacterId.jiyoung => '"오늘 우산 꼭 챙겨야 해 알겠지?"',
     CharacterId.sohee => '"오후부터 비가 내리겠습니다. 우산을 준비해 주세요."',
-    CharacterId.jihoon => '"최고 22도. 셔츠 한 장이면 충분."',
+    CharacterId.jihoon => '"아가씨, 오늘은 우산을 꼭 챙기셔야 합니다."',
     CharacterId.siwon => '"와 정말 더워! 반팔 입어!"',
   };
 }

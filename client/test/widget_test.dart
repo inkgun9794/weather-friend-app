@@ -7,6 +7,7 @@ import 'package:weather_friend/core/services/fcm_service.dart';
 import 'package:weather_friend/core/services/notification_service.dart';
 import 'package:weather_friend/core/services/shared_prefs_provider.dart';
 import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
+import 'package:weather_friend/features/briefing/data/weather_providers.dart';
 import 'package:weather_friend/features/briefing/domain/briefing.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_screen.dart';
@@ -57,6 +58,14 @@ class _FakeNotificationService extends NotificationService {
   Future<void> showTestNotification({String? body}) async {}
 }
 
+class _FakeTodayBriefings extends TodayBriefingsNotifier {
+  @override
+  Future<Map<int, Briefing>> build() async => const {};
+
+  @override
+  Future<void> refresh() async {}
+}
+
 void main() {
   testWidgets('app boots and shows briefing screen', (tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -73,11 +82,9 @@ void main() {
           // pumpAndSettle이 hang하지 않게 stream을 한 번만 emit.
           kstDateProvider.overrideWith((ref) => Stream.value('2026-05-23')),
           kstHourProvider.overrideWith((ref) => Stream.value(12)),
-          todayBriefingsProvider.overrideWith(
-            (ref) => Future.value(<int, Briefing>{}),
-          ),
+          todayBriefingsProvider.overrideWith(_FakeTodayBriefings.new),
           todayHourlyWeatherProvider.overrideWith(
-            (ref) => Future.value({
+            (ref) => AsyncData({
               for (var hour = 0; hour < 24; hour++)
                 hour: HourlyWeather(
                   hour: hour,
@@ -87,10 +94,13 @@ void main() {
                 ),
             }),
           ),
-          todayDailySummaryProvider.overrideWith((ref) => Future.value(null)),
-          weekDaysProvider.overrideWith(
-            (ref) => Future.value(const <WeekDay>[]),
+          todayDailySummaryProvider.overrideWith(
+            (ref) => const AsyncData(null),
           ),
+          todaySunriseSunsetProvider.overrideWith(
+            (ref) => const AsyncData((null, null)),
+          ),
+          weekDaysProvider.overrideWith((ref) => const AsyncData(<WeekDay>[])),
         ],
         child: const WeatherFriendApp(),
       ),

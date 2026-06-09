@@ -30,21 +30,31 @@ class FcmService {
   // Firebase 미초기화 환경(테스트 등)에서 `instance` 접근이 throw하지 않도록 lazy.
   late final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   bool _initialized = false;
+  Future<void>? _initializing;
 
-  Future<void> init() async {
-    if (_initialized) return;
-    // iOS는 foreground에서도 알림 배너/사운드가 보이도록 명시적으로 활성화.
-    await _messaging.setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-    _initialized = true;
+  Future<void> init() {
+    if (_initialized) return Future.value();
+    return _initializing ??= _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      // iOS는 foreground에서도 알림 배너/사운드가 보이도록 명시적으로 활성화.
+      await _messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      _initialized = true;
+    } finally {
+      _initializing = null;
+    }
   }
 
   /// 푸시 권한 요청. true = 허용됨.
   /// iOS는 명시적 요청 필요, Android 13+ 도 동일.
   Future<bool> requestPermissions() async {
+    await init();
     final settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
@@ -55,6 +65,7 @@ class FcmService {
   }
 
   Future<bool> hasPermission() async {
+    await init();
     final settings = await _messaging.getNotificationSettings();
     return settings.authorizationStatus == AuthorizationStatus.authorized ||
         settings.authorizationStatus == AuthorizationStatus.provisional;
@@ -67,6 +78,7 @@ class FcmService {
     required CharacterId current,
     required String city,
   }) async {
+    await init();
     if (!await hasPermission()) {
       debugPrint('FcmService: permission denied, skipping subscription');
       return;
@@ -102,6 +114,7 @@ class FcmService {
 
   /// 권한이 박탈됐거나 사용자가 해지한 경우. 저장된 구독을 모두 해지.
   Future<void> unsubscribeAll() async {
+    await init();
     final last = _readLastTarget();
     if (last != null) {
       await _safeUnsubscribe(

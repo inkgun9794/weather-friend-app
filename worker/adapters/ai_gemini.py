@@ -17,6 +17,7 @@ from google import genai
 from google.genai import types
 
 from domain.briefing import (
+    BUTLER_VOICE_RULES,
     HUMAN_VOICE_RULES,
     RAIN_MM_THRESHOLD,
     SEMANTIC_INSTRUCTIONS,
@@ -38,6 +39,8 @@ _RETRY_BASE_DELAY_SEC = 2.0  # 2 → 4 → 8
 def _style_rules_for(character: Character) -> str:
     if character.is_weathercaster:
         return WEATHERCASTER_VOICE_RULES
+    if character.is_butler:
+        return BUTLER_VOICE_RULES
     return HUMAN_VOICE_RULES
 
 

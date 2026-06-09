@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,24 +8,20 @@ import 'package:weather_friend/app/app.dart';
 import 'package:weather_friend/core/services/fcm_service.dart';
 import 'package:weather_friend/core/services/notification_service.dart';
 import 'package:weather_friend/core/services/shared_prefs_provider.dart';
+import 'package:weather_friend/features/location/data/city_catalog.dart';
 import 'package:weather_friend/firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  final results = await Future.wait<Object>([
+    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
+    SharedPreferences.getInstance(),
+    CityCatalog.load(),
+  ]);
+  final prefs = results[1] as SharedPreferences;
 
-  // 알림 채널 생성 + timezone 초기화. 매일 6시 정기 알림은 FCM 토픽 푸시로 처리;
-  // 이 서비스는 FCM 푸시가 표시될 Android 채널 사전 생성 + 테스트 알림 발사용.
   final notifications = NotificationService();
-  await notifications.init();
-
-  // SharedPreferences는 여기서 한 번만 await — Notifier들이 build()에서
-  // 동기로 읽을 수 있게 override로 주입. 안 그러면 라우터가 prefs 로딩
-  // 끝나기 전에 redirect 평가해서 온보딩 완료 사용자도 다시 온보딩으로 보내짐.
-  final prefs = await SharedPreferences.getInstance();
-
   final fcm = FcmService(prefs);
-  await fcm.init();
 
   runApp(
     ProviderScope(
@@ -34,5 +32,18 @@ Future<void> main() async {
       ],
       child: const WeatherFriendApp(),
     ),
+  );
+
+  // 알림 플러그인 준비는 첫 화면 표시를 막을 이유가 없다. 각 서비스의 공개
+  // 메서드도 init을 보장하므로 여기서는 warm-up만 백그라운드로 시작한다.
+  unawaited(
+    notifications.init().catchError((Object error, StackTrace stackTrace) {
+      debugPrint('NotificationService warm-up failed: $error');
+    }),
+  );
+  unawaited(
+    fcm.init().catchError((Object error, StackTrace stackTrace) {
+      debugPrint('FcmService warm-up failed: $error');
+    }),
   );
 }
