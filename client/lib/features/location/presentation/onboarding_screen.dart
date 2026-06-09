@@ -996,14 +996,14 @@ class _OnboardCharCard extends StatelessWidget {
 
   String _tag(CharacterId id) => switch (id) {
     CharacterId.jiyoung => '다정한 날사친',
-    CharacterId.sohee => '시크한 날사친',
+    CharacterId.sohee => '전문 기상캐스터',
     CharacterId.jihoon => '듬직한 날사친',
     CharacterId.siwon => '상냥한 날사친',
   };
 
   String _quote(CharacterId id) => switch (id) {
     CharacterId.jiyoung => '"오늘 우산 꼭 챙겨야 해 알겠지?"',
-    CharacterId.sohee => '"비 와. 알아서 챙겨."',
+    CharacterId.sohee => '"오후부터 비가 내리겠습니다. 우산을 준비해 주세요."',
     CharacterId.jihoon => '"최고 22도. 셔츠 한 장이면 충분."',
     CharacterId.siwon => '"와 정말 더워! 반팔 입어!"',
   };

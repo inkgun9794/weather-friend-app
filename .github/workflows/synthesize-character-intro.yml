@@ -1,0 +1,63 @@
+name: Synthesize Character Intro
+
+on:
+  workflow_dispatch:
+    inputs:
+      character:
+        description: Character ID
+        required: true
+        type: choice
+        default: sohee
+        options:
+          - jiyoung
+          - sohee
+          - jihoon
+          - siwon
+
+permissions:
+  contents: write
+
+jobs:
+  synthesize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: 'worker/uv.lock'
+
+      - name: Setup Python
+        run: uv python install 3.12
+        working-directory: worker
+
+      - name: Install dependencies
+        run: uv sync --frozen
+        working-directory: worker
+
+      - name: Synthesize intro
+        working-directory: worker
+        env:
+          TYPECAST_API_KEY: ${{ secrets.TYPECAST_API_KEY }}
+          TYPECAST_API_KEY_B: ${{ secrets.TYPECAST_API_KEY_B }}
+        run: |
+          uv run python synth_intros.py \
+            --character "${{ inputs.character }}"
+
+      - name: Commit intro asset
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "client/assets/character_intros/${{ inputs.character }}.mp3"
+          if git diff --staged --quiet; then
+            echo "No intro audio changes."
+            exit 0
+          fi
+          git commit -m "chore(audio): update ${{ inputs.character }} intro"
+          git pull --rebase --autostash origin main
+          git push

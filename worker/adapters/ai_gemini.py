@@ -20,6 +20,7 @@ from domain.briefing import (
     HUMAN_VOICE_RULES,
     RAIN_MM_THRESHOLD,
     SEMANTIC_INSTRUCTIONS,
+    WEATHERCASTER_VOICE_RULES,
     BriefingType,
     DayForecast,
     RainBlock,
@@ -32,6 +33,12 @@ log = logging.getLogger(__name__)
 
 _MAX_RETRIES = 3
 _RETRY_BASE_DELAY_SEC = 2.0  # 2 → 4 → 8
+
+
+def _style_rules_for(character: Character) -> str:
+    if character.is_weathercaster:
+        return WEATHERCASTER_VOICE_RULES
+    return HUMAN_VOICE_RULES
 
 
 def _is_retryable(error: Exception) -> bool:
@@ -187,7 +194,8 @@ class GeminiScriptGenerator:
         """
         semantic = SEMANTIC_INSTRUCTIONS[briefing_type].format(hour=hour)
         system_instruction = (
-            f"{character.persona_prompt}\n\n{HUMAN_VOICE_RULES}\n\n{semantic}"
+            f"{character.persona_prompt}\n\n{semantic}\n\n"
+            f"{_style_rules_for(character)}"
         )
 
         # CASUAL은 날씨 데이터 대신 "지금 핫토픽 찾아서 친구톡 만들어" 요청.

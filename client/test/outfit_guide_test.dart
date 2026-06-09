@@ -42,7 +42,7 @@ void main() {
     );
     expect(
       outfitMessageForCharacter(CharacterId.sohee, guide),
-      '통풍 잘되는 거 입고, 에어컨 대비해 얇은 겉옷 챙겨.',
+      '더운 날씨가 이어지겠습니다. 통풍이 잘되는 옷을 입고 얇은 겉옷도 준비해 주세요.',
     );
     expect(
       outfitMessageForCharacter(CharacterId.jihoon, guide),

@@ -28,7 +28,9 @@ class Character {
       id: CharacterId.sohee,
       displayName: '소희',
       gender: Gender.female,
-      overseasMessage: '해외야? 거긴 잘 몰라. 직접 검색해. 잘 다녀와.',
+      overseasMessage:
+          '현재 위치가 해외로 확인됩니다. 현지 기상 정보는 해당 지역의 공식 예보를 '
+          '확인해 주시고, 안전한 일정 보내시기 바랍니다.',
     ),
     Character(
       id: CharacterId.jihoon,
