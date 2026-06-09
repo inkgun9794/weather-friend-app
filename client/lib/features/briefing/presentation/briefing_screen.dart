@@ -1036,8 +1036,8 @@ class _HourSlot extends StatelessWidget {
                   isSunset:
                       sunset != null && _isWithinHourWindow(hour, sunset!, 30),
                 )),
-                width: isNow ? 28 : 26,
-                height: isNow ? 28 : 26,
+                width: isNow ? 36 : 34,
+                height: isNow ? 36 : 34,
                 filterQuality: FilterQuality.medium,
               ),
               const SizedBox(height: 6),
