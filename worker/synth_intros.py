@@ -26,10 +26,7 @@ from domain.character import CHARACTERS, CHARACTERS_BY_ID
 _INTROS: dict[str, str] = {
     "jiyoung": "난 지영이야. 앞으로 잘 부탁해.",
     "sohee": "안녕하세요. 정확하고 자세한 날씨를 전해드리겠습니다.",
-    "jihoon": (
-        "아가씨, 흑표범이라는 가명으로 불리는 집사 지훈입니다. "
-        "오늘의 날씨는 제가 세심히 살펴드리겠습니다."
-    ),
+    "jihoon": "안녕하세요. 집사 흑표범입니다. 앞으로 잘 부탁드립니다, 아가씨.",
     "siwon": "난 시원이야. 지금 날씨 궁금하지 않아? 내가 알려줄게!",
 }
 
