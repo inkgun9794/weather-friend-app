@@ -18,6 +18,7 @@ import 'package:weather_friend/features/location/data/selected_city_provider.dar
 import 'package:weather_friend/shared/widgets/audio_bubble.dart';
 import 'package:weather_friend/shared/widgets/character_portrait.dart';
 import 'package:weather_friend/shared/widgets/weather_bg.dart';
+import 'package:weather_friend/shared/widgets/weather_icons.dart';
 
 class BriefingScreen extends ConsumerWidget {
   const BriefingScreen({super.key});
@@ -147,59 +148,6 @@ WeatherCondition _conditionFromString(String s) {
   if (s.contains('눈')) return WeatherCondition.snow;
   if (s.contains('흐') || s.contains('구름')) return WeatherCondition.cloudy;
   return WeatherCondition.clear;
-}
-
-/// Flaticon Premium 카와이 날씨 아이콘 (PNG).
-///
-/// 우선순위 (KMA가 절대 우선):
-/// 1. KMA condition (c)이 비/눈/흐림이면 그 카테고리 그대로 — Open-Meteo 강도 보강만
-///    (예: KMA "비" + Open-Meteo WMO 95(천둥번개) → thunder.png)
-///    (예: KMA "맑음" + Open-Meteo WMO 95 → 천둥 무시, 그냥 맑음 아이콘)
-/// 2. KMA "맑음"일 때만 일출/일몰 윈도우 (±30분) 검사 → sunrise/sunset.png
-/// 3. 그 외 맑음 → 낮/밤 (일출~일몰 사이) → sun/moon.png
-String _weatherAsset(
-  WeatherCondition c,
-  int hour, {
-  int? weatherCode,
-  DateTime? sunrise,
-  DateTime? sunset,
-}) {
-  // 1. KMA condition 우선 — 비/눈/흐림 카테고리 결정
-  switch (c) {
-    case WeatherCondition.rain:
-      // KMA가 비라면 비 계열 안에서 Open-Meteo로 강도 보강
-      if (weatherCode != null) {
-        if (weatherCode >= 95) return 'assets/icons/weather/thunder.png';
-        if (weatherCode == 65 || weatherCode == 82) {
-          return 'assets/icons/weather/heavy_rain.png';
-        }
-        if (weatherCode == 81) return 'assets/icons/weather/shower.png';
-      }
-      return 'assets/icons/weather/rain.png';
-    case WeatherCondition.snow:
-      if (weatherCode == 75 || weatherCode == 86) {
-        return 'assets/icons/weather/blizzard.png';
-      }
-      return 'assets/icons/weather/snow.png';
-    case WeatherCondition.cloudy:
-      return 'assets/icons/weather/cloud.png';
-    case WeatherCondition.clear:
-      break; // 아래 일출/일몰/낮/밤 처리로 진행
-  }
-
-  // 2. KMA "맑음"일 때만 일출/일몰 윈도우 (±30분) → sunrise/sunset.png
-  if (sunrise != null && _isWithinHourWindow(hour, sunrise, 30)) {
-    return 'assets/icons/weather/sunrise.png';
-  }
-  if (sunset != null && _isWithinHourWindow(hour, sunset, 30)) {
-    return 'assets/icons/weather/sunset.png';
-  }
-
-  // 3. 평소 맑음 — 낮/밤 결정
-  final isDay = _isDaytime(hour, sunrise, sunset);
-  return isDay
-      ? 'assets/icons/weather/sun.png'
-      : 'assets/icons/weather/moon.png';
 }
 
 /// `hour:00` (정시)이 [t]에서 ±[minutes]분 이내인지.
@@ -1042,9 +990,6 @@ class _HourSlot extends StatelessWidget {
     // casual 타입은 weatherSnapshot이 null이라 그땐 hourly fallback 사용.
     final conditionStr =
         briefing?.weatherSnapshot?.condition ?? hourly?.condition;
-    final cond = conditionStr != null
-        ? _conditionFromString(conditionStr)
-        : WeatherCondition.clear;
     final temp =
         briefing?.weatherSnapshot?.temperatureC.round() ??
         hourly?.temperatureC.round();
@@ -1082,13 +1027,15 @@ class _HourSlot extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Image.asset(
-                _weatherAsset(
-                  cond,
-                  hour,
+                weatherGlyphAsset(weatherGlyphFor(
+                  condition: conditionStr ?? '',
+                  isDay: _isDaytime(hour, sunrise, sunset),
                   weatherCode: hourly?.weatherCode,
-                  sunrise: sunrise,
-                  sunset: sunset,
-                ),
+                  isSunrise:
+                      sunrise != null && _isWithinHourWindow(hour, sunrise!, 30),
+                  isSunset:
+                      sunset != null && _isWithinHourWindow(hour, sunset!, 30),
+                )),
                 width: isNow ? 28 : 26,
                 height: isNow ? 28 : 26,
                 filterQuality: FilterQuality.medium,
@@ -1285,19 +1232,21 @@ class _PartCell extends StatelessWidget {
   final SkyPalette sky;
   // morning ~9시 / afternoon ~14시 / evening ~20시.
   // weekly 카드는 day-level이라 sunrise/sunset 정확한 값을 알 수 없음 →
-  // _weatherAsset에 sunrise/sunset 안 넘기고 6시~19시 휴리스틱으로 fallback.
+  // 일출/일몰 없이 6시~19시 휴리스틱으로 낮/밤만 판단.
   final int partHour;
 
   @override
   Widget build(BuildContext context) {
-    final cond = _conditionFromString(summary.condition);
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Image.asset(
-          _weatherAsset(cond, partHour),
-          width: 20,
-          height: 20,
+          weatherGlyphAsset(weatherGlyphFor(
+            condition: summary.condition,
+            isDay: partHour >= 6 && partHour < 19,
+          )),
+          width: 28,
+          height: 28,
           filterQuality: FilterQuality.medium,
         ),
         const SizedBox(width: 6),

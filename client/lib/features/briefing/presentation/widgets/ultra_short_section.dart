@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
+import 'package:weather_friend/shared/widgets/weather_icons.dart';
 
 /// "초단기 6시간" 카드 — 오늘 날씨 섹션 위에 표시.
 ///
@@ -168,17 +169,11 @@ class _UltraSlot extends StatelessWidget {
     // Flaticon Premium 카와이 PNG 아이콘. 낮/밤은 일출/일몰 시각 기반 (대략적
     // 6시~19시 fallback).
     final isDay = _isDaytime(slotTime, sunrise, sunset);
-    final asset = switch (hour.condition) {
-      '소나기' => 'assets/icons/weather/shower.png',
-      '비' => 'assets/icons/weather/rain.png',
-      '비/눈' => 'assets/icons/weather/sleet.png',
-      '눈' => 'assets/icons/weather/snow.png',
-      '흐림' => 'assets/icons/weather/cloud.png',
-      '구름많음' => 'assets/icons/weather/cloud.png',
-      _ => isDay
-          ? 'assets/icons/weather/sun.png'
-          : 'assets/icons/weather/moon.png',
-    };
+    final asset = weatherGlyphAsset(weatherGlyphFor(
+      condition: hour.condition,
+      isDay: isDay,
+      weatherCode: hour.weatherCode,
+    ));
 
     // 슬롯이 현재 시간대인지 ("지금")
     final isNow = slotTime.year == now.year &&
