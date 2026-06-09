@@ -1237,19 +1237,21 @@ class _PartCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    // 아이콘(위) + 기온(아래) 세로 구조 — 각 요소가 칸 정중앙에 와서
+    // 헤더(오전/오후/저녁)와 세로축이 정확히 맞는다.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Image.asset(
           weatherGlyphAsset(weatherGlyphFor(
             condition: summary.condition,
             isDay: partHour >= 6 && partHour < 19,
           )),
-          width: 28,
-          height: 28,
+          width: 36,
+          height: 36,
           filterQuality: FilterQuality.medium,
         ),
-        const SizedBox(width: 6),
+        const SizedBox(height: 4),
         Text(
           '${summary.tempC}°',
           style: TextStyle(
