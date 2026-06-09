@@ -12,27 +12,30 @@ class FortuneReport {
     required this.fortuneText,
     required this.score,
     required this.viewedAt,
+    this.promptVersion = '',
   });
 
   final SajuProfile profile;
   final String fortuneText;
   final int score; // 0~100
   final DateTime viewedAt;
+  final String promptVersion;
 
   Map<String, dynamic> toJson() => {
-        'profile': profile.toJson(),
-        'fortuneText': fortuneText,
-        'score': score,
-        'viewedAt': viewedAt.toIso8601String(),
-      };
+    'profile': profile.toJson(),
+    'fortuneText': fortuneText,
+    'score': score,
+    'viewedAt': viewedAt.toIso8601String(),
+    'promptVersion': promptVersion,
+  };
 
   factory FortuneReport.fromJson(Map<String, dynamic> json) => FortuneReport(
-        profile:
-            SajuProfile.fromJson(json['profile'] as Map<String, dynamic>),
-        fortuneText: json['fortuneText'] as String,
-        score: (json['score'] as num?)?.toInt() ?? 50, // 마이그레이션 default
-        viewedAt: DateTime.parse(json['viewedAt'] as String),
-      );
+    profile: SajuProfile.fromJson(json['profile'] as Map<String, dynamic>),
+    fortuneText: json['fortuneText'] as String,
+    score: (json['score'] as num?)?.toInt() ?? 50, // 마이그레이션 default
+    viewedAt: DateTime.parse(json['viewedAt'] as String),
+    promptVersion: json['promptVersion'] as String? ?? '',
+  );
 }
 
 /// 당일 본 리포트만 유지. 자정 넘어가 날짜 키 다르면 자동 비움.
@@ -95,11 +98,12 @@ class FortuneReportRepository {
   }
 }
 
-final fortuneReportRepositoryProvider =
-    FutureProvider<FortuneReportRepository>((ref) async {
-  final prefs = await ref.watch(sharedPreferencesProvider.future);
-  return FortuneReportRepository(prefs);
-});
+final fortuneReportRepositoryProvider = FutureProvider<FortuneReportRepository>(
+  (ref) async {
+    final prefs = await ref.watch(sharedPreferencesProvider.future);
+    return FortuneReportRepository(prefs);
+  },
+);
 
 /// 오늘 본 리포트 리스트 — 화면에서 watch하고, 새 운세 보면 add() 호출.
 class FortuneReportsNotifier extends AsyncNotifier<List<FortuneReport>> {
@@ -125,5 +129,7 @@ class FortuneReportsNotifier extends AsyncNotifier<List<FortuneReport>> {
   }
 }
 
-final fortuneReportsProvider = AsyncNotifierProvider<
-    FortuneReportsNotifier, List<FortuneReport>>(FortuneReportsNotifier.new);
+final fortuneReportsProvider =
+    AsyncNotifierProvider<FortuneReportsNotifier, List<FortuneReport>>(
+      FortuneReportsNotifier.new,
+    );

@@ -2,7 +2,7 @@ const functions = require('@google-cloud/functions-framework');
 
 const GEMINI_MODEL = 'gemini-2.5-flash';
 const MAX_RETRIES = 3;
-const PROMPT_VERSION = 'concise-weather-v3';
+const PROMPT_VERSION = 'concise-weather-v4';
 
 functions.http('fortune', async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
@@ -39,11 +39,7 @@ functions.http('fortune', async (req, res) => {
     .map((part) => part.text ?? '')
     .join('');
 
-  const scoreMatch = raw.match(/SCORE\s*:\s*(\d{1,3})/i);
-  const score = scoreMatch
-    ? Math.max(0, Math.min(100, parseInt(scoreMatch[1], 10)))
-    : 50;
-  const text = raw.replace(/SCORE\s*:\s*\d{1,3}\s*/i, '').trim();
+  const { text, score } = parseFortuneResponse(raw);
 
   res.json({ text, score, promptVersion: PROMPT_VERSION });
 });
@@ -129,6 +125,12 @@ ${hasDetailedFlow
 3. 각 운의 십성, 오행의 도움·주의 역할, 원국과의 합·충·형·해·파를 함께 비교한다.
 4. 도움 요인과 주의 요인을 모두 반영해 오늘의 흐름과 실천 행동을 도출한다.
 5. 근거 없는 일반론을 만들지 말고, 제공된 명리 분석값과 현재 운의 흐름에 근거한다.
+6. 오늘의 점수는 50점을 기준으로 아래 방식에 따라 별도로 산출한다.
+   - 대운 15%, 세운 20%, 월운 25%, 일운 40% 비중으로 반영한다.
+   - 각 운의 천간·지지 역할이 용신·희신에 도움이 되면 올리고, 주의 오행이면 내린다.
+   - 원국과의 합은 소폭 가점하고, 충·형·해·파는 강도에 따라 감점한다.
+   - 도움과 주의가 함께 있으면 상쇄하고, 신강신약 점수를 오늘 점수로 그대로 복사하지 않는다.
+   - 특별한 도움이나 주의 근거가 없다면 50점 안팎으로 두며, 근거 없이 매번 같은 점수를 쓰지 않는다.
 
 [작성 원칙]
 1. 관계, 일/공부, 재물, 건강처럼 영역을 세분화하지 않는다.
@@ -148,8 +150,17 @@ ${hasDetailedFlow
 ## 한 줄 조언
 오늘의 균형을 돕는 조언 한 문장을 35자 이내로 작성한다.
 
-모든 섹션을 작성한 뒤 마지막 줄에 0~100 사이 정수 점수를 다음 형식으로 쓴다.
-SCORE: 67`;
+모든 섹션을 작성한 뒤 마지막 줄에 위 판단으로 산출한 0~100 사이 정수 점수를 쓴다.
+마지막 줄은 반드시 "SCORE: " 뒤에 산출한 정수만 작성하고, 고정값이나 예시값을 반복하지 않는다.`;
 }
 
-module.exports = { buildPrompt };
+function parseFortuneResponse(raw) {
+  const scoreMatch = raw.match(/SCORE\s*:\s*(\d{1,3})/i);
+  const score = scoreMatch
+    ? Math.max(0, Math.min(100, parseInt(scoreMatch[1], 10)))
+    : 50;
+  const text = raw.replace(/SCORE\s*:\s*\d{1,3}\s*/i, '').trim();
+  return { text, score };
+}
+
+module.exports = { buildPrompt, parseFortuneResponse };

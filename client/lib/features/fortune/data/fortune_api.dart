@@ -11,12 +11,18 @@ import 'package:weather_friend/features/fortune/data/saju_profile.dart';
 /// Cloud Run (Seoul region) Gemini proxy URL.
 const _kFortuneEndpoint =
     'https://weather-friend-llm-89382148867.asia-northeast3.run.app';
+const fortunePromptVersion = 'concise-weather-v4';
 
 /// LLM 응답 — 운세 텍스트 + 점수 (0~100).
 class FortuneResult {
-  const FortuneResult({required this.text, required this.score});
+  const FortuneResult({
+    required this.text,
+    required this.score,
+    this.promptVersion = fortunePromptVersion,
+  });
   final String text;
   final int score;
+  final String promptVersion;
 }
 
 class FortuneApi {
@@ -48,8 +54,14 @@ class FortuneApi {
     final data = json.decode(res.body) as Map<String, dynamic>;
     final text = data['text'] as String? ?? '';
     final score = (data['score'] as num?)?.toInt() ?? 50;
+    final promptVersion =
+        data['promptVersion'] as String? ?? fortunePromptVersion;
     if (text.isEmpty) throw const FortuneApiException('빈 응답');
-    return FortuneResult(text: text, score: score.clamp(0, 100));
+    return FortuneResult(
+      text: text,
+      score: score.clamp(0, 100),
+      promptVersion: promptVersion,
+    );
   }
 }
 
@@ -129,7 +141,7 @@ Map<String, dynamic> buildFortuneRequestPayload({
         '${date.year}-'
         '${date.month.toString().padLeft(2, '0')}-'
         '${date.day.toString().padLeft(2, '0')}',
-    'promptVersion': 'concise-weather-v3',
+    'promptVersion': fortunePromptVersion,
   };
 }
 
@@ -282,11 +294,17 @@ final fortuneApiProvider = Provider<FortuneApi>((_) => const FortuneApi());
 final fortuneForProfileProvider =
     FutureProvider.family<FortuneResult, SajuProfile>((ref, profile) async {
       // 1) 캐시 hit?
-      await ref.watch(fortuneReportsProvider.future);
+      // 리포트 저장은 이 provider 내부에서 일어난다. 여기서 watch하면
+      // 저장된 목록 변경이 다시 fetch를 시작해 재호출 순환이 생긴다.
+      await ref.read(fortuneReportsProvider.future);
       final reportsNotifier = ref.read(fortuneReportsProvider.notifier);
       final cached = reportsNotifier.findByProfile(profile);
-      if (cached != null) {
-        return FortuneResult(text: cached.fortuneText, score: cached.score);
+      if (cached != null && cached.promptVersion == fortunePromptVersion) {
+        return FortuneResult(
+          text: cached.fortuneText,
+          score: cached.score,
+          promptVersion: cached.promptVersion,
+        );
       }
 
       // 2) 사주 계산
@@ -310,6 +328,7 @@ final fortuneForProfileProvider =
           fortuneText: result.text,
           score: result.score,
           viewedAt: DateTime.now(),
+          promptVersion: result.promptVersion,
         ),
       );
 
