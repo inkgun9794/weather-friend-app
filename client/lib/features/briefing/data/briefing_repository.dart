@@ -10,7 +10,10 @@ import 'package:weather_friend/features/briefing/domain/briefing.dart';
 class BriefingRepository {
   BriefingRepository(this._firestore, this._prefs);
 
-  final FirebaseFirestore _firestore;
+  @visibleForTesting
+  BriefingRepository.cacheOnly(this._prefs) : _firestore = null;
+
+  final FirebaseFirestore? _firestore;
   final SharedPreferences _prefs;
 
   static const _activeHours = <int>[
@@ -30,8 +33,13 @@ class BriefingRepository {
     21,
   ];
 
-  CollectionReference<Map<String, dynamic>> get _col =>
-      _firestore.collection('briefings');
+  CollectionReference<Map<String, dynamic>> get _col {
+    final firestore = _firestore;
+    if (firestore == null) {
+      throw StateError('Firestore is unavailable in a cache-only repository.');
+    }
+    return firestore.collection('briefings');
+  }
 
   Future<Briefing?> fetchOne({
     required String city,
@@ -97,6 +105,45 @@ class BriefingRepository {
     } catch (_) {
       return null;
     }
+  }
+
+  List<Briefing> readCachedHistory({
+    required String city,
+    required String characterId,
+  }) {
+    final prefix = 'briefings_v1:$city:';
+    final suffix = ':$characterId';
+    final byId = <String, Briefing>{};
+
+    for (final key in _prefs.getKeys()) {
+      if (!key.startsWith(prefix) || !key.endsWith(suffix)) continue;
+      final raw = _prefs.getString(key);
+      if (raw == null) continue;
+
+      try {
+        final items = (json.decode(raw) as List).cast<Map<String, dynamic>>();
+        for (final item in items) {
+          final briefing = Briefing.fromJson(item);
+          if (briefing.city != city || briefing.characterId != characterId) {
+            continue;
+          }
+          byId[briefingDocId(
+                city: briefing.city,
+                date: briefing.date,
+                hour: briefing.hour,
+                characterId: briefing.characterId,
+              )] =
+              briefing;
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+
+    return byId.values.toList()..sort((a, b) {
+      final dateOrder = a.date.compareTo(b.date);
+      return dateOrder != 0 ? dateOrder : a.hour.compareTo(b.hour);
+    });
   }
 
   String _cacheKey(String city, String date, String characterId) {

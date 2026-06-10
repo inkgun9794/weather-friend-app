@@ -34,8 +34,7 @@ class ConversationScreen extends ConsumerWidget {
       if (chat.isCheckingAvailability) {
         screen = const Scaffold(
           backgroundColor: Colors.transparent,
-          appBar: _MessagesAppBar(),
-          body: Center(child: CircularProgressIndicator()),
+          body: SafeArea(child: Center(child: CircularProgressIndicator())),
         );
       } else if (chat.availability?.isAvailable == true) {
         screen = const _CharacterChatScreen();
@@ -116,28 +115,6 @@ Color _messageSkyColorAtHour(int hour, List<(int, Color)> keyframes) {
     }
   }
   return keyframes.last.$2;
-}
-
-class _MessagesAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _MessagesAppBar();
-
-  @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
-
-  @override
-  Widget build(BuildContext context) {
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      surfaceTintColor: Colors.transparent,
-      title: const Text(
-        '메세지',
-        style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0),
-      ),
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      automaticallyImplyLeading: false,
-    );
-  }
 }
 
 class _CharacterChatScreen extends ConsumerStatefulWidget {
@@ -657,7 +634,7 @@ class _ChatComposer extends StatelessWidget {
   }
 }
 
-/// 지원되지 않는 기기에서는 기존 오늘 브리핑 기록을 그대로 보여준다.
+/// 지원되지 않는 기기에서는 로컬에 누적된 브리핑 기록을 보여준다.
 class _BriefingConversationScreen extends ConsumerWidget {
   const _BriefingConversationScreen({
     required this.availability,
@@ -670,10 +647,18 @@ class _BriefingConversationScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncBriefings = ref.watch(todayBriefingsProvider);
+    final history = ref.watch(briefingHistoryProvider);
     final hour = currentHourKst();
+    final activeDate = todayKstIso();
     // 00~04시는 아직 어제 사이클 — 어제 브리핑(6~21시)은 모두 지났으니 전부 보여준다.
     // 05시부터는 현재 시각까지만 누적 표시.
     final cutoff = hour < kstCycleStartHour ? 24 : hour;
+    final visibleHistory = history
+        .where((briefing) {
+          final dateOrder = briefing.date.compareTo(activeDate);
+          return dateOrder < 0 || (dateOrder == 0 && briefing.hour <= cutoff);
+        })
+        .toList(growable: false);
 
     // 하단 글래스 탭 뒤로 ListView가 흘러들어가도록 — 마지막 버블이 가려지지 않게.
     final bottomInset =
@@ -681,48 +666,111 @@ class _BriefingConversationScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: const _MessagesAppBar(),
-      body: asyncBriefings.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('오류: $e')),
-        data: (briefings) {
-          final entries =
-              briefings.entries.where((e) => e.key <= cutoff).toList()
-                ..sort((a, b) => a.key.compareTo(b.key));
-
-          if (entries.isEmpty) {
-            return Center(
-              child: Text(
-                '아직 메시지가 없어요',
-                style: TextStyle(color: AppColors.inkMute, fontSize: 14),
+      body: SafeArea(
+        bottom: false,
+        child: asyncBriefings.isLoading && visibleHistory.isEmpty
+            ? const Center(child: CircularProgressIndicator())
+            : visibleHistory.isEmpty
+            ? Center(
+                child: Text(
+                  asyncBriefings.hasError ? '메시지를 불러오지 못했어요' : '아직 메시지가 없어요',
+                  style: TextStyle(color: AppColors.inkMute, fontSize: 14),
+                ),
+              )
+            : RefreshIndicator(
+                onRefresh: () =>
+                    ref.read(todayBriefingsProvider.notifier).refresh(),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset),
+                  children: [
+                    if (showChatNotice)
+                      _UnsupportedChatNotice(availability: availability),
+                    ..._historyWidgets(visibleHistory, activeDate: activeDate),
+                  ],
+                ),
               ),
-            );
-          }
-
-          return RefreshIndicator(
-            onRefresh: () =>
-                ref.read(todayBriefingsProvider.notifier).refresh(),
-            child: ListView(
-              padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset),
-              children: [
-                if (showChatNotice)
-                  _UnsupportedChatNotice(availability: availability),
-                for (var i = 0; i < entries.length; i++)
-                  _MessageBubble(
-                    hour: entries[i].key,
-                    briefing: entries[i].value,
-                    showHeader:
-                        i == 0 ||
-                        entries[i - 1].value.characterId !=
-                            entries[i].value.characterId,
-                  ),
-              ],
-            ),
-          );
-        },
       ),
     );
   }
+}
+
+List<Widget> _historyWidgets(
+  List<Briefing> history, {
+  required String activeDate,
+}) {
+  final widgets = <Widget>[];
+  for (var i = 0; i < history.length; i++) {
+    final briefing = history[i];
+    final previous = i == 0 ? null : history[i - 1];
+    final startsNewDay = previous?.date != briefing.date;
+
+    if (startsNewDay) {
+      widgets.add(
+        _MessageDateDivider(date: briefing.date, activeDate: activeDate),
+      );
+    }
+    widgets.add(
+      _MessageBubble(
+        hour: briefing.hour,
+        briefing: briefing,
+        showHeader:
+            startsNewDay || previous?.characterId != briefing.characterId,
+      ),
+    );
+  }
+  return widgets;
+}
+
+class _MessageDateDivider extends StatelessWidget {
+  const _MessageDateDivider({required this.date, required this.activeDate});
+
+  final String date;
+  final String activeDate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 2),
+      child: Center(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+            child: Text(
+              _dateLabel(date, activeDate),
+              style: TextStyle(
+                color: AppColors.inkMute,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.1,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _dateLabel(String date, String activeDate) {
+  if (date == activeDate) return '오늘';
+
+  final parsed = DateTime.tryParse(date);
+  final active = DateTime.tryParse(activeDate);
+  if (parsed == null) return date;
+  if (active != null &&
+      parsed.year == active.subtract(const Duration(days: 1)).year &&
+      parsed.month == active.subtract(const Duration(days: 1)).month &&
+      parsed.day == active.subtract(const Duration(days: 1)).day) {
+    return '어제';
+  }
+
+  const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+  return '${parsed.month}월 ${parsed.day}일 ${weekdays[parsed.weekday - 1]}요일';
 }
 
 class _UnsupportedChatNotice extends StatelessWidget {

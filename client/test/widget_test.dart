@@ -49,11 +49,14 @@ class _FakeNotificationService extends NotificationService {
     required BriefingSlot slot,
     required String title,
     required String body,
+    String? audioPayload,
   }) async {}
   @override
   Future<void> cancelSlot(BriefingSlot slot) async {}
   @override
   Future<void> cancelAllSlots() async {}
+  @override
+  Future<void> cancel(int id) async {}
   @override
   Future<void> showTestNotification({String? body}) async {}
 }

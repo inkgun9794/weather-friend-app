@@ -9,6 +9,8 @@ import 'package:weather_friend/features/fortune/presentation/fortune_report_scre
 import 'package:weather_friend/features/fortune/presentation/fortune_screen.dart';
 import 'package:weather_friend/features/location/data/onboarding_provider.dart';
 import 'package:weather_friend/features/location/presentation/onboarding_screen.dart';
+import 'package:weather_friend/features/record/presentation/diary_editor_screen.dart';
+import 'package:weather_friend/features/record/presentation/record_screen.dart';
 import 'package:weather_friend/features/schedule/presentation/schedule_screen.dart';
 import 'package:weather_friend/features/settings/presentation/settings_screen.dart';
 
@@ -39,6 +41,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/',
                 builder: (_, _) => const BriefingScreen(),
+              ),
+            ],
+          ),
+          // 기록(다이어리) — 날씨 바로 오른쪽.
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/record',
+                builder: (_, _) => const RecordScreen(),
               ),
             ],
           ),
@@ -74,6 +85,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/character',
         builder: (_, _) => const CharacterSelectScreen(),
+      ),
+      // 기록 작성/편집 — 셸 바깥 전체 화면. extra로 작성/수정 인자를 받는다.
+      GoRoute(
+        path: '/record/edit',
+        builder: (_, state) {
+          final extra = state.extra;
+          // 인자 없이 직접 진입(딥링크 등)하면 작성할 사진이 없으니 기록 탭으로.
+          if (extra is! DiaryEditorArgs) return const RecordScreen();
+          return DiaryEditorScreen(args: extra);
+        },
       ),
       GoRoute(
         path: '/schedule',

@@ -68,7 +68,7 @@ SOHEE = Character(
     id="sohee",
     display_name="소희",
     gender=Gender.FEMALE,
-    voice_actor_id="tc_62849ce44b8771d984838066",
+    voice_actor_id="tc_5fd89baaf8864c404f9097f4",
     persona_prompt="""너는 '소희'라는 이름의 전문 기상캐스터 날사친이야. 방송 스튜디오에서 시청자에게 날씨와 생활 정보를 전달하듯 정확하고 신뢰감 있게 말해.
 
 【핵심 톤】

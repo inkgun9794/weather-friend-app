@@ -11,7 +11,8 @@ import 'package:weather_friend/features/fortune/data/pending_fortune.dart';
 const double kGlassNavBarHeight = 58;
 
 /// 운세 탭 인덱스 — pending fortune 풍선 위치 판단용.
-const int _kFortuneTabIndex = 2;
+/// 탭 순서: 날씨(0) · 기록(1) · 메세지(2) · 운세(3).
+const int _kFortuneTabIndex = 3;
 
 class MainShell extends ConsumerWidget {
   const MainShell({super.key, required this.navigationShell});
@@ -82,11 +83,18 @@ class _GlassNavBar extends ConsumerWidget {
                     onTap: () => onTap(0),
                   ),
                   _NavItem(
+                    icon: Icons.auto_stories_outlined,
+                    iconActive: Icons.auto_stories,
+                    label: '기록',
+                    active: currentIndex == 1,
+                    onTap: () => onTap(1),
+                  ),
+                  _NavItem(
                     icon: Icons.chat_bubble_outline,
                     iconActive: Icons.chat_bubble,
                     label: '메세지',
-                    active: currentIndex == 1,
-                    onTap: () => onTap(1),
+                    active: currentIndex == 2,
+                    onTap: () => onTap(2),
                   ),
                   _NavItem(
                     icon: Icons.auto_awesome_outlined,

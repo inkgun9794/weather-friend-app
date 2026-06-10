@@ -5,19 +5,6 @@ import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/core/services/audio_player_service.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
 
-class CurrentlyPlayingNotifier extends Notifier<String?> {
-  @override
-  String? build() => null;
-
-  void start(String url) => state = url;
-  void stop() => state = null;
-}
-
-final currentlyPlayingProvider =
-    NotifierProvider<CurrentlyPlayingNotifier, String?>(
-      CurrentlyPlayingNotifier.new,
-    );
-
 const _waveformBars = <double>[
   3,
   5,

@@ -10,7 +10,7 @@ class CharacterStyleTest(unittest.TestCase):
     def test_sohee_uses_weathercaster_voice_and_formal_style(self) -> None:
         self.assertEqual(
             SOHEE.voice_actor_id,
-            "tc_62849ce44b8771d984838066",
+            "tc_5fd89baaf8864c404f9097f4",
         )
         self.assertTrue(SOHEE.is_weathercaster)
         self.assertIn("존댓말", SOHEE.persona_prompt)

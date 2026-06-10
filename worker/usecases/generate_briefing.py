@@ -3,8 +3,8 @@
 매시간 :50에 cron이 호출 → 다음 시각(HH:00)의 4 캐릭터 브리핑 생성.
 실시간 forecast로 데이터 신선도 ↑, Gemini RPM 한도 안전.
 
-6시 morning은 Typecast 음성 합성 + FCM 발송.
-21시 evening은 별도 Typecast 계정으로 음성만 합성.
+6시 morning과 21시 evening은 Typecast 음성 합성 + FCM 발송.
+21시 evening은 별도 Typecast 계정으로 합성한다.
 """
 
 from __future__ import annotations
@@ -148,10 +148,10 @@ async def _generate_one(
         " +audio" if audio_url else "",
     )
 
-    # 4) FCM push — morning 오디오 생성 성공 시에만.
+    # 4) FCM push — morning/evening 오디오 생성 성공 시에만.
     #    푸시 실패가 브리핑 저장을 무효화하면 안 됨 (이미 Firestore에 저장됐고
     #    다음 cron 재시도는 idempotent하게 skip할 것).
-    if fcm is not None and audio_url and btype == BriefingType.MORNING:
+    if fcm is not None and audio_url and is_audio_slot(hour):
         try:
             await fcm.send_briefing(
                 city=city,
@@ -159,6 +159,7 @@ async def _generate_one(
                 character_id=character.id,
                 character_display_name=character.display_name,
                 transcript=message_script,
+                audio_url=audio_url,
             )
         except Exception as e:
             log.error(
@@ -202,11 +203,9 @@ async def generate_for_city_hour(
     publisher = PagesPublisher(docs_root)
     store = FirestoreMetadataStore(project_id)
 
-    # FCM은 morning 오디오 슬롯에서만 필요 — evening은 음성만 만들고 푸시는 보내지 않음.
+    # FCM은 morning/evening 오디오 슬롯에서만 필요.
     fcm: FcmPushClient | None = (
-        FcmPushClient()
-        if briefing_type_for_hour(target_hour) == BriefingType.MORNING
-        else None
+        FcmPushClient() if is_audio_slot(target_hour) else None
     )
 
     try:

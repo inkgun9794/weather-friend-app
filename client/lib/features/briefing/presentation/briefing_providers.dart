@@ -134,3 +134,11 @@ final todayBriefingsProvider =
     AsyncNotifierProvider<TodayBriefingsNotifier, Map<int, Briefing>>(
       TodayBriefingsNotifier.new,
     );
+
+final briefingHistoryProvider = Provider<List<Briefing>>((ref) {
+  ref.watch(todayBriefingsProvider);
+  final character = ref.watch(selectedCharacterProvider);
+  return ref
+      .watch(briefingRepositoryProvider)
+      .readCachedHistory(city: _defaultCity, characterId: character.name);
+});

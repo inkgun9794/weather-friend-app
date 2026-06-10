@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:weather_friend/core/services/audio_player_service.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
-import 'package:weather_friend/shared/widgets/audio_bubble.dart'
-    show currentlyPlayingProvider;
 
 /// 작은 스피커 버튼 — 캐릭터 자기소개 mp3를 재생/일시정지.
 /// 같은 currentlyPlayingProvider를 공유해서 다른 카드 누르면 자동 stop.

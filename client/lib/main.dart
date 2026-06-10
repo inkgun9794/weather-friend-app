@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +12,23 @@ import 'package:weather_friend/core/services/shared_prefs_provider.dart';
 import 'package:weather_friend/features/location/data/city_catalog.dart';
 import 'package:weather_friend/firebase_options.dart';
 
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
+  final briefing = RemoteBriefingNotification.fromData(message.data);
+  if (briefing == null) return;
+  await NotificationService().showBriefingPush(
+    title: briefing.title,
+    body: briefing.body,
+    audioUrl: briefing.audioUrl,
+  );
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final results = await Future.wait<Object>([
@@ -19,6 +37,7 @@ Future<void> main() async {
     CityCatalog.load(),
   ]);
   final prefs = results[1] as SharedPreferences;
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
   final notifications = NotificationService();
   final fcm = FcmService(prefs);

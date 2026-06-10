@@ -4,7 +4,10 @@ import 'dart:io' show Platform;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:weather_friend/app/router/app_router.dart';
+import 'package:weather_friend/core/services/audio_player_service.dart';
 import 'package:weather_friend/core/services/fcm_service.dart';
 import 'package:weather_friend/core/services/notification_service.dart';
 import 'package:weather_friend/core/utils/kst.dart';
@@ -44,6 +47,8 @@ class _NotificationCoordinatorState
     extends ConsumerState<NotificationCoordinator>
     with WidgetsBindingObserver {
   StreamSubscription<RemoteMessage>? _fcmForegroundSub;
+  StreamSubscription<RemoteMessage>? _fcmOpenedSub;
+  StreamSubscription<NotificationResponse>? _notificationResponseSub;
 
   @override
   void initState() {
@@ -52,18 +57,36 @@ class _NotificationCoordinatorState
 
     // FCM 포그라운드 메시지 도착 → 즉시 브리핑 invalidate.
     // (앱이 켜진 상태에서 6시 푸시 받으면 화면 자동 갱신.)
-    _fcmForegroundSub = FirebaseMessaging.onMessage.listen((msg) {
+    final notifications = ref.read(notificationServiceProvider);
+    _notificationResponseSub = notifications.responses.listen(
+      _handleNotificationResponse,
+    );
+
+    _fcmForegroundSub = FirebaseMessaging.onMessage.listen((msg) async {
       if (!mounted) return;
       debugPrint('FCM foreground: ${msg.notification?.title}');
+      final briefing = RemoteBriefingNotification.fromData(msg.data);
+      if (briefing != null && !kIsWeb && Platform.isAndroid) {
+        await notifications.showBriefingPush(
+          title: briefing.title,
+          body: briefing.body,
+          audioUrl: briefing.audioUrl,
+        );
+      }
       ref.invalidate(todayBriefingsProvider);
     });
+    _fcmOpenedSub = FirebaseMessaging.onMessageOpenedApp.listen(
+      _handleOpenedRemoteMessage,
+    );
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
   }
 
   @override
   void dispose() {
     _fcmForegroundSub?.cancel();
+    _fcmOpenedSub?.cancel();
+    _notificationResponseSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -81,6 +104,61 @@ class _NotificationCoordinatorState
       kIsWeb ||
       Platform.isAndroid ||
       (Platform.isIOS && NotificationCoordinator._isIosFcmReady);
+
+  Future<void> _initialize() async {
+    final notifications = ref.read(notificationServiceProvider);
+    await notifications.init();
+    final initialResponse = notifications.takeInitialResponse();
+    if (initialResponse != null) {
+      await _handleNotificationResponse(initialResponse);
+    }
+
+    try {
+      final initialRemoteMessage = await FirebaseMessaging.instance
+          .getInitialMessage();
+      if (initialRemoteMessage != null) {
+        await _handleOpenedRemoteMessage(initialRemoteMessage);
+      }
+    } catch (e) {
+      debugPrint('NotificationCoordinator: initial FCM message skipped: $e');
+    }
+    await _refresh();
+  }
+
+  Future<void> _handleNotificationResponse(
+    NotificationResponse response,
+  ) async {
+    // 음성 재생 액션.
+    if (response.actionId == playAudioActionId) {
+      final audioUrl = resolveAudioNotificationPayload(
+        response.payload,
+        date: todayKstIso(),
+      );
+      if (audioUrl != null) await _playAudio(audioUrl);
+      return;
+    }
+    // 기록 리마인더 본문 탭 → 기록 화면으로 이동.
+    if (response.payload == recordReminderPayload) {
+      ref.read(appRouterProvider).go('/record');
+    }
+  }
+
+  Future<void> _handleOpenedRemoteMessage(RemoteMessage message) async {
+    final briefing = RemoteBriefingNotification.fromData(message.data);
+    if (briefing == null) return;
+    await _playAudio(briefing.audioUrl);
+  }
+
+  Future<void> _playAudio(String audioUrl) async {
+    final playing = ref.read(currentlyPlayingProvider.notifier);
+    playing.start(audioUrl);
+    try {
+      await ref.read(audioPlayerServiceProvider).playUrl(audioUrl);
+    } catch (e) {
+      playing.stop();
+      debugPrint('NotificationCoordinator: audio playback failed: $e');
+    }
+  }
 
   Future<void> _refresh() async {
     if (!ref.read(onboardingCompleteProvider)) return;
@@ -131,6 +209,11 @@ class _NotificationCoordinatorState
         slot: slot,
         title: displayName,
         body: body,
+        audioPayload: briefingAudioNotificationPayload(
+          city: city,
+          hour: slot.hour,
+          characterId: character.name,
+        ),
       );
     }
   }

@@ -3,7 +3,7 @@
 시맨틱:
 - MORNING (06시): 오늘 하루 forecast — 사용자가 하루를 준비할 수 있게 (음성 + 푸시)
 - HOURLY  (11시): 점심 무렵 날씨 점검 (텍스트)
-- EVENING (21시): 오늘 회고 + 내일 forecast — 내일 준비 도와줌 (음성)
+- EVENING (21시): 오늘 회고 + 내일 forecast — 내일 준비 도와줌 (음성 + 푸시)
 - CASUAL  (9/10/12-20시 중 11 제외): 트렌드/이슈 기반 친구톡 — 날씨와 무관
 """
 
@@ -13,7 +13,7 @@ from enum import Enum
 
 class BriefingType(str, Enum):
     MORNING = "morning"   # 06시 - 푸시 + 음성 + 오늘 날씨
-    EVENING = "evening"   # 21시 - 음성 + 오늘 회고 + 내일 날씨
+    EVENING = "evening"   # 21시 - 푸시 + 음성 + 오늘 회고 + 내일 날씨
     HOURLY = "hourly"     # 11시 - 텍스트 + 점심 무렵 날씨 한번 (하루 중 유일한 텍스트 날씨)
     CASUAL = "casual"     # 9/10/12-20시 - 트렌드/이슈 기반 친구톡 (텍스트, 푸시 X)
 
@@ -320,7 +320,7 @@ def briefing_type_for_hour(hour: int) -> BriefingType:
 def is_audio_slot(hour: int) -> bool:
     """이 시간에 음성을 생성할지 (Typecast TTS 호출 여부).
 
-    6시 MORNING과 21시 EVENING에 음성을 생성한다. 푸시 여부는 별도 정책이다.
+    6시 MORNING과 21시 EVENING에 음성을 생성하고 푸시한다.
     """
     return briefing_type_for_hour(hour) in (
         BriefingType.MORNING,

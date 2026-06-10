@@ -5,24 +5,69 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:weather_friend/core/services/shared_prefs_provider.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
 
-/// 토픽 명명 규칙은 worker/adapters/push_fcm.py의 `_topic_name`과 동일해야 함.
-///     briefing-{city}-{slot}-{characterId}
+/// 토픽 명명 규칙은 worker/adapters/push_fcm.py의
+/// `_interactive_topic_name`과 동일해야 함.
+///     briefing-{city}-{slot}-{characterId}-audio-v2
 const _slotMorning = 'morning';
+const _slotEvening = 'evening';
+const _audioBriefingKind = 'audio_briefing';
 
 /// 마지막으로 토픽 구독한 city/character. SharedPreferences 키.
-const _kLastSubscribedTargetKey = 'fcm_last_subscribed_target';
+const _kLastSubscribedTargetKey = 'fcm_last_subscribed_target_v3';
+const _kPreviousAudioSubscribedTargetKey = 'fcm_last_subscribed_target_v2';
+const _kPreviousSubscribedTargetKey = 'fcm_last_subscribed_target';
 const _kLegacyLastSubscribedCharacterKey = 'fcm_last_subscribed_character';
 
 String _topicName({
   required String city,
   required String slot,
   required CharacterId character,
+}) => 'briefing-$city-$slot-${character.name}-audio-v2';
+
+String _legacyTopicName({
+  required String city,
+  required String slot,
+  required CharacterId character,
 }) => 'briefing-$city-$slot-${character.name}';
+
+class RemoteBriefingNotification {
+  const RemoteBriefingNotification({
+    required this.title,
+    required this.body,
+    required this.audioUrl,
+  });
+
+  final String title;
+  final String body;
+  final String audioUrl;
+
+  static RemoteBriefingNotification? fromData(Map<String, dynamic> data) {
+    if (data['kind'] != _audioBriefingKind) return null;
+    final title = data['title'] as String?;
+    final body = data['body'] as String?;
+    final audioUrl = data['audio_url'] as String?;
+    final audioUri = audioUrl == null ? null : Uri.tryParse(audioUrl);
+    if (title == null ||
+        title.isEmpty ||
+        body == null ||
+        body.isEmpty ||
+        audioUrl == null ||
+        audioUri == null ||
+        !audioUri.hasScheme) {
+      return null;
+    }
+    return RemoteBriefingNotification(
+      title: title,
+      body: body,
+      audioUrl: audioUrl,
+    );
+  }
+}
 
 /// FCM 푸시 구독/권한 관리.
 ///
-/// 현재 정책은 오전 6시 음성 브리핑만 푸시한다. 사용자가 선택한 위치/캐릭터의
-/// morning 토픽만 구독하고, 변경 시 이전 토픽은 unsubscribe.
+/// 오전 6시와 오후 9시 음성 브리핑을 푸시한다. 사용자가 선택한 위치/캐릭터의
+/// morning/evening 토픽을 구독하고, 변경 시 이전 토픽은 unsubscribe.
 class FcmService {
   FcmService(this._prefs);
 
@@ -87,6 +132,7 @@ class FcmService {
     final next = _SubscriptionTarget(city: city, character: current);
     final last = _readLastTarget();
 
+    await _clearPreviousSubscriptions();
     if (last == next) return; // 변경 없음
 
     if (last != null) {
@@ -98,18 +144,24 @@ class FcmService {
           character: last.character,
         ),
       );
-      // 이전 버전은 evening도 구독했으므로 한 번 정리해 둔다.
+      // 이전 대상의 evening 토픽도 함께 정리한다.
       await _safeUnsubscribe(
-        _topicName(city: last.city, slot: 'evening', character: last.character),
+        _topicName(
+          city: last.city,
+          slot: _slotEvening,
+          character: last.character,
+        ),
       );
     }
 
     await _safeSubscribe(
       _topicName(city: city, slot: _slotMorning, character: current),
     );
+    await _safeSubscribe(
+      _topicName(city: city, slot: _slotEvening, character: current),
+    );
 
     await _prefs.setString(_kLastSubscribedTargetKey, next.encoded);
-    await _prefs.remove(_kLegacyLastSubscribedCharacterKey);
   }
 
   /// 권한이 박탈됐거나 사용자가 해지한 경우. 저장된 구독을 모두 해지.
@@ -125,21 +177,81 @@ class FcmService {
         ),
       );
       await _safeUnsubscribe(
-        _topicName(city: last.city, slot: 'evening', character: last.character),
+        _topicName(
+          city: last.city,
+          slot: _slotEvening,
+          character: last.character,
+        ),
       );
     }
+    await _clearPreviousSubscriptions();
     await _prefs.remove(_kLastSubscribedTargetKey);
-    await _prefs.remove(_kLegacyLastSubscribedCharacterKey);
   }
 
   _SubscriptionTarget? _readLastTarget() {
     final raw = _prefs.getString(_kLastSubscribedTargetKey);
     if (raw != null) return _SubscriptionTarget.decode(raw);
+    return null;
+  }
 
-    final legacy = _prefs.getString(_kLegacyLastSubscribedCharacterKey);
-    final legacyCharacter = legacy == null ? null : Character.parseId(legacy);
-    if (legacyCharacter == null) return null;
-    return _SubscriptionTarget(city: 'seoul', character: legacyCharacter);
+  Future<void> _clearPreviousSubscriptions() async {
+    final previousAudioRaw = _prefs.getString(
+      _kPreviousAudioSubscribedTargetKey,
+    );
+    final previousAudio = previousAudioRaw == null
+        ? null
+        : _SubscriptionTarget.decode(previousAudioRaw);
+    if (previousAudio != null) {
+      await _safeUnsubscribe(
+        _topicName(
+          city: previousAudio.city,
+          slot: _slotMorning,
+          character: previousAudio.character,
+        ),
+      );
+      await _safeUnsubscribe(
+        _topicName(
+          city: previousAudio.city,
+          slot: _slotEvening,
+          character: previousAudio.character,
+        ),
+      );
+    }
+
+    final previousRaw = _prefs.getString(_kPreviousSubscribedTargetKey);
+    final previous = previousRaw == null
+        ? null
+        : _SubscriptionTarget.decode(previousRaw);
+    final legacyCharacterRaw = _prefs.getString(
+      _kLegacyLastSubscribedCharacterKey,
+    );
+    final legacyCharacter = legacyCharacterRaw == null
+        ? null
+        : Character.parseId(legacyCharacterRaw);
+    final target =
+        previous ??
+        (legacyCharacter == null
+            ? null
+            : _SubscriptionTarget(city: 'seoul', character: legacyCharacter));
+    if (target != null) {
+      await _safeUnsubscribe(
+        _legacyTopicName(
+          city: target.city,
+          slot: _slotMorning,
+          character: target.character,
+        ),
+      );
+      await _safeUnsubscribe(
+        _legacyTopicName(
+          city: target.city,
+          slot: _slotEvening,
+          character: target.character,
+        ),
+      );
+    }
+    await _prefs.remove(_kPreviousAudioSubscribedTargetKey);
+    await _prefs.remove(_kPreviousSubscribedTargetKey);
+    await _prefs.remove(_kLegacyLastSubscribedCharacterKey);
   }
 
   Future<void> _safeSubscribe(String topic) async {
