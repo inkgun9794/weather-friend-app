@@ -83,12 +83,15 @@ class _CharacterCard extends StatelessWidget {
                     style: theme.textTheme.titleMedium,
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    _toneLabel(character.id),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                  SizedBox(
+                    width: double.infinity,
+                    child: Text(
+                      _toneLabel(character.id),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      textAlign: TextAlign.left,
                     ),
-                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   AnimatedOpacity(
