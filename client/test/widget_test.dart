@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -97,7 +98,26 @@ void main() {
             }),
           ),
           todayDailySummaryProvider.overrideWith(
-            (ref) => const AsyncData(null),
+            (ref) => const AsyncData(
+              DailySummary(
+                date: '2026-05-23',
+                maxC: 27,
+                minC: 19,
+                condition: '맑음',
+                precipitationProbMax: 0,
+              ),
+            ),
+          ),
+          yesterdayDailySummaryProvider.overrideWith(
+            (ref) => const AsyncData(
+              DailySummary(
+                date: '2026-05-22',
+                maxC: 23,
+                minC: 17,
+                condition: '맑음',
+                precipitationProbMax: 0,
+              ),
+            ),
           ),
           todaySunriseSunsetProvider.overrideWith(
             (ref) => const AsyncData((null, null)),
@@ -109,5 +129,18 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(BriefingScreen), findsOneWidget);
+    expect(find.text('오늘은 어제보다 3도 높습니다.'), findsOneWidget);
+    expect(find.textContaining('오늘 날씨 ·'), findsNothing);
+
+    final styleToggle = find.byKey(const Key('timeline-style-toggle'));
+    expect(styleToggle, findsOneWidget);
+    expect(find.byTooltip('실사 하늘 배경으로 전환'), findsOneWidget);
+
+    await tester.tap(styleToggle);
+    await tester.pump();
+
+    expect(find.byTooltip('그림 배경으로 전환'), findsOneWidget);
+    expect(find.byKey(const Key('timeline-photo-panorama')), findsOneWidget);
+    expect(prefs.getString('hour_strip_style'), 'gradient');
   });
 }

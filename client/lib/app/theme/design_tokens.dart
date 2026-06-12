@@ -22,13 +22,11 @@ class CharVisual {
     required this.color,
     required this.colorDeep,
     required this.colorSoft,
-    required this.initial,
   });
 
   final Color color;
   final Color colorDeep;
   final Color colorSoft;
-  final String initial;
 }
 
 final _charVisuals = <CharacterId, CharVisual>{
@@ -36,25 +34,21 @@ final _charVisuals = <CharacterId, CharVisual>{
     color: oklch(0.74, 0.13, 30),
     colorDeep: oklch(0.54, 0.14, 30),
     colorSoft: oklch(0.94, 0.04, 30),
-    initial: 'ㅈ',
   ),
   CharacterId.sohee: CharVisual(
     color: oklch(0.62, 0.10, 330),
     colorDeep: oklch(0.42, 0.12, 330),
     colorSoft: oklch(0.94, 0.03, 330),
-    initial: 'ㅅ',
   ),
   CharacterId.jihoon: CharVisual(
     color: oklch(0.55, 0.11, 240),
     colorDeep: oklch(0.38, 0.12, 240),
     colorSoft: oklch(0.94, 0.03, 240),
-    initial: 'ㅈ',
   ),
   CharacterId.siwon: CharVisual(
     color: oklch(0.78, 0.14, 135),
     colorDeep: oklch(0.56, 0.16, 135),
     colorSoft: oklch(0.95, 0.05, 135),
-    initial: 'ㅅ',
   ),
 };
 
