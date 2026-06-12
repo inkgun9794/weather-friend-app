@@ -13,6 +13,19 @@ const double kGlassNavBarHeight = 58;
 /// 운세 탭 인덱스 — pending fortune 풍선 위치 판단용.
 /// 탭 순서: 날씨(0) · 기록(1) · 메세지(2) · 운세(3).
 const int _kFortuneTabIndex = 3;
+const int _kMessagesTabIndex = 2;
+
+final messageTabSelectionProvider =
+    NotifierProvider<MessageTabSelectionNotifier, int>(
+      MessageTabSelectionNotifier.new,
+    );
+
+class MessageTabSelectionNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void select() => state++;
+}
 
 class MainShell extends ConsumerWidget {
   const MainShell({super.key, required this.navigationShell});
@@ -26,11 +39,16 @@ class MainShell extends ConsumerWidget {
       body: navigationShell,
       bottomNavigationBar: _GlassNavBar(
         currentIndex: navigationShell.currentIndex,
-        onTap: (i) => navigationShell.goBranch(
-          i,
-          // 활성 탭을 다시 누르면 그 브랜치의 초기 위치로 리셋
-          initialLocation: i == navigationShell.currentIndex,
-        ),
+        onTap: (i) {
+          navigationShell.goBranch(
+            i,
+            // 활성 탭을 다시 누르면 그 브랜치의 초기 위치로 리셋
+            initialLocation: i == navigationShell.currentIndex,
+          );
+          if (i == _kMessagesTabIndex) {
+            ref.read(messageTabSelectionProvider.notifier).select();
+          }
+        },
       ),
     );
   }
@@ -47,7 +65,7 @@ class _GlassNavBar extends ConsumerWidget {
     final pending = ref.watch(pendingFortuneProvider);
     final showFortuneBubble =
         pending.status == PendingFortuneStatus.ready &&
-            currentIndex != _kFortuneTabIndex;
+        currentIndex != _kFortuneTabIndex;
 
     return ClipRect(
       child: BackdropFilter(
@@ -93,8 +111,8 @@ class _GlassNavBar extends ConsumerWidget {
                     icon: Icons.chat_bubble_outline,
                     iconActive: Icons.chat_bubble,
                     label: '메세지',
-                    active: currentIndex == 2,
-                    onTap: () => onTap(2),
+                    active: currentIndex == _kMessagesTabIndex,
+                    onTap: () => onTap(_kMessagesTabIndex),
                   ),
                   _NavItem(
                     icon: Icons.auto_awesome_outlined,
@@ -162,10 +180,7 @@ class _NavItem extends StatelessWidget {
                 ],
               ),
               if (bubble != null)
-                Positioned(
-                  top: -28,
-                  child: _SpeechBubble(text: bubble!),
-                ),
+                Positioned(top: -28, child: _SpeechBubble(text: bubble!)),
             ],
           ),
         ),
@@ -195,9 +210,10 @@ class _SpeechBubbleState extends State<_SpeechBubble>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
-    _bob = Tween<double>(begin: 0, end: -3).animate(
-      CurvedAnimation(parent: _bobCtrl, curve: Curves.easeInOut),
-    );
+    _bob = Tween<double>(
+      begin: 0,
+      end: -3,
+    ).animate(CurvedAnimation(parent: _bobCtrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -210,10 +226,8 @@ class _SpeechBubbleState extends State<_SpeechBubble>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _bob,
-      builder: (_, child) => Transform.translate(
-        offset: Offset(0, _bob.value),
-        child: child,
-      ),
+      builder: (_, child) =>
+          Transform.translate(offset: Offset(0, _bob.value), child: child),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

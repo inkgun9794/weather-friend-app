@@ -136,6 +136,7 @@ class _CharacterChatScreenState extends ConsumerState<_CharacterChatScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
   @override
@@ -199,6 +200,10 @@ class _CharacterChatScreenState extends ConsumerState<_CharacterChatScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(messageTabSelectionProvider, (_, _) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    });
+
     final chat = ref.watch(chatControllerProvider);
     final character = Character.byId(chat.characterId);
     final visual = visualFor(chat.characterId);
@@ -635,7 +640,7 @@ class _ChatComposer extends StatelessWidget {
 }
 
 /// 지원되지 않는 기기에서는 로컬에 누적된 브리핑 기록을 보여준다.
-class _BriefingConversationScreen extends ConsumerWidget {
+class _BriefingConversationScreen extends ConsumerStatefulWidget {
   const _BriefingConversationScreen({
     required this.availability,
     this.showChatNotice = true,
@@ -645,7 +650,49 @@ class _BriefingConversationScreen extends ConsumerWidget {
   final bool showChatNotice;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_BriefingConversationScreen> createState() =>
+      _BriefingConversationScreenState();
+}
+
+class _BriefingConversationScreenState
+    extends ConsumerState<_BriefingConversationScreen> {
+  final _scrollController = ScrollController();
+  int _lastVisibleCount = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToLatest());
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToLatest({bool animate = false}) {
+    if (!_scrollController.hasClients) return;
+    final target = _scrollController.position.maxScrollExtent;
+    if (animate) {
+      _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOut,
+      );
+    } else {
+      _scrollController.jumpTo(target);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<int>(messageTabSelectionProvider, (_, _) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _scrollToLatest(animate: true),
+      );
+    });
+
     final asyncBriefings = ref.watch(todayBriefingsProvider);
     final history = ref.watch(briefingHistoryProvider);
     final hour = currentHourKst();
@@ -659,6 +706,11 @@ class _BriefingConversationScreen extends ConsumerWidget {
           return dateOrder < 0 || (dateOrder == 0 && briefing.hour <= cutoff);
         })
         .toList(growable: false);
+
+    if (visibleHistory.length != _lastVisibleCount) {
+      _lastVisibleCount = visibleHistory.length;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToLatest());
+    }
 
     // 하단 글래스 탭 뒤로 ListView가 흘러들어가도록 — 마지막 버블이 가려지지 않게.
     final bottomInset =
@@ -681,11 +733,12 @@ class _BriefingConversationScreen extends ConsumerWidget {
                 onRefresh: () =>
                     ref.read(todayBriefingsProvider.notifier).refresh(),
                 child: ListView(
+                  controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset),
                   children: [
-                    if (showChatNotice)
-                      _UnsupportedChatNotice(availability: availability),
+                    if (widget.showChatNotice)
+                      _UnsupportedChatNotice(availability: widget.availability),
                     ..._historyWidgets(visibleHistory, activeDate: activeDate),
                   ],
                 ),
