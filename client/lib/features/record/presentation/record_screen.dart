@@ -15,6 +15,7 @@ import 'package:weather_friend/features/record/presentation/diary_editor_screen.
 import 'package:weather_friend/features/record/presentation/diary_format.dart';
 import 'package:weather_friend/features/record/presentation/widgets/image_source_sheet.dart';
 import 'package:weather_friend/features/record/presentation/widgets/mood_widgets.dart';
+import 'package:weather_friend/features/record/presentation/widgets/photo_dump.dart';
 import 'package:weather_friend/features/record/presentation/widgets/streak_card.dart';
 import 'package:weather_friend/shared/widgets/weather_bg.dart';
 
@@ -81,6 +82,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen>
     final past = today == null
         ? entries
         : entries.where((e) => e.id != today.id).toList();
+    final hasPhotos = entries.any((entry) => entry.hasImage);
     final bottomInset =
         kGlassNavBarHeight + MediaQuery.paddingOf(context).bottom + 16;
 
@@ -102,6 +104,11 @@ class _RecordScreenState extends ConsumerState<RecordScreen>
             padding: EdgeInsets.only(bottom: bottomInset),
             children: [
               _Masthead(sky: sky),
+              if (hasPhotos)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                  child: PhotoDumpLauncher(entries: entries, sky: sky),
+                ),
               // 잔디심기 챌린지 — 기록이 하나라도 있을 때만(빈 격자 방지).
               if (entries.isNotEmpty)
                 Padding(
@@ -220,9 +227,9 @@ class _SkyPhotoCtaState extends ConsumerState<_SkyPhotoCta> {
       );
     } on Exception catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('사진을 불러오지 못했어요')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('사진을 불러오지 못했어요')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -309,10 +316,7 @@ class _SectionLabel extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Divider(
-              height: 1,
-              color: sky.ink.withValues(alpha: 0.15),
-            ),
+            child: Divider(height: 1, color: sky.ink.withValues(alpha: 0.15)),
           ),
         ],
       ),
