@@ -304,6 +304,7 @@ final fortuneForProfileProvider =
       await ref.read(fortuneReportsProvider.future);
       final reportsNotifier = ref.read(fortuneReportsProvider.notifier);
       final cached = reportsNotifier.findByProfile(profile);
+      // 점수 산식이 바뀐 리포트는 같은 날이어도 다시 생성한다.
       if (cached != null && cached.promptVersion == fortunePromptVersion) {
         return FortuneResult(
           text: cached.fortuneText,

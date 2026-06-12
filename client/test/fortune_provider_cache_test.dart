@@ -67,6 +67,37 @@ void main() {
     expect(cached.score, 74);
     expect(secondApi.calls, 0);
   });
+
+  test('a new provider container refreshes a legacy-version report', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final repo = FortuneReportRepository(prefs);
+    await repo.add(
+      FortuneReport(
+        profile: _profile,
+        fortuneText: '## 오늘의 운세\n이미 확인한 오늘의 결과입니다.',
+        score: 68,
+        viewedAt: DateTime.now(),
+        promptVersion: 'concise-weather-v4',
+      ),
+    );
+
+    final api = _CountingFortuneApi();
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWith((ref) async => prefs),
+        fortuneApiProvider.overrideWithValue(api),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final cached = await container.read(
+      fortuneForProfileProvider(_profile).future,
+    );
+
+    expect(cached.score, 74);
+    expect(cached.promptVersion, fortunePromptVersion);
+    expect(api.calls, 1);
+  });
 }
 
 const _profile = SajuProfile(

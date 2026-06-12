@@ -88,7 +88,8 @@ class _FortuneScreenState extends ConsumerState<FortuneScreen> {
 
     final myProfile = ref.watch(sajuProfileProvider);
     final pending = ref.watch(pendingFortuneProvider);
-    final reports = ref.watch(fortuneReportsProvider).asData?.value ?? const [];
+    final reportsAsync = ref.watch(fortuneReportsProvider);
+    final reports = reportsAsync.asData?.value ?? const [];
     final hourAsync = ref.watch(kstHourProvider);
     final currentHour = switch (hourAsync) {
       AsyncData(:final value) => value,
@@ -125,7 +126,7 @@ class _FortuneScreenState extends ConsumerState<FortuneScreen> {
         hour: currentHour,
         child: SafeArea(
           bottom: false,
-          child: !_profileLoaded
+          child: !_profileLoaded || reportsAsync.isLoading
               ? Center(child: CircularProgressIndicator(color: sky.ink))
               : viewing == null
               ? _IntroAndInput(sky: sky)

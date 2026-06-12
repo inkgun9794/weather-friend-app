@@ -42,6 +42,13 @@ functions.http('fortune', async (req, res) => {
 
   // 점수는 코드 산출값을 권위값으로 사용. 본문에 혹시 남은 SCORE 줄만 제거.
   const text = stripScoreLine(raw);
+  console.log(
+    JSON.stringify({
+      event: 'fortune_generated',
+      promptVersion: PROMPT_VERSION,
+      score,
+    }),
+  );
 
   res.json({ text, score, promptVersion: PROMPT_VERSION });
 });
