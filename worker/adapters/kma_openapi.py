@@ -139,6 +139,14 @@ class KmaMidTempForecast:
     days: tuple[KmaMidTempDay, ...]
 
 
+@dataclass(frozen=True)
+class KmaDailyObservation:
+    date: str  # YYYY-MM-DD
+    stn_id: str
+    min_ta: float
+    max_ta: float
+
+
 # ────────────────────────────────────────────────────────────────────────
 # HTTP helpers
 # ────────────────────────────────────────────────────────────────────────
@@ -199,6 +207,55 @@ def _to_int(v: Any) -> int | None:
         return int(float(v))
     except (TypeError, ValueError):
         return None
+
+
+# ────────────────────────────────────────────────────────────────────────
+# 종관기상관측 일자료 (ASOS)
+# ────────────────────────────────────────────────────────────────────────
+
+
+async def fetch_asos_daily_observation(
+    *,
+    stn_id: str,
+    date: str,
+) -> KmaDailyObservation:
+    """ASOS 지점의 하루 최저·최고 기온 조회.
+
+    date는 YYYYMMDD. 공식 일자료 API는 전일(D-1)까지 제공한다.
+    """
+    url = f"{_BASE}/AsosDalyInfoService/getWthrDataList"
+    data = await _get_json(
+        url,
+        {
+            "serviceKey": _service_key(),
+            "pageNo": 1,
+            "numOfRows": 1,
+            "dataType": "JSON",
+            "dataCd": "ASOS",
+            "dateCd": "DAY",
+            "startDt": date,
+            "endDt": date,
+            "stnIds": stn_id,
+        },
+    )
+    items = data.get("response", {}).get("body", {}).get("items", {}).get("item", [])
+    if isinstance(items, dict):
+        items = [items]
+    if not items:
+        raise KmaOpenApiError(f"ASOS daily observation missing: stn={stn_id} date={date}")
+
+    item = items[0]
+    min_ta = _to_float(item.get("minTa"))
+    max_ta = _to_float(item.get("maxTa"))
+    if min_ta is None or max_ta is None:
+        raise KmaOpenApiError(f"ASOS daily temperature missing: stn={stn_id} date={date}")
+
+    return KmaDailyObservation(
+        date=str(item.get("tm") or date),
+        stn_id=str(item.get("stnId") or stn_id),
+        min_ta=min_ta,
+        max_ta=max_ta,
+    )
 
 
 # ────────────────────────────────────────────────────────────────────────

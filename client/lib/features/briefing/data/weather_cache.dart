@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:weather_friend/core/services/shared_prefs_provider.dart';
 import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
 
-const _weatherCacheVersion = 1;
+const _weatherCacheVersion = 3;
 
 class WeatherCache {
   WeatherCache(this._prefs);
@@ -52,6 +52,9 @@ Map<String, dynamic> _bundleToJson(WeatherBundle bundle) {
     'today_summary': bundle.todaySummary == null
         ? null
         : _dailyToJson(bundle.todaySummary!),
+    'yesterday_summary': bundle.yesterdaySummary == null
+        ? null
+        : _dailyToJson(bundle.yesterdaySummary!),
     'week_days': bundle.weekDays.map(_weekDayToJson).toList(),
     'sunrise': bundle.sunriseToday?.toIso8601String(),
     'sunset': bundle.sunsetToday?.toIso8601String(),
@@ -67,6 +70,8 @@ Map<String, dynamic> _bundleToJson(WeatherBundle bundle) {
 WeatherBundle _bundleFromJson(Map<String, dynamic> json) {
   final todayJson = json['today'] as Map<String, dynamic>;
   final summaryJson = json['today_summary'] as Map<String, dynamic>?;
+  final yesterdaySummaryJson =
+      json['yesterday_summary'] as Map<String, dynamic>?;
   final ultraJson = json['ultra_short'] as Map<String, dynamic>?;
 
   return WeatherBundle(
@@ -77,6 +82,9 @@ WeatherBundle _bundleFromJson(Map<String, dynamic> json) {
         ),
     },
     todaySummary: summaryJson == null ? null : _dailyFromJson(summaryJson),
+    yesterdaySummary: yesterdaySummaryJson == null
+        ? null
+        : _dailyFromJson(yesterdaySummaryJson),
     weekDays: (json['week_days'] as List)
         .cast<Map<String, dynamic>>()
         .map(_weekDayFromJson)

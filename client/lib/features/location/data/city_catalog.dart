@@ -38,6 +38,8 @@ class WeatherCity {
   final String midLandRegId;
   final String midTempRegId;
 
+  String get asosStnId => _asosStationByMidTempRegId[midTempRegId]!;
+
   /// Generated AI briefings still use the old Seoul slug. Other city IDs are
   /// future-compatible for when per-city briefings are enabled server-side.
   String get briefingCityKey => cityId == seoulCityId ? 'seoul' : cityId;
@@ -55,6 +57,27 @@ class WeatherCity {
     );
   }
 }
+
+const _asosStationByMidTempRegId = {
+  '11B10101': '108', // 서울
+  '11B20201': '112', // 인천
+  '11B20601': '119', // 수원
+  '11C10301': '131', // 청주
+  '11C20101': '129', // 서산
+  '11C20401': '133', // 대전
+  '11C20404': '239', // 세종
+  '11D10301': '101', // 춘천
+  '11D20501': '105', // 강릉
+  '11F10201': '146', // 전주
+  '11F20501': '156', // 광주
+  '11G00201': '184', // 제주
+  '11H10501': '136', // 안동
+  '11H10701': '143', // 대구
+  '11H20101': '152', // 울산
+  '11H20201': '159', // 부산
+  '11H20301': '155', // 창원
+  '21F20801': '165', // 목포
+};
 
 class CityCatalog {
   CityCatalog._();

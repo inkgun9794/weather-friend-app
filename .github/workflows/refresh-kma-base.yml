@@ -1,6 +1,6 @@
-name: Refresh KMA cache (base — short + mid)
+name: Refresh KMA cache (base — short + mid + observation)
 
-# 단기 + 중기 갱신. 매 1시간 정시 (:05). 초단기는 별도 grid 워크플로에서 처리.
+# 단기 + 중기 + 전일 ASOS 관측 갱신. 매 1시간 정시 (:05).
 # 단기는 3시간마다, 중기는 6시간마다 발표라 1시간 주기면 충분.
 
 on:
@@ -50,7 +50,7 @@ jobs:
           workload_identity_provider: ${{ vars.WIF_PROVIDER }}
           service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
 
-      - name: Refresh KMA cache (base — short + mid)
+      - name: Refresh KMA cache (base — short + mid + observation)
         working-directory: worker
         env:
           KMA_OPENAPI_KEY: ${{ secrets.KMA_OPENAPI_KEY }}

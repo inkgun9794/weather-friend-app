@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:weather_friend/core/utils/kst.dart';
 import 'package:weather_friend/features/briefing/data/open_meteo_client.dart'
     show
         DailySummary,
@@ -17,6 +19,7 @@ import 'package:weather_friend/features/location/data/city_catalog.dart';
 /// - kma_short/{cityId}    — 단기예보 1~3일치 hourly
 /// - kma_mid_land/{regId}  — 중기육상 4~10일 오전/오후
 /// - kma_mid_temp/{regId}  — 중기기온 4~10일 일별 최저/최고
+/// - kma_observation/{stnId} — ASOS 전일 관측 최저/최고
 class FirestoreWeatherSource implements WeatherSource {
   FirestoreWeatherSource(this._db);
 
@@ -31,18 +34,15 @@ class FirestoreWeatherSource implements WeatherSource {
   }) async {
     final selected = await CityCatalog.findById(city);
 
-    final results = await Future.wait([
+    final requiredResults = await Future.wait([
       _db.collection('kma_short').doc(selected.cityId).get(),
       _db.collection('kma_mid_land').doc(selected.midLandRegId).get(),
       _db.collection('kma_mid_temp').doc(selected.midTempRegId).get(),
-      _db.collection('kma_ultra').doc(selected.cityId).get(),
     ]);
-    final short = results[0];
-    final midLand = results[1];
-    final midTemp = results[2];
-    final ultra = results[3];
+    final short = requiredResults[0];
+    final midLand = requiredResults[1];
+    final midTemp = requiredResults[2];
 
-    // short/mid는 필수, ultra는 선택 (없으면 UI 섹션 숨김).
     if (!short.exists || !midLand.exists || !midTemp.exists) {
       throw StateError(
         'KMA cache missing for $city — '
@@ -50,12 +50,39 @@ class FirestoreWeatherSource implements WeatherSource {
       );
     }
 
+    // 선택 컬렉션의 미배포/권한 오류가 기본 KMA 예보까지 무효화하지 않게 분리한다.
+    final optionalResults = await Future.wait([
+      _optionalDoc(
+        _db.collection('kma_ultra').doc(selected.cityId).get(),
+        'kma_ultra/${selected.cityId}',
+      ),
+      _optionalDoc(
+        _db.collection('kma_observation').doc(selected.asosStnId).get(),
+        'kma_observation/${selected.asosStnId}',
+      ),
+    ]);
+    final ultra = optionalResults[0];
+    final observation = optionalResults[1];
+
     return _KmaMapper.toBundle(
       shortData: short.data()!,
       midLandData: midLand.data()!,
       midTempData: midTemp.data()!,
-      ultraData: ultra.exists ? ultra.data() : null,
+      ultraData: ultra?.exists == true ? ultra!.data() : null,
+      observationData: observation?.exists == true ? observation!.data() : null,
     );
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>?> _optionalDoc(
+    Future<DocumentSnapshot<Map<String, dynamic>>> request,
+    String path,
+  ) async {
+    try {
+      return await request;
+    } catch (error) {
+      debugPrint('[kma-firestore] optional $path unavailable: $error');
+      return null;
+    }
   }
 }
 
@@ -69,13 +96,36 @@ class _KmaMapper {
     required Map<String, dynamic> midLandData,
     required Map<String, dynamic> midTempData,
     Map<String, dynamic>? ultraData,
+    Map<String, dynamic>? observationData,
   }) {
     final hours = (shortData['hours'] as List).cast<Map<String, dynamic>>();
     return WeatherBundle(
       today: _todayHourly(hours, ultraData),
       todaySummary: _todaySummary(hours),
+      yesterdaySummary: _yesterdaySummary(observationData),
       weekDays: _weekDays(hours, midLandData, midTempData),
       ultraShort: ultraData != null ? _ultraShort(ultraData) : null,
+    );
+  }
+
+  static DailySummary? _yesterdaySummary(Map<String, dynamic>? data) {
+    if (data == null) return null;
+    final date = data['date'] as String?;
+    final minC = (data['min_c'] as num?)?.toDouble();
+    final maxC = (data['max_c'] as num?)?.toDouble();
+    if (date == null || minC == null || maxC == null) return null;
+    final yesterday = nowKst().subtract(const Duration(days: 1));
+    final expectedDate =
+        '${yesterday.year.toString().padLeft(4, '0')}-'
+        '${yesterday.month.toString().padLeft(2, '0')}-'
+        '${yesterday.day.toString().padLeft(2, '0')}';
+    if (date != expectedDate) return null;
+    return DailySummary(
+      date: date,
+      maxC: maxC,
+      minC: minC,
+      condition: '기상청 관측',
+      precipitationProbMax: 0,
     );
   }
 

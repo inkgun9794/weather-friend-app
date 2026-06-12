@@ -10,7 +10,7 @@ import 'package:weather_friend/features/location/data/city_catalog.dart';
 ///   - 오늘 24h hourly  → 메인 화면 연결형 strip을 채움 (메시지 없는 hour에도
 ///     온도/아이콘이 보이도록)
 ///   - 오늘 daily 요약   → strip 헤더 한 줄
-///   - 주간 weekDays     → 다음 주 월요일까지의 카드 (오전/오후 분리)
+///   - 주간 weekDays     → 8일치(오늘+7일) 카드 (오전/오후 분리)
 /// 모두 한 번의 API 호출로 받아오는 단일 bundle.
 
 class HourlyWeather {
@@ -54,6 +54,35 @@ class DailySummary {
   String shortLine() {
     return '$condition · ${maxC.round()}° / ${minC.round()}°';
   }
+}
+
+String temperatureComparisonLine(DailySummary? today, DailySummary? yesterday) {
+  if (today != null && _rainExpected(today)) {
+    return '오늘은 비가 옵니다.';
+  }
+  if (today == null || yesterday == null) {
+    return '오늘 날씨 정보를 불러오고 있습니다.';
+  }
+
+  final todayMean = (today.maxC + today.minC) / 2;
+  final yesterdayMean = (yesterday.maxC + yesterday.minC) / 2;
+  final difference = todayMean - yesterdayMean;
+  if (difference.abs() < 1) {
+    return '오늘은 어제와 비슷합니다.';
+  }
+
+  final degrees = difference.abs().round();
+  return difference > 0
+      ? '오늘은 어제보다 $degrees도 높습니다.'
+      : '오늘은 어제보다 $degrees도 낮습니다.';
+}
+
+bool _rainExpected(DailySummary summary) {
+  final condition = summary.condition;
+  return condition.contains('비') ||
+      condition.contains('소나기') ||
+      condition.contains('천둥') ||
+      summary.precipitationProbMax >= 60;
 }
 
 /// 하루를 3구간(오전/오후/저녁)으로 쪼갠 한 칸의 요약.
@@ -104,6 +133,7 @@ class WeatherBundle {
     required this.today,
     required this.todaySummary,
     required this.weekDays,
+    this.yesterdaySummary,
     this.sunriseToday,
     this.sunsetToday,
     this.ultraShort,
@@ -111,6 +141,7 @@ class WeatherBundle {
 
   final Map<int, HourlyWeather> today;
   final DailySummary? todaySummary;
+  final DailySummary? yesterdaySummary;
   final List<WeekDay> weekDays;
 
   /// 오늘 일출/일몰 시각 (KST). 아이콘 낮/밤 결정용. fetch 실패 시 null.
@@ -170,7 +201,8 @@ class OpenMeteoClient {
 
   final http.Client _http;
 
-  /// 오늘 ~ 다음 주 월요일까지 한 번에 받는다.
+  /// 오늘부터 8일치(오늘 + 7일)를 한 번에 받는다 — KMA 단기(+3일)+중기(+7일)
+  /// 조합과 같은 범위라, 폴백으로 떨어져도 주간 카드 일수가 줄지 않는다.
   /// 호출 1회로 hourly(전체 일수 × 24시간) + daily(전체 일수) 모두 채움 —
   /// Open-Meteo는 forecast_days 파라미터 하나로 다중 일 조회 지원.
   Future<WeatherBundle> fetchBundle({
@@ -180,7 +212,7 @@ class OpenMeteoClient {
     final lat = selected.lat;
     final lng = selected.lon;
 
-    final daysCount = _daysUntilNextMonday(nowKst());
+    const daysCount = 8;
 
     final uri = Uri.https('api.open-meteo.com', '/v1/forecast', {
       'latitude': lat.toString(),
@@ -190,6 +222,7 @@ class OpenMeteoClient {
       'daily':
           'temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,sunrise,sunset',
       'timezone': 'Asia/Seoul',
+      'past_days': '1',
       'forecast_days': daysCount.toString(),
     });
 
@@ -200,22 +233,30 @@ class OpenMeteoClient {
 
     final data = json.decode(resp.body) as Map<String, dynamic>;
     final hourly = data['hourly'] as Map<String, dynamic>;
+    final times = (hourly['time'] as List);
     final temps = (hourly['temperature_2m'] as List);
     final feelsLike = (hourly['apparent_temperature'] as List);
     final humidity = (hourly['relative_humidity_2m'] as List);
     final probs = (hourly['precipitation_probability'] as List);
     final codes = (hourly['weather_code'] as List);
 
-    // 오늘 24시간만 hourly map으로 (연결형 strip용).
+    final now = nowKst();
+    final todayDate = _isoDate(now);
+
+    // 날짜를 기준으로 오늘 24시간만 추린다.
     final today = <int, HourlyWeather>{};
-    for (var h = 0; h < 24 && h < temps.length; h++) {
-      today[h] = _snapshot(
-        h,
-        temps[h],
-        feelsLike[h],
-        humidity[h],
-        probs[h],
-        codes[h],
+    for (var i = 0; i < times.length && i < temps.length; i++) {
+      final timestamp = times[i].toString();
+      if (!timestamp.startsWith(todayDate)) continue;
+      final parsed = DateTime.tryParse(timestamp);
+      if (parsed == null) continue;
+      today[parsed.hour] = _snapshot(
+        parsed.hour,
+        temps[i],
+        feelsLike[i],
+        humidity[i],
+        probs[i],
+        codes[i],
       );
     }
 
@@ -230,29 +271,33 @@ class OpenMeteoClient {
     final sunrises = (daily?['sunrise'] as List?) ?? const [];
     final sunsets = (daily?['sunset'] as List?) ?? const [];
 
-    DateTime? sunriseToday;
-    DateTime? sunsetToday;
-    if (sunrises.isNotEmpty) {
-      sunriseToday = DateTime.tryParse(sunrises[0].toString());
-    }
-    if (sunsets.isNotEmpty) {
-      sunsetToday = DateTime.tryParse(sunsets[0].toString());
-    }
-
-    DailySummary? todaySummary;
-    if (dates.isNotEmpty) {
-      todaySummary = DailySummary(
-        date: dates[0].toString(),
-        maxC: (maxs[0] as num).toDouble(),
-        minC: (mins[0] as num).toDouble(),
-        condition: _weatherCodeKo[(dCodes[0] as num).toInt()] ?? '알 수 없음',
-        precipitationProbMax: ((dProbs[0] as num?) ?? 0).toInt(),
-      );
-    }
+    final todayIndex = dates.indexWhere((date) => date.toString() == todayDate);
+    final sunriseToday = todayIndex >= 0 && todayIndex < sunrises.length
+        ? DateTime.tryParse(sunrises[todayIndex].toString())
+        : null;
+    final sunsetToday = todayIndex >= 0 && todayIndex < sunsets.length
+        ? DateTime.tryParse(sunsets[todayIndex].toString())
+        : null;
+    final todaySummary = _dailySummaryAt(
+      todayIndex,
+      dates: dates,
+      maxs: maxs,
+      mins: mins,
+      codes: dCodes,
+      probabilities: dProbs,
+    );
+    final yesterdaySummary = _dailySummaryAt(
+      todayIndex - 1,
+      dates: dates,
+      maxs: maxs,
+      mins: mins,
+      codes: dCodes,
+      probabilities: dProbs,
+    );
 
     // 주간 카드 — 각 일을 오전(6-11)/오후(12-17)/저녁(18-23)로 분리해서 대표값 뽑음.
     final weekDays = <WeekDay>[];
-    for (var d = 0; d < dates.length; d++) {
+    for (var d = todayIndex < 0 ? 0 : todayIndex; d < dates.length; d++) {
       final dateStr = dates[d].toString();
       final dt = DateTime.parse(dateStr);
       weekDays.add(
@@ -269,9 +314,36 @@ class OpenMeteoClient {
     return WeatherBundle(
       today: today,
       todaySummary: todaySummary,
+      yesterdaySummary: yesterdaySummary,
       weekDays: weekDays,
       sunriseToday: sunriseToday,
       sunsetToday: sunsetToday,
+    );
+  }
+
+  DailySummary? _dailySummaryAt(
+    int index, {
+    required List dates,
+    required List maxs,
+    required List mins,
+    required List codes,
+    required List probabilities,
+  }) {
+    if (index < 0 ||
+        index >= dates.length ||
+        index >= maxs.length ||
+        index >= mins.length ||
+        index >= codes.length) {
+      return null;
+    }
+    return DailySummary(
+      date: dates[index].toString(),
+      maxC: (maxs[index] as num).toDouble(),
+      minC: (mins[index] as num).toDouble(),
+      condition: _weatherCodeKo[(codes[index] as num).toInt()] ?? '알 수 없음',
+      precipitationProbMax: index < probabilities.length
+          ? ((probabilities[index] as num?) ?? 0).toInt()
+          : 0,
     );
   }
 
@@ -329,13 +401,10 @@ class OpenMeteoClient {
   }
 }
 
-/// 오늘(포함)부터 다음 주 월요일(포함)까지 며칠인지.
-/// - 월: 8일(오늘 ~ 다음 월요일)
-/// - 화: 7일, 수: 6일, …, 일: 2일
-int _daysUntilNextMonday(DateTime today) {
-  final w = today.weekday; // 1=Mon … 7=Sun
-  return w == DateTime.monday ? 8 : (9 - w);
-}
+String _isoDate(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-'
+    '${date.month.toString().padLeft(2, '0')}-'
+    '${date.day.toString().padLeft(2, '0')}';
 
 class OpenMeteoException implements Exception {
   OpenMeteoException(this.message);

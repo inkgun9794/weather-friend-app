@@ -10,6 +10,27 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+ASOS_STATION_BY_MID_TEMP_REG_ID = {
+    "11B10101": "108",  # 서울
+    "11B20201": "112",  # 인천
+    "11B20601": "119",  # 수원
+    "11C10301": "131",  # 청주
+    "11C20101": "129",  # 서산
+    "11C20401": "133",  # 대전
+    "11C20404": "239",  # 세종
+    "11D10301": "101",  # 춘천
+    "11D20501": "105",  # 강릉
+    "11F10201": "146",  # 전주
+    "11F20501": "156",  # 광주
+    "11G00201": "184",  # 제주
+    "11H10501": "136",  # 안동
+    "11H10701": "143",  # 대구
+    "11H20101": "152",  # 울산
+    "11H20201": "159",  # 부산
+    "11H20301": "155",  # 창원
+    "21F20801": "165",  # 목포
+}
+
 
 @dataclass(frozen=True)
 class CityKma:
@@ -21,6 +42,10 @@ class CityKma:
     short_ny: int
     mid_land_reg_id: str  # 중기육상 광역 (10종)
     mid_temp_reg_id: str  # 중기기온 대표시 (18종)
+
+    @property
+    def asos_stn_id(self) -> str:
+        return ASOS_STATION_BY_MID_TEMP_REG_ID[self.mid_temp_reg_id]
 
 
 def _load_cities() -> dict[str, CityKma]:

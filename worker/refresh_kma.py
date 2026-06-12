@@ -2,7 +2,7 @@
 
 Usage:
     uv run python refresh_kma.py --mode ultra   # 초단기만 (grid 워크플로, 30분)
-    uv run python refresh_kma.py --mode base    # 단기+중기 (base 워크플로, 1시간)
+    uv run python refresh_kma.py --mode base    # 단기+중기+전일 관측 (base 워크플로, 1시간)
 
 Required env vars:
 - KMA_OPENAPI_KEY  : data.go.kr 키 (URL-encoded 그대로)

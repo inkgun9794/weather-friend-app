@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:weather_friend/features/briefing/data/firestore_weather_source.dart';
@@ -11,6 +13,7 @@ import 'package:weather_friend/features/location/data/city_catalog.dart';
 ///
 /// 데이터 우선순위:
 /// - 조건/기온/예보 = KMA (Firestore 캐시) 절대 우선
+/// - 전일 최저/최고 = KMA ASOS 관측
 /// - 일출/일몰 / WMO weather_code (강도 보강) = Open-Meteo 보조
 ///   → KMA가 못 주는 데이터만 가져와 KMA 위에 덮어씀
 ///
@@ -28,8 +31,16 @@ class WeatherFacade {
     final sw = Stopwatch()..start();
     // 두 소스 병렬 호출 — KMA는 메인 데이터, Open-Meteo는 보조 (sunrise/sunset, weather_code)
     final results = await Future.wait([
-      _timed(primary.id, () => primary.fetchBundle(city: city)),
-      _timed(fallback.id, () => fallback.fetchBundle(city: city)),
+      _timed(
+        primary.id,
+        () => primary.fetchBundle(city: city),
+        timeout: const Duration(seconds: 10),
+      ),
+      _timed(
+        fallback.id,
+        () => fallback.fetchBundle(city: city),
+        timeout: const Duration(seconds: 10),
+      ),
     ]);
     final kma = results[0];
     final om = results[1];
@@ -40,12 +51,16 @@ class WeatherFacade {
       throw Exception('All weather sources failed (KMA + Open-Meteo)');
     }
     if (kma == null) {
-      debugPrint('[weather_facade] ↩️ source=${fallback.id} only (KMA down)');
+      debugPrint(
+        '[weather_facade] ↩️ source=${fallback.id} only '
+        '(KMA unavailable; see previous error)',
+      );
       return om!;
     }
     if (om == null) {
       debugPrint(
-        '[weather_facade] ✅ source=${primary.id} only (Open-Meteo down)',
+        '[weather_facade] ✅ source=${primary.id} only '
+        '(Open-Meteo unavailable; see previous error)',
       );
       return kma;
     }
@@ -77,7 +92,8 @@ class WeatherFacade {
 
     return WeatherBundle(
       today: mergedHourly,
-      todaySummary: kma.todaySummary,
+      todaySummary: kma.todaySummary ?? om.todaySummary,
+      yesterdaySummary: kma.yesterdaySummary ?? om.yesterdaySummary,
       weekDays: kma.weekDays,
       sunriseToday: om.sunriseToday,
       sunsetToday: om.sunsetToday,
@@ -96,14 +112,22 @@ final weatherFacadeProvider = Provider<WeatherFacade>((ref) {
 /// 단일 source fetch 시간 측정 + 에러는 null 반환.
 Future<WeatherBundle?> _timed(
   String label,
-  Future<WeatherBundle> Function() task,
-) async {
+  Future<WeatherBundle> Function() task, {
+  required Duration timeout,
+}) async {
   final sw = Stopwatch()..start();
   try {
-    final result = await task().timeout(const Duration(seconds: 5));
+    final result = await task().timeout(timeout);
     sw.stop();
     debugPrint('[weather_facade] ⏱ $label ${sw.elapsedMilliseconds}ms');
     return result;
+  } on TimeoutException catch (error) {
+    sw.stop();
+    debugPrint(
+      '[weather_facade] ⚠️ $label timed out '
+      'after ${sw.elapsedMilliseconds}ms: $error',
+    );
+    return null;
   } catch (e) {
     sw.stop();
     debugPrint(

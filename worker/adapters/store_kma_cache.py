@@ -5,6 +5,7 @@
 - `kma_ultra/{city_id}`     — 초단기예보 카드용 (10분 갱신)
 - `kma_mid_land/{reg_id}`   — 중기육상 (6시간 갱신)
 - `kma_mid_temp/{reg_id}`   — 중기기온 (6시간 갱신)
+- `kma_observation/{stn_id}` — ASOS 전일 관측 최저·최고
 - `kma_radar/latest`              — 레이더 manifest (bbox + frame 메타)
 - `kma_radar/latest/frames/{slot}` — 프레임별 PNG bytes (덮어쓰기)
 
@@ -21,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from google.cloud import firestore
 
 from adapters.kma_openapi import (
+    KmaDailyObservation,
     KmaMidLandForecast,
     KmaMidTempForecast,
     KmaShortForecast,
@@ -65,6 +67,14 @@ class KmaCacheStore:
             "reg_id": forecast.reg_id,
             "tm_fc": forecast.tm_fc,
             "days": [asdict(d) for d in forecast.days],
+        })
+
+    async def save_observation(self, observation: KmaDailyObservation) -> None:
+        await self._set(f"kma_observation/{observation.stn_id}", {
+            "date": observation.date,
+            "stn_id": observation.stn_id,
+            "min_c": observation.min_ta,
+            "max_c": observation.max_ta,
         })
 
     async def save_grid_rain(self, payload: dict) -> None:

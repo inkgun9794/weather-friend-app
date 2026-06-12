@@ -1,7 +1,7 @@
 """KMA 캐시 갱신 유스케이스.
 
 두 종류의 갱신 흐름 (호출량 중복 방지):
-- `refresh_short_and_mid(city_ids)` — 단기 + 중기 (base 워크플로, 1시간 주기)
+- `refresh_short_and_mid(city_ids)` — 단기 + 중기 + 전일 관측 (base 워크플로, 1시간 주기)
 - `refresh_ultra_only(city_ids)`    — 초단기만 (grid 워크플로, 30분 주기)
 
 발표시각 계산도 여기서 (어댑터는 순수 호출만).
@@ -25,6 +25,7 @@ from adapters.kma_apihub import fetch_vsrt_grid
 from adapters.kma_openapi import (
     KmaShortForecast,
     KmaShortHour,
+    fetch_asos_daily_observation,
     fetch_mid_land_forecast,
     fetch_mid_temp_forecast,
     fetch_short_term_forecast,
@@ -148,13 +149,17 @@ async def refresh_short_and_mid(
     city_ids: list[str],
     project_id: str,
 ) -> None:
-    """단기 + 중기 갱신. 초단기는 별도 워크플로(refresh_ultra_only)에서 처리하여
-    호출 중복 방지. base 워크플로 (매 1시간) 용도."""
+    """단기 + 중기 + 전일 관측 갱신.
+
+    초단기는 별도 워크플로(refresh_ultra_only)에서 처리하여 호출 중복 방지.
+    base 워크플로 (매 1시간) 용도.
+    """
     store = KmaCacheStore(project_id=project_id)
     try:
         await asyncio.gather(
             _refresh_short(city_ids, store),
             _refresh_mid(city_ids, store),
+            _refresh_observations(city_ids, store),
         )
     finally:
         await store.close()
@@ -249,6 +254,36 @@ def _merge_short(
         ny=recent.ny,
         hours=sorted_hours,
     )
+
+
+async def _refresh_observations(
+    city_ids: list[str],
+    store: KmaCacheStore,
+) -> None:
+    date = (_now_kst() - timedelta(days=1)).strftime("%Y%m%d")
+    station_ids = {CITIES_KMA[c].asos_stn_id for c in city_ids}
+    log.info("ASOS 전일 관측 갱신 시작 (date=%s, stations=%s)", date, station_ids)
+
+    sem = asyncio.Semaphore(_CITY_CONCURRENCY)
+
+    async def _one(stn_id: str) -> None:
+        async with sem:
+            try:
+                observation = await fetch_asos_daily_observation(
+                    stn_id=stn_id,
+                    date=date,
+                )
+                await store.save_observation(observation)
+                log.info(
+                    "  ASOS %s: 최저 %.1f / 최고 %.1f",
+                    stn_id,
+                    observation.min_ta,
+                    observation.max_ta,
+                )
+            except Exception as e:
+                log.error("  ASOS %s 실패: %s", stn_id, e)
+
+    await asyncio.gather(*(_one(stn_id) for stn_id in station_ids))
 
 
 async def _refresh_ultra(city_ids: list[str], store: KmaCacheStore) -> None:

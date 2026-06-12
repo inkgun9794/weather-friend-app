@@ -90,6 +90,12 @@ final todayDailySummaryProvider = Provider<AsyncValue<DailySummary?>>(
       .whenData((bundle) => bundle.todaySummary),
 );
 
+final yesterdayDailySummaryProvider = Provider<AsyncValue<DailySummary?>>(
+  (ref) => ref
+      .watch(weatherBundleProvider)
+      .whenData((bundle) => bundle.yesterdaySummary),
+);
+
 final weekDaysProvider = Provider<AsyncValue<List<WeekDay>>>(
   (ref) =>
       ref.watch(weatherBundleProvider).whenData((bundle) => bundle.weekDays),
