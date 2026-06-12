@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/fortune/data/pending_fortune.dart';
 import 'package:weather_friend/features/fortune/data/saju_profile.dart';
+import 'package:weather_friend/features/fortune/presentation/widgets/birth_wheel_pickers.dart';
 
 /// 입력 모드 — primary는 SharedPreferences에 저장, guest는 임시 (당일 리포트만).
 enum BirthInputMode { primary, guest }
 
-/// 사주 입력 form. 이름/관계/생년월일/시/성별/양력음력 입력.
+/// 사주 입력 form. 이름/관계/생년월일(양·음력 포함)/시/성별 입력.
+/// 생년월일·시간은 휠 피커 바텀시트로 고른다 (달력/시계 다이얼로그 X).
 /// 저장 시 mode에 따라 처리:
 ///   - primary: '내 프로필'로 영구 저장 + sajuProfileProvider 업데이트
 ///   - guest:   영구 저장 X — 단지 fetch만 (fortuneForProfileProvider가 FortuneReport에 저장)
@@ -132,6 +134,7 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
   late DateTime _date;
   late int _hour;
   late int _minute;
+  late bool _timeUnknown;
   late bool _isLunar;
   late SajuGender _gender;
   bool _saving = false;
@@ -153,6 +156,7 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
         : DateTime(1990, 1, 1);
     _hour = init?.hour ?? 12;
     _minute = init?.minute ?? 0;
+    _timeUnknown = init?.timeUnknown ?? false;
     _isLunar = init?.isLunar ?? false;
     _gender = init?.gender ?? SajuGender.male;
   }
@@ -164,33 +168,33 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _date,
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
-      helpText: '생년월일',
-    );
-    if (picked != null) setState(() => _date = picked);
-  }
-
-  Future<void> _pickHour() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay(hour: _hour, minute: _minute),
-      helpText: '태어난 시간',
-      // 24시간 표시 (오전/오후 분리 X).
-      builder: (context, child) {
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-          child: child!,
-        );
-      },
+    final picked = await showBirthDateWheelSheet(
+      context,
+      initial: _date,
+      initialIsLunar: _isLunar,
     );
     if (picked != null) {
       setState(() {
-        _hour = picked.hour;
-        _minute = picked.minute;
+        _date = picked.date;
+        _isLunar = picked.isLunar;
+      });
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showBirthTimeWheelSheet(
+      context,
+      initialHour: _hour,
+      initialMinute: _minute,
+      initialUnknown: _timeUnknown,
+    );
+    if (picked != null) {
+      setState(() {
+        _timeUnknown = picked.unknown;
+        if (!picked.unknown) {
+          _hour = picked.hour;
+          _minute = picked.minute;
+        }
       });
     }
   }
@@ -212,10 +216,11 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
       year: _date.year,
       month: _date.month,
       day: _date.day,
-      hour: _hour,
-      minute: _minute,
+      hour: _timeUnknown ? 12 : _hour,
+      minute: _timeUnknown ? 0 : _minute,
       isLunar: _isLunar,
       gender: _gender,
+      timeUnknown: _timeUnknown,
     );
 
     // primary 모드면 SharedPreferences + provider 업데이트
@@ -304,37 +309,14 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
         ),
         const SizedBox(height: 20),
 
-        // 양력/음력
-        _SectionLabel(label: '달력', style: style),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _ToggleButton(
-                label: '양력',
-                selected: !_isLunar,
-                onTap: () => setState(() => _isLunar = false),
-                style: style,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _ToggleButton(
-                label: '음력',
-                selected: _isLunar,
-                onTap: () => setState(() => _isLunar = true),
-                style: style,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-
+        // 생년월일 — 양/음력 토글은 휠 피커 시트 안에 함께 있다.
         _SectionLabel(label: '생년월일', style: style),
         const SizedBox(height: 8),
         _FieldButton(
           icon: Icons.calendar_today_rounded,
-          text: '${_date.year}년 ${_date.month}월 ${_date.day}일',
+          text:
+              '${_isLunar ? '음력' : '양력'} '
+              '${_date.year}년 ${_date.month}월 ${_date.day}일',
           onTap: _pickDate,
           style: style,
         ),
@@ -344,10 +326,12 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
         const SizedBox(height: 8),
         _FieldButton(
           icon: Icons.access_time_rounded,
-          text:
-              '${_hour.toString().padLeft(2, '0')}:'
-              '${_minute.toString().padLeft(2, '0')}',
-          onTap: _pickHour,
+          text: _timeUnknown
+              ? '시간 모름'
+              : '${_hour.toString().padLeft(2, '0')}:'
+                    '${_minute.toString().padLeft(2, '0')}'
+                    ' (${sijinFor(_hour).name})',
+          onTap: _pickTime,
           style: style,
         ),
         const SizedBox(height: 20),

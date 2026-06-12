@@ -2,7 +2,7 @@ const functions = require('@google-cloud/functions-framework');
 
 const GEMINI_MODEL = 'gemini-2.5-flash';
 const MAX_RETRIES = 3;
-const PROMPT_VERSION = 'concise-weather-v4';
+const PROMPT_VERSION = 'concise-weather-v5';
 
 functions.http('fortune', async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
@@ -24,7 +24,8 @@ functions.http('fortune', async (req, res) => {
     return res.status(400).send('Bad JSON');
   }
 
-  const prompt = buildPrompt(body);
+  const score = computeFortuneScore(body);
+  const prompt = buildPrompt(body, score);
   const geminiRes = await callGeminiWithRetry(prompt);
 
   if (!geminiRes.ok) {
@@ -39,7 +40,8 @@ functions.http('fortune', async (req, res) => {
     .map((part) => part.text ?? '')
     .join('');
 
-  const { text, score } = parseFortuneResponse(raw);
+  // 점수는 코드 산출값을 권위값으로 사용. 본문에 혹시 남은 SCORE 줄만 제거.
+  const text = stripScoreLine(raw);
 
   res.json({ text, score, promptVersion: PROMPT_VERSION });
 });
@@ -74,7 +76,7 @@ async function callGeminiWithRetry(prompt) {
   return lastResponse;
 }
 
-function buildPrompt(body) {
+function buildPrompt(body, score) {
   const age = new Date(body.date).getFullYear() - body.birthYear;
   const elementKo = {
     wood: '나무',
@@ -125,12 +127,11 @@ ${hasDetailedFlow
 3. 각 운의 십성, 오행의 도움·주의 역할, 원국과의 합·충·형·해·파를 함께 비교한다.
 4. 도움 요인과 주의 요인을 모두 반영해 오늘의 흐름과 실천 행동을 도출한다.
 5. 근거 없는 일반론을 만들지 말고, 제공된 명리 분석값과 현재 운의 흐름에 근거한다.
-6. 오늘의 점수는 50점을 기준으로 아래 방식에 따라 별도로 산출한다.
-   - 대운 15%, 세운 20%, 월운 25%, 일운 40% 비중으로 반영한다.
-   - 각 운의 천간·지지 역할이 용신·희신에 도움이 되면 올리고, 주의 오행이면 내린다.
-   - 원국과의 합은 소폭 가점하고, 충·형·해·파는 강도에 따라 감점한다.
-   - 도움과 주의가 함께 있으면 상쇄하고, 신강신약 점수를 오늘 점수로 그대로 복사하지 않는다.
-   - 특별한 도움이나 주의 근거가 없다면 50점 안팎으로 두며, 근거 없이 매번 같은 점수를 쓰지 않는다.
+6. 오늘의 점수는 이미 ${score}점으로 산출되어 있다(0~100, 50이 평이). 이 점수가 나타내는
+   흐름과 본문의 톤·내용을 어긋나지 않게 맞춘다.
+   - 70점 이상: 가볍게 긍정적이고 활기 있는 톤
+   - 40~69점: 담담하고 무난한 톤
+   - 40점 미만: 조심스럽고 차분히 살피는 톤
 
 [작성 원칙]
 1. 관계, 일/공부, 재물, 건강처럼 영역을 세분화하지 않는다.
@@ -150,17 +151,68 @@ ${hasDetailedFlow
 ## 한 줄 조언
 오늘의 균형을 돕는 조언 한 문장을 35자 이내로 작성한다.
 
-모든 섹션을 작성한 뒤 마지막 줄에 위 판단으로 산출한 0~100 사이 정수 점수를 쓴다.
-마지막 줄은 반드시 "SCORE: " 뒤에 산출한 정수만 작성하고, 고정값이나 예시값을 반복하지 않는다.`;
+세 섹션만 작성하고, 점수나 숫자는 본문에 쓰지 않는다.`;
 }
 
-function parseFortuneResponse(raw) {
-  const scoreMatch = raw.match(/SCORE\s*:\s*(\d{1,3})/i);
-  const score = scoreMatch
-    ? Math.max(0, Math.min(100, parseInt(scoreMatch[1], 10)))
-    : 50;
-  const text = raw.replace(/SCORE\s*:\s*\d{1,3}\s*/i, '').trim();
-  return { text, score };
+// 점수는 computeFortuneScore가 결정한다. 모델이 혹시 마지막 줄에 SCORE를 남겨도
+// 본문에서만 제거하는 방어용 헬퍼.
+function stripScoreLine(raw) {
+  return raw.replace(/SCORE\s*:\s*\d{1,3}\s*$/i, '').trim();
 }
 
-module.exports = { buildPrompt, parseFortuneResponse };
+const FLOW_WEIGHTS = { majorLuck: 0.15, year: 0.2, month: 0.25, day: 0.4 };
+const NATAL_INTENSITY = { 일주: 1.5, 월주: 1.2, 년주: 0.8, 시주: 0.8 };
+const RELATION_DELTA = { 합: 0.6, 충: -0.6, 형: -0.5, 해: -0.4, 파: -0.3 };
+// 분포 보정 노브 — 50k일 시뮬레이션으로 평균≈50, 5개 밴드 모두 도달하도록 맞춤.
+const RELATION_SCALE = 0.15; // 관계가 역할(용신/기신)보다 과하게 점수를 흔들지 않게 축소
+const SCORE_SPREAD = 40; // normalized([-1.5,1.5]) → 점수 폭. 클수록 상·하위 밴드 도달 쉬움
+
+function roleSign(role) {
+  if (role === '도움') return 1;
+  if (role === '주의') return -1;
+  return 0;
+}
+
+// 한 운(대운/세운/월운/일운) 기둥이 오늘 점수에 더하는 기여도. 범위 [-1.5, +1.5].
+// 천간·지지가 용신·희신에 도움이면 +, 기신이면 -. 원국과의 합은 가점, 충·형·해·파는
+// 어느 원국 기둥과 부딪히는지(일주가 가장 큼)에 따라 강도를 달리해 감점한다.
+function flowContribution(flow) {
+  if (!flow || typeof flow !== 'object') return 0;
+  let c = roleSign(flow.stemRole) * 0.45 + roleSign(flow.branchRole) * 0.55;
+
+  const relations = Array.isArray(flow.relationsToNatal)
+    ? flow.relationsToNatal
+    : [];
+  for (const relation of relations) {
+    const natal = ['일주', '월주', '년주', '시주'].find((p) =>
+      relation.includes(p),
+    );
+    const intensity = NATAL_INTENSITY[natal] ?? 1.0;
+    for (const [kind, delta] of Object.entries(RELATION_DELTA)) {
+      if (relation.includes(kind)) c += delta * intensity * RELATION_SCALE;
+    }
+  }
+
+  return Math.max(-1.5, Math.min(1.5, c));
+}
+
+// 원국·현재 운 흐름으로 오늘의 0~100 점수를 결정론적으로 산출한다.
+// 프롬프트가 명세하던 비중(대운15/세운20/월운25/일운40)을 실제 가중합으로 적용하고,
+// 존재하는 운만으로 정규화한다. 신강신약 점수는 매일 불변이라 의도적으로 쓰지 않는다.
+function computeFortuneScore(body) {
+  const flow = (body && body.currentFlow) || {};
+  let weighted = 0;
+  let totalWeight = 0;
+  for (const [key, weight] of Object.entries(FLOW_WEIGHTS)) {
+    if (flow[key]) {
+      weighted += flowContribution(flow[key]) * weight;
+      totalWeight += weight;
+    }
+  }
+  if (totalWeight === 0) return 50; // 운 흐름 미제공(레거시) → 평이
+
+  const normalized = weighted / totalWeight; // ≈ [-1.5, +1.5]
+  return Math.max(0, Math.min(100, Math.round(50 + normalized * SCORE_SPREAD)));
+}
+
+module.exports = { buildPrompt, stripScoreLine, computeFortuneScore };

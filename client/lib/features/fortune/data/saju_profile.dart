@@ -31,6 +31,7 @@ class SajuProfile {
     required this.minute,
     required this.isLunar,
     required this.gender,
+    this.timeUnknown = false,
   });
 
   final String name;            // "나", "엄마", "철수" 등
@@ -43,6 +44,10 @@ class SajuProfile {
   final bool isLunar;
   final SajuGender gender;
 
+  /// 출생 시간 모름 — true면 hour/minute은 계산용 placeholder(12:00).
+  /// 시주는 결과 카드에서 가리고, LLM에도 '모름'으로 전달한다.
+  final bool timeUnknown;
+
   Map<String, dynamic> toJson() => {
         'name': name,
         'relation': relation.name,
@@ -53,6 +58,7 @@ class SajuProfile {
         'minute': minute,
         'isLunar': isLunar,
         'gender': gender.name,
+        'timeUnknown': timeUnknown,
       };
 
   /// 기존 데이터 호환 — name/relation 없으면 default ('나' / 본인). minute 없으면 0.
@@ -72,6 +78,7 @@ class SajuProfile {
           (g) => g.name == json['gender'],
           orElse: () => SajuGender.male,
         ),
+        timeUnknown: json['timeUnknown'] as bool? ?? false,
       );
 
   SajuProfile copyWith({
@@ -80,6 +87,7 @@ class SajuProfile {
     int? year, int? month, int? day, int? hour, int? minute,
     bool? isLunar,
     SajuGender? gender,
+    bool? timeUnknown,
   }) =>
       SajuProfile(
         name: name ?? this.name,
@@ -91,19 +99,34 @@ class SajuProfile {
         minute: minute ?? this.minute,
         isLunar: isLunar ?? this.isLunar,
         gender: gender ?? this.gender,
+        timeUnknown: timeUnknown ?? this.timeUnknown,
       );
 
   /// 캐시 키 — 같은 사주 = 같은 키 (라벨은 제외).
   /// 명리학적으로 같은 사주는 같은 운세라서, 같은 키면 캐시 공유 정당.
   /// minute 포함 (시 경계에 가까운 분이면 시주 달라질 수 있음).
+  /// 시간 모름이면 시각 자리를 'UNKN'으로 — 12:00 입력 프로필과 캐시가 섞이지 않게.
   String get cacheKey {
     final cal = isLunar ? 'L' : 'S';
+    final time = timeUnknown
+        ? 'UNKN'
+        : '${hour.toString().padLeft(2, '0')}${minute.toString().padLeft(2, '0')}';
     return '$cal${year.toString().padLeft(4, '0')}'
         '${month.toString().padLeft(2, '0')}'
         '${day.toString().padLeft(2, '0')}'
-        '${hour.toString().padLeft(2, '0')}'
-        '${minute.toString().padLeft(2, '0')}'
+        '$time'
         '_${gender.name}';
+  }
+
+  /// 결과/리포트 화면 공용 한 줄 요약.
+  /// 예: "양력 1990.01.15 07:30 · 남성" / 시간 모름이면 "양력 1990.01.15 시간모름 · 남성"
+  String get birthSummary {
+    final cal = isLunar ? '음력' : '양력';
+    final time = timeUnknown
+        ? '시간모름'
+        : '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+    return '$cal $year.${month.toString().padLeft(2, '0')}.'
+        '${day.toString().padLeft(2, '0')} $time · ${gender.label}';
   }
 }
 
@@ -177,7 +200,10 @@ saju.SajuResult? computeSajuFor(SajuProfile profile) {
     }
 
     final loc = tz.getLocation('Asia/Seoul');
-    final birth = tz.TZDateTime(loc, y, m, d, profile.hour, profile.minute);
+    // 시간 모름이면 정오(12:00)로 계산 — 시주는 카드에서 가리고 프롬프트에도 '모름'으로 보낸다.
+    final hour = profile.timeUnknown ? 12 : profile.hour;
+    final minute = profile.timeUnknown ? 0 : profile.minute;
+    final birth = tz.TZDateTime(loc, y, m, d, hour, minute);
 
     return saju.getSaju(
       birth,

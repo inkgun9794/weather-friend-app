@@ -155,9 +155,10 @@ class _SajuPillarsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pillars = result.pillars;
-    // 시 - 일 - 월 - 년 (전통 명리학 배열)
-    final cols = <(String, saju.Pillar)>[
-      ('시', pillars.hour),
+    // 시 - 일 - 월 - 년 (전통 명리학 배열).
+    // 시간 모름이면 시주는 placeholder 계산값이라 보여주지 않는다 (null → — 표시).
+    final cols = <(String, saju.Pillar?)>[
+      ('시', profile.timeUnknown ? null : pillars.hour),
       ('일', pillars.day),
       ('월', pillars.month),
       ('년', pillars.year),
@@ -167,7 +168,7 @@ class _SajuPillarsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _CardTitle('사주 원국', subtitle: _birthLabel(profile)),
+          _CardTitle('사주 원국', subtitle: profile.birthSummary),
           const SizedBox(height: 14),
           Row(
             children: [
@@ -189,25 +190,66 @@ class _SajuPillarsCard extends StatelessWidget {
           Row(
             children: [
               for (final (_, p) in cols)
-                Expanded(child: _GanZhiCell(stem: p.stem)),
+                Expanded(
+                  child: p == null
+                      ? const _UnknownPillarCell()
+                      : _GanZhiCell(stem: p.stem),
+                ),
             ],
           ),
           const SizedBox(height: 4),
           Row(
             children: [
               for (final (_, p) in cols)
-                Expanded(child: _BranchCell(branch: p.branch)),
+                Expanded(
+                  child: p == null
+                      ? const _UnknownPillarCell()
+                      : _BranchCell(branch: p.branch),
+                ),
             ],
           ),
         ],
       ),
     );
   }
+}
 
-  String _birthLabel(SajuProfile p) {
-    final cal = p.isLunar ? '음력' : '양력';
-    return '$cal ${p.year}.${p.month.toString().padLeft(2, '0')}.${p.day.toString().padLeft(2, '0')} '
-        '${p.hour.toString().padLeft(2, '0')}:${p.minute.toString().padLeft(2, '0')} · ${p.gender.label}';
+/// 시간 모름 프로필의 시주 자리 — 간지 셀과 같은 크기의 빈 칸.
+class _UnknownPillarCell extends StatelessWidget {
+  const _UnknownPillarCell();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 3),
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.inkMute.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '—',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: AppColors.inkMute,
+              height: 1.0,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '모름',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: AppColors.inkSoft,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -11,7 +11,7 @@ import 'package:weather_friend/features/fortune/data/saju_profile.dart';
 /// Cloud Run (Seoul region) Gemini proxy URL.
 const _kFortuneEndpoint =
     'https://weather-friend-llm-89382148867.asia-northeast3.run.app';
-const fortunePromptVersion = 'concise-weather-v4';
+const fortunePromptVersion = 'concise-weather-v5';
 
 /// LLM 응답 — 운세 텍스트 + 점수 (0~100).
 class FortuneResult {
@@ -92,7 +92,10 @@ Map<String, dynamic> buildFortuneRequestPayload({
       'year': result.pillars.year.hanja,
       'month': result.pillars.month.hanja,
       'day': result.pillars.day.hanja,
-      'hour': result.pillars.hour.hanja,
+      // 서버가 이 값을 프롬프트의 "사주 4기둥" 줄에 그대로 넣는다.
+      // 시간 모름이면 placeholder(12:00)로 계산된 시주 대신 '모름'을 보내
+      // LLM이 세 기둥 기준으로 풀이하게 한다.
+      'hour': profile.timeUnknown ? '모름(시주 제외)' : result.pillars.hour.hanja,
     },
     'dayMaster': result.pillars.dayMaster.hanja,
     'element': result.pillars.dayMaster.element.key,
@@ -134,9 +137,11 @@ Map<String, dynamic> buildFortuneRequestPayload({
     },
     'gender': profile.gender == SajuGender.male ? 'male' : 'female',
     'birthYear': profile.year,
-    'birthTime':
-        '${profile.hour.toString().padLeft(2, '0')}:'
-        '${profile.minute.toString().padLeft(2, '0')}',
+    'birthTime': profile.timeUnknown
+        ? '모름'
+        : '${profile.hour.toString().padLeft(2, '0')}:'
+              '${profile.minute.toString().padLeft(2, '0')}',
+    'birthTimeUnknown': profile.timeUnknown,
     'date':
         '${date.year}-'
         '${date.month.toString().padLeft(2, '0')}-'

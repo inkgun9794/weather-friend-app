@@ -580,10 +580,7 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cal = profile.isLunar ? '음력' : '양력';
-    final birthLine =
-        '$cal ${profile.year}.${profile.month.toString().padLeft(2, '0')}.${profile.day.toString().padLeft(2, '0')} '
-        '${profile.hour.toString().padLeft(2, '0')}:00 · ${profile.gender.label}';
+    final birthLine = profile.birthSummary;
     final lightText = sky.ink.computeLuminance() > 0.55;
     final textShadows = _readableTextShadows(sky);
     final tagFill = lightText

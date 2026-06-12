@@ -1,5 +1,14 @@
 import 'package:weather_friend/features/character/domain/character.dart';
 
+/// 옷 추천 한 칸 — 아이콘과 그 아래 붙는 짧은 라벨.
+/// 라벨은 수식어 없이 옷 이름만 쓴다 ("가벼운 원피스" X, "원피스" O).
+class OutfitItem {
+  const OutfitItem(this.label, this.asset);
+
+  final String label;
+  final String asset;
+}
+
 class OutfitGuide {
   const OutfitGuide({
     required this.key,
@@ -8,6 +17,7 @@ class OutfitGuide {
     required this.title,
     required this.items,
     required this.message,
+    this.wear = const [],
   });
 
   final String key;
@@ -16,6 +26,10 @@ class OutfitGuide {
   final String title;
   final List<String> items;
   final String message;
+
+  /// 카드에 그려지는 아이콘+라벨 셀 목록.
+  /// 아이콘이 없는 항목(발열내의 등)은 빠지므로 [items]와 1:1은 아님.
+  final List<OutfitItem> wear;
 
   bool contains(int temperature) {
     final aboveMin = minTemp == null || temperature >= minTemp!;
@@ -26,6 +40,24 @@ class OutfitGuide {
 
 OutfitGuide outfitGuideFor(int feelsLikeTemp) {
   return outfitGuides.firstWhere((guide) => guide.contains(feelsLikeTemp));
+}
+
+const kUmbrellaAsset = '$_c/umbrella.png';
+const kUmbrellaItem = OutfitItem('우산', kUmbrellaAsset);
+
+/// 우산을 챙겨야 하는 날인지 — 비/이슬비/소나기/천둥번개 컨디션이거나
+/// 강수확률이 60% 이상이면 true. (눈은 우산 대신 보온을 우선해 제외.)
+bool umbrellaNeeded({String? condition, int? precipitationProb}) {
+  final c = condition ?? '';
+  if (c.contains('비') || c.contains('소나기') || c.contains('천둥')) {
+    return true;
+  }
+  return (precipitationProb ?? 0) >= 60;
+}
+
+/// 화면에 그릴 최종 셀 목록 — 비 소식이 있으면 우산이 마지막에 붙는다.
+List<OutfitItem> outfitWearFor(OutfitGuide guide, {bool rainy = false}) {
+  return [...guide.wear, if (rainy) kUmbrellaItem];
 }
 
 String outfitMessageForCharacter(CharacterId characterId, OutfitGuide guide) {
@@ -92,6 +124,8 @@ String outfitMessageForCharacter(CharacterId characterId, OutfitGuide guide) {
   };
 }
 
+const _c = 'assets/clothes';
+
 const outfitGuides = <OutfitGuide>[
   OutfitGuide(
     key: 'minus5',
@@ -100,6 +134,12 @@ const outfitGuides = <OutfitGuide>[
     title: '한파급 추위',
     items: ['롱패딩', '발열내의', '기모바지', '목도리', '장갑'],
     message: '보온이 최우선이에요. 목과 손까지 따뜻하게 챙겨주세요.',
+    wear: [
+      OutfitItem('롱패딩', '$_c/padding_jacket.png'),
+      OutfitItem('기모바지', '$_c/pants.png'),
+      OutfitItem('목도리', '$_c/scarf.png'),
+      OutfitItem('장갑', '$_c/gloves.png'),
+    ],
   ),
   OutfitGuide(
     key: 'minus4_0',
@@ -108,6 +148,12 @@ const outfitGuides = <OutfitGuide>[
     title: '두꺼운 아우터 필수',
     items: ['패딩', '두꺼운 코트', '목폴라', '기모 하의'],
     message: '두꺼운 아우터에 니트나 기모 소재를 함께 입는 게 좋아요.',
+    wear: [
+      OutfitItem('패딩', '$_c/padding_jacket2.png'),
+      OutfitItem('무스탕', '$_c/mustang2.png'),
+      OutfitItem('니트', '$_c/pullover_knit.png'),
+      OutfitItem('청바지', '$_c/jeans.png'),
+    ],
   ),
   OutfitGuide(
     key: '1_4',
@@ -116,6 +162,12 @@ const outfitGuides = <OutfitGuide>[
     title: '초겨울 옷차림',
     items: ['숏패딩', '울코트', '니트', '머플러'],
     message: '아직 꽤 추워요. 도톰한 아우터와 니트를 추천해요.',
+    wear: [
+      OutfitItem('숏패딩', '$_c/short_padding.png'),
+      OutfitItem('코트', '$_c/coat.png'),
+      OutfitItem('니트', '$_c/pullover_knit.png'),
+      OutfitItem('목도리', '$_c/scarf.png'),
+    ],
   ),
   OutfitGuide(
     key: '5_8',
@@ -124,6 +176,12 @@ const outfitGuides = <OutfitGuide>[
     title: '쌀쌀한 날씨',
     items: ['코트', '경량패딩', '무스탕', '두꺼운 니트'],
     message: '가벼운 겉옷보다는 코트나 경량패딩이 안정적이에요.',
+    wear: [
+      OutfitItem('코트', '$_c/coat.png'),
+      OutfitItem('패딩조끼', '$_c/vest.png'),
+      OutfitItem('무스탕', '$_c/mustang.png'),
+      OutfitItem('니트', '$_c/pullover_knit.png'),
+    ],
   ),
   OutfitGuide(
     key: '9_11',
@@ -132,6 +190,12 @@ const outfitGuides = <OutfitGuide>[
     title: '자켓이 필요한 날',
     items: ['트렌치코트', '야상', '울자켓', '맨투맨'],
     message: '가디건만 입기엔 쌀쌀할 수 있어 자켓을 걸치는 게 좋아요.',
+    wear: [
+      OutfitItem('트렌치', '$_c/trench-coat.png'),
+      OutfitItem('야상', '$_c/jumper.png'),
+      OutfitItem('자켓', '$_c/jacket-2.png'),
+      OutfitItem('맨투맨', '$_c/sweater.png'),
+    ],
   ),
   OutfitGuide(
     key: '12_16',
@@ -140,6 +204,12 @@ const outfitGuides = <OutfitGuide>[
     title: '간절기 날씨',
     items: ['얇은 자켓', '가디건', '니트', '맨투맨'],
     message: '낮에는 벗기 쉽도록 얇은 아우터를 챙겨보세요.',
+    wear: [
+      OutfitItem('데님자켓', '$_c/blue_jacket.png'),
+      OutfitItem('가디건', '$_c/cardigan.png'),
+      OutfitItem('니트', '$_c/pullover_knit.png'),
+      OutfitItem('맨투맨', '$_c/sweater.png'),
+    ],
   ),
   OutfitGuide(
     key: '17_19',
@@ -148,6 +218,13 @@ const outfitGuides = <OutfitGuide>[
     title: '선선한 날씨',
     items: ['얇은 니트', '셔츠', '맨투맨', '가디건'],
     message: '두꺼운 아우터 없이 가벼운 긴팔이면 충분해요.',
+    wear: [
+      OutfitItem('니트', '$_c/pullover_knit.png'),
+      OutfitItem('셔츠', '$_c/shirt-1.png'),
+      OutfitItem('후드티', '$_c/hoodie.png'),
+      OutfitItem('가디건', '$_c/cardigan2.png'),
+      OutfitItem('원피스', '$_c/long_arm_dress.png'),
+    ],
   ),
   OutfitGuide(
     key: '20_22',
@@ -156,6 +233,13 @@ const outfitGuides = <OutfitGuide>[
     title: '포근한 날씨',
     items: ['긴팔티', '블라우스', '얇은 셔츠', '면바지'],
     message: '낮에는 포근하지만 아침저녁엔 얇은 겉옷이 유용해요.',
+    wear: [
+      OutfitItem('긴팔티', '$_c/long_arm_t_shirt.png'),
+      OutfitItem('블라우스', '$_c/tanktop_blouse.png'),
+      OutfitItem('셔츠', '$_c/shirt-1.png'),
+      OutfitItem('면바지', '$_c/pants2.png'),
+      OutfitItem('원피스', '$_c/long_arm_dress2.png'),
+    ],
   ),
   OutfitGuide(
     key: '23_26',
@@ -164,6 +248,12 @@ const outfitGuides = <OutfitGuide>[
     title: '따뜻한 날씨',
     items: ['반팔', '얇은 셔츠', '린넨팬츠', '가벼운 원피스'],
     message: '얇고 통풍이 잘 되는 옷차림이 좋아요.',
+    wear: [
+      OutfitItem('반팔', '$_c/polo.png'),
+      OutfitItem('셔츠', '$_c/half_arm_shirt-3.png'),
+      OutfitItem('린넨팬츠', '$_c/pants2.png'),
+      OutfitItem('원피스', '$_c/tanktop_dress3.png'),
+    ],
   ),
   OutfitGuide(
     key: '27_plus',
@@ -172,5 +262,11 @@ const outfitGuides = <OutfitGuide>[
     title: '더운 날씨',
     items: ['반팔', '민소매', '반바지', '린넨'],
     message: '통풍이 잘 되는 옷을 입고, 실내 냉방용 겉옷을 챙겨주세요.',
+    wear: [
+      OutfitItem('반팔', '$_c/t_shirt.png'),
+      OutfitItem('민소매', '$_c/tanktop.png'),
+      OutfitItem('반바지', '$_c/shorts.png'),
+      OutfitItem('원피스', '$_c/tanktop_dress.png'),
+    ],
   ),
 ];

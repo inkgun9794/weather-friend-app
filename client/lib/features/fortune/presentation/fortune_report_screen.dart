@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/fortune/data/fortune_report.dart';
-import 'package:weather_friend/features/fortune/data/saju_profile.dart';
 
 /// 오늘 본 운세 리포트 목록 화면. /fortune/report.
 /// 자정 reset 됨. 탭하면 해당 결과 재표시 (광고 없이, 캐시).
@@ -73,10 +72,7 @@ class _ReportTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = report.profile;
-    final cal = p.isLunar ? '음력' : '양력';
-    final birthLine =
-        '$cal ${p.year}.${p.month.toString().padLeft(2, '0')}.${p.day.toString().padLeft(2, '0')} '
-        '${p.hour.toString().padLeft(2, '0')}:00 · ${p.gender.label}';
+    final birthLine = p.birthSummary;
     final viewedTime =
         '${report.viewedAt.hour.toString().padLeft(2, '0')}:${report.viewedAt.minute.toString().padLeft(2, '0')}';
 

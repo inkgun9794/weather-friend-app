@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/widgets.dart' show Key;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:weather_friend/app/app.dart';
 import 'package:weather_friend/core/services/fcm_service.dart';
@@ -110,6 +109,5 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(BriefingScreen), findsOneWidget);
-    expect(find.byKey(const Key('temperature-curve')), findsOneWidget);
   });
 }

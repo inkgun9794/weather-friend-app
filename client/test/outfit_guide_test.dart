@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:weather_friend/features/briefing/domain/outfit_guide.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
@@ -62,5 +64,50 @@ void main() {
       expect(messages, hasLength(CharacterId.values.length));
       expect(messages, isNot(contains(guide.message)));
     }
+  });
+
+  test('every guide maps wear cells with short labels and real images', () {
+    for (final guide in outfitGuides) {
+      expect(guide.wear, isNotEmpty, reason: guide.key);
+      expect(
+        guide.wear.length,
+        lessThanOrEqualTo(5),
+        reason: '${guide.key}: 셀은 5칸까지(비 오면 우산까지 6칸)가 한계',
+      );
+      final labels = guide.wear.map((w) => w.label).toList();
+      expect(labels.toSet(), hasLength(labels.length), reason: guide.key);
+      for (final item in guide.wear) {
+        expect(item.label, isNotEmpty, reason: guide.key);
+        expect(
+          item.label.length,
+          lessThanOrEqualTo(5),
+          reason: '${guide.key}: "${item.label}" — 라벨은 수식어 없이 짧게',
+        );
+        expect(
+          File(item.asset).existsSync(),
+          isTrue,
+          reason: '${guide.key}: ${item.asset} 에셋이 없다',
+        );
+      }
+    }
+    expect(File(kUmbrellaAsset).existsSync(), isTrue);
+  });
+
+  test('appends umbrella cell only on rainy days', () {
+    final guide = outfitGuideFor(10);
+    expect(outfitWearFor(guide), guide.wear);
+    expect(outfitWearFor(guide, rainy: true), [...guide.wear, kUmbrellaItem]);
+  });
+
+  test('umbrellaNeeded follows rainy conditions and precipitation odds', () {
+    expect(umbrellaNeeded(condition: '비'), isTrue);
+    expect(umbrellaNeeded(condition: '약한 이슬비'), isTrue);
+    expect(umbrellaNeeded(condition: '강한 소나기'), isTrue);
+    expect(umbrellaNeeded(condition: '천둥번개'), isTrue);
+    expect(umbrellaNeeded(condition: '눈'), isFalse);
+    expect(umbrellaNeeded(condition: '맑음'), isFalse);
+    expect(umbrellaNeeded(condition: null), isFalse);
+    expect(umbrellaNeeded(condition: '맑음', precipitationProb: 60), isTrue);
+    expect(umbrellaNeeded(condition: '흐림', precipitationProb: 59), isFalse);
   });
 }
