@@ -920,6 +920,7 @@ class _OnboardCharCard extends StatelessWidget {
                       color: v.colorDeep,
                       letterSpacing: -0.11,
                     ),
+                    textAlign: TextAlign.left,
                   ),
                   const SizedBox(height: 2),
                   Text(
