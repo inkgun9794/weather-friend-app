@@ -93,7 +93,13 @@ flutter:
 
   assets:
     - assets/character_intros/
+    - assets/characters/jihoon/
+    - assets/characters/jiyoung/
+    - assets/characters/siwon/
+    - assets/characters/sohee/
+    - assets/clothes/
     - assets/maps/
+    - assets/weather/
     - assets/icons/weather/
     - assets/icons/weather_v2/
 
