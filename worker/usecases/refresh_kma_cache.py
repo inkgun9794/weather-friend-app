@@ -15,9 +15,16 @@ import pathlib
 import zoneinfo
 from datetime import datetime, timedelta
 
+import httpx
 import numpy as np
 from PIL import Image
 
+from adapters.airkorea import (
+    AirQuality,
+    fetch_realtime,
+    fetch_stations,
+    nearest_station,
+)
 from adapters.extrapolation import estimate_motion_per_hour_intensity
 from adapters.kma_apihub import NX as GRID_NX
 from adapters.kma_apihub import NY as GRID_NY
@@ -161,6 +168,11 @@ async def refresh_short_and_mid(
             _refresh_mid(city_ids, store),
             _refresh_observations(city_ids, store),
         )
+        # 미세먼지(AirKorea)는 보조 데이터 — 실패해도 KMA 본 흐름에 영향 없도록 guard.
+        try:
+            await _refresh_air_quality(city_ids, store)
+        except Exception as e:
+            log.error("미세먼지 갱신 실패(무시): %s", e)
     finally:
         await store.close()
 
@@ -284,6 +296,59 @@ async def _refresh_observations(
                 log.error("  ASOS %s 실패: %s", stn_id, e)
 
     await asyncio.gather(*(_one(stn_id) for stn_id in station_ids))
+
+
+async def _refresh_air_quality(city_ids: list[str], store: KmaCacheStore) -> None:
+    """도시별 실시간 미세먼지(AirKorea) → Firestore `air_quality/{city_id}`.
+
+    측정소 목록은 1회만 받고, 각 도시 최근접 측정소의 실시간을 조회한다.
+    여러 도시가 같은 측정소를 공유하므로 측정소 단위로 dedupe해서 호출을 줄인다.
+    (호출량을 더 줄이려면 시도별 일괄 API getCtprvnRltmMesureDnsty로 교체 가능.)
+    """
+    log.info("미세먼지 갱신 시작 (cities=%d)", len(city_ids))
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        stations = await fetch_stations(client)
+        if not stations:
+            log.warning(
+                "미세먼지: 측정소 목록 비어 있음 "
+                "(AIRKOREA_SERVICE_KEY 미설정/호출 실패?) → 스킵",
+            )
+            return
+
+        # 도시 → 최근접 측정소 이름. 측정소 단위로 dedupe.
+        city_station: dict[str, str] = {}
+        for cid in city_ids:
+            city = CITIES_KMA[cid]
+            st = nearest_station(stations, city.lat, city.lon)
+            if st is not None:
+                city_station[cid] = st.name
+        unique = sorted(set(city_station.values()))
+        log.info("  도시 %d개 → 측정소 %d개(dedup)", len(city_station), len(unique))
+
+        sem = asyncio.Semaphore(_CITY_CONCURRENCY)
+        by_station: dict[str, AirQuality] = {}
+
+        async def _one(name: str) -> None:
+            async with sem:
+                aq = await fetch_realtime(client, name)
+                if aq is not None and aq.pm10 is not None:
+                    by_station[name] = aq
+
+        await asyncio.gather(*(_one(n) for n in unique))
+
+        saved = 0
+        for cid, name in city_station.items():
+            aq = by_station.get(name)
+            if aq is None:
+                continue
+            try:
+                await store.save_air_quality(cid, aq, name)
+                saved += 1
+            except Exception as e:
+                log.error("  미세먼지 저장 %s 실패: %s", cid, e)
+        log.info(
+            "미세먼지 저장 완료 — 도시 %d개 (측정소 %d개)", saved, len(by_station),
+        )
 
 
 async def _refresh_ultra(city_ids: list[str], store: KmaCacheStore) -> None:

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:weather_friend/app/router/main_shell.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/core/utils/kst.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
@@ -245,21 +246,14 @@ class _IntroAndInput extends StatelessWidget {
         children: [
           Text(
             '오늘의 운세',
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              color: sky.ink,
-              shadows: textShadows,
-            ),
+            style: AppType.display.copyWith(color: sky.ink, shadows: textShadows),
           ),
           const SizedBox(height: 6),
           Text(
             '생년월일과 태어난 시간을 바탕으로\n매일 간단한 운세를 알려드려요.',
-            style: TextStyle(
-              fontSize: 14,
+            style: AppType.reading.copyWith(
               height: 1.5,
               color: sky.inkSoft,
-              fontWeight: FontWeight.w600,
               shadows: textShadows,
             ),
           ),
@@ -438,19 +432,13 @@ class _PrimaryActionCard extends StatelessWidget {
                       children: [
                         Text(
                           '$name의 오늘 운세 받기',
-                          style: TextStyle(
-                            color: fg,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                          ),
+                          style: AppType.subhead.copyWith(color: fg),
                         ),
                         const SizedBox(height: 3),
                         Text(
                           '광고 시청 후 결과를 볼 수 있어요',
-                          style: TextStyle(
+                          style: AppType.caption.copyWith(
                             color: fg.withValues(alpha: 0.72),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -604,9 +592,7 @@ class _ProfileHeader extends StatelessWidget {
                 children: [
                   Text(
                     profile.name,
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
+                    style: AppType.titleLg.copyWith(
                       color: sky.ink,
                       shadows: textShadows,
                     ),
@@ -626,9 +612,7 @@ class _ProfileHeader extends StatelessWidget {
                     ),
                     child: Text(
                       profile.relation.label,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                      style: AppType.micro.copyWith(
                         color: tagText,
                         shadows: lightText ? textShadows : null,
                       ),
@@ -639,10 +623,8 @@ class _ProfileHeader extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 birthLine,
-                style: TextStyle(
-                  fontSize: 12,
+                style: AppType.caption.copyWith(
                   color: sky.inkSoft,
-                  fontWeight: FontWeight.w600,
                   shadows: textShadows,
                 ),
               ),
@@ -708,11 +690,7 @@ class _ActionButton extends StatelessWidget {
                   Expanded(
                     child: Text(
                       label,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.ink,
-                      ),
+                      style: AppType.bodyLg.copyWith(color: AppColors.ink),
                     ),
                   ),
                   Icon(
@@ -763,11 +741,7 @@ class _SheetWrapper extends StatelessWidget {
             ),
             Text(
               title,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: AppColors.ink,
-              ),
+              style: AppType.title.copyWith(color: AppColors.ink),
             ),
             const SizedBox(height: 16),
             child,

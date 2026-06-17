@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:weather_friend/app/router/main_shell.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/core/utils/kst.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
@@ -158,10 +159,8 @@ class _Masthead extends StatelessWidget {
               const SizedBox(width: 9),
               Text(
                 '일기',
-                style: TextStyle(
+                style: AppType.display.copyWith(
                   color: sky.ink,
-                  fontSize: 25,
-                  fontWeight: FontWeight.w800,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -170,10 +169,8 @@ class _Masthead extends StatelessWidget {
           const SizedBox(height: 7),
           Text(
             DiaryFormat.full(DateTime.now()),
-            style: TextStyle(
+            style: AppType.body.copyWith(
               color: sky.inkSoft,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
               letterSpacing: 0.2,
             ),
           ),
@@ -278,12 +275,7 @@ class _SkyPhotoCtaState extends ConsumerState<_SkyPhotoCta> {
                 const SizedBox(height: 12),
                 Text(
                   '오늘의 하늘 사진을 남겨보세요!',
-                  style: TextStyle(
-                    color: widget.sky.ink,
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.1,
-                  ),
+                  style: AppType.body.copyWith(color: widget.sky.ink),
                 ),
               ],
             ),
@@ -307,10 +299,8 @@ class _SectionLabel extends StatelessWidget {
         children: [
           Text(
             '지난 기록',
-            style: TextStyle(
+            style: AppType.caption.copyWith(
               color: sky.inkSoft,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
               letterSpacing: 0.4,
             ),
           ),
@@ -337,12 +327,7 @@ class _EmptyHint extends StatelessWidget {
         child: Text(
           '아직 남긴 기록이 없어요.\n위 카드를 눌러 첫 하늘을 담아보세요.',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            color: sky.inkSoft,
-            fontSize: 13,
-            height: 1.6,
-            fontWeight: FontWeight.w500,
-          ),
+          style: AppType.body.copyWith(color: sky.inkSoft, height: 1.6),
         ),
       ),
     );
@@ -420,10 +405,8 @@ class _DiaryCard extends StatelessWidget {
                       children: [
                         Text(
                           DiaryFormat.stamp(entry.createdAt),
-                          style: TextStyle(
+                          style: AppType.micro2.copyWith(
                             color: AppColors.inkMute,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
                             letterSpacing: 0.6,
                           ),
                         ),
@@ -439,12 +422,7 @@ class _DiaryCard extends StatelessWidget {
                         entry.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: AppColors.ink,
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.2,
-                        ),
+                        style: AppType.headline.copyWith(color: AppColors.ink),
                       ),
                     ],
                     // 내용은 카드에 미리보기로 노출하지 않는다 — 탭해서 편집 화면에서만.
@@ -460,11 +438,8 @@ class _DiaryCard extends StatelessWidget {
                           const SizedBox(width: 5),
                           Text(
                             '눌러서 수정',
-                            style: TextStyle(
+                            style: AppType.caption.copyWith(
                               color: AppColors.inkMute,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -0.1,
                             ),
                           ),
                           const Spacer(),
@@ -499,12 +474,10 @@ class _TodayBadge extends StatelessWidget {
         color: kDiaryAccent.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: const Text(
+      child: Text(
         '오늘',
-        style: TextStyle(
-          color: Color(0xFF8A5A22),
-          fontSize: 10.5,
-          fontWeight: FontWeight.w800,
+        style: AppType.micro2.copyWith(
+          color: const Color(0xFF8A5A22),
           letterSpacing: 0.2,
         ),
       ),

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/record/domain/diary_entry.dart';
 import 'package:weather_friend/features/record/presentation/diary_format.dart';
@@ -350,10 +351,9 @@ class _DumpPolaroid extends StatelessWidget {
             overflow: TextOverflow.fade,
             textAlign: TextAlign.center,
             softWrap: false,
-            style: TextStyle(
+            style: AppType.micro2.copyWith(
               color: AppColors.inkMute,
               fontSize: 8.5,
-              fontWeight: FontWeight.w700,
               letterSpacing: 0.4,
             ),
           ),

@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lunar/lunar.dart' as lunar_pkg;
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 
 /// 생년월일 휠 피커 결과 — 양/음력 선택을 시트 안으로 합쳤다.
@@ -209,11 +210,7 @@ class _BirthDateSheetState extends State<_BirthDateSheet> {
         const SizedBox(height: 4),
         Text(
           _isLunar ? '음력 생일은 윤달 없이 평달 기준으로 풀이해요' : '주민등록상 생일이 아닌 실제 태어난 날짜를 선택해요',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: AppColors.inkMute,
-          ),
+          style: AppType.caption.copyWith(color: AppColors.inkMute),
         ),
       ],
     );
@@ -307,11 +304,7 @@ class _BirthTimeSheetState extends State<_BirthTimeSheet> {
         Text(
           _unknown ? '시(時)를 빼고 세 기둥으로 풀이해요' : '${sijin.name} (${sijin.range})',
           key: const Key('birth-time-caption'),
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.inkMute,
-          ),
+          style: AppType.caption.copyWith(color: AppColors.inkMute),
         ),
       ],
     );
@@ -354,11 +347,7 @@ class _SheetScaffold extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             title,
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              color: AppColors.ink,
-            ),
+            style: AppType.title.copyWith(color: AppColors.ink),
           ),
           const SizedBox(height: 14),
           ...children,
@@ -380,7 +369,7 @@ class _SheetScaffold extends StatelessWidget {
                 ),
                 child: const Text(
                   '확인',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  style: AppType.headline,
                 ),
               ),
             ),
@@ -462,11 +451,7 @@ class _Wheel extends StatelessWidget {
             Center(
               child: Text(
                 labelFor(i),
-                style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
-                ),
+                style: AppType.title.copyWith(color: AppColors.ink),
               ),
             ),
         ],
@@ -522,11 +507,7 @@ class _SegChip extends StatelessWidget {
               ],
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
-                ),
+                style: AppType.bodyLg.copyWith(color: AppColors.ink),
               ),
             ],
           ),

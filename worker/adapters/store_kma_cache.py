@@ -6,6 +6,7 @@
 - `kma_mid_land/{reg_id}`   — 중기육상 (6시간 갱신)
 - `kma_mid_temp/{reg_id}`   — 중기기온 (6시간 갱신)
 - `kma_observation/{stn_id}` — ASOS 전일 관측 최저·최고
+- `air_quality/{city_id}`   — 실시간 미세먼지 (AirKorea, 1시간 갱신)
 - `kma_radar/latest`              — 레이더 manifest (bbox + frame 메타)
 - `kma_radar/latest/frames/{slot}` — 프레임별 PNG bytes (덮어쓰기)
 
@@ -21,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 
 from google.cloud import firestore
 
+from adapters.airkorea import AirQuality
 from adapters.kma_openapi import (
     KmaDailyObservation,
     KmaMidLandForecast,
@@ -75,6 +77,17 @@ class KmaCacheStore:
             "stn_id": observation.stn_id,
             "min_c": observation.min_ta,
             "max_c": observation.max_ta,
+        })
+
+    async def save_air_quality(
+        self, city_id: str, aq: AirQuality, station: str,
+    ) -> None:
+        await self._set(f"air_quality/{city_id}", {
+            "pm10": aq.pm10,
+            "pm25": aq.pm25,
+            "pm10_grade": aq.pm10_grade,
+            "pm25_grade": aq.pm25_grade,
+            "station": station,
         })
 
     async def save_grid_rain(self, payload: dict) -> None:

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/record/data/diary_repository.dart';
 import 'package:weather_friend/features/record/domain/diary_entry.dart';
@@ -209,12 +210,7 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
         scrolledUnderElevation: 0,
         title: Text(
           _isPersisted ? '기록' : '새 기록',
-          style: TextStyle(
-            color: AppColors.ink,
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.2,
-          ),
+          style: AppType.title.copyWith(color: AppColors.ink),
         ),
         actions: [
           if (_isPersisted)
@@ -235,12 +231,7 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                     )
                   : Text(
                       '저장',
-                      style: TextStyle(
-                        color: AppColors.ink,
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.1,
-                      ),
+                      style: AppType.subhead.copyWith(color: AppColors.ink),
                     ),
             ),
           ),
@@ -277,10 +268,8 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
               titleField: TextField(
                 controller: _title,
                 textInputAction: TextInputAction.next,
-                style: TextStyle(
+                style: AppType.title.copyWith(
                   color: AppColors.ink,
-                  fontSize: 19,
-                  fontWeight: FontWeight.w800,
                   letterSpacing: -0.3,
                   height: 1.3,
                 ),
@@ -288,10 +277,8 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                   isCollapsed: true,
                   border: InputBorder.none,
                   hintText: '제목',
-                  hintStyle: TextStyle(
+                  hintStyle: AppType.title.copyWith(
                     color: AppColors.inkFaint,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
                     letterSpacing: -0.3,
                   ),
                 ),
@@ -303,22 +290,17 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                 maxLines: null,
                 keyboardType: TextInputType.multiline,
                 textCapitalization: TextCapitalization.sentences,
-                style: TextStyle(
+                style: AppType.reading.copyWith(
                   color: AppColors.inkSoft,
-                  fontSize: 15,
                   height: 1.7,
-                  fontWeight: FontWeight.w400,
-                  letterSpacing: -0.1,
                 ),
                 decoration: InputDecoration(
                   isCollapsed: true,
                   border: InputBorder.none,
                   hintText: '오늘 하늘은 어땠나요?\n떠오른 생각을 자유롭게 적어보세요.',
-                  hintStyle: TextStyle(
+                  hintStyle: AppType.reading.copyWith(
                     color: AppColors.inkFaint,
-                    fontSize: 15,
                     height: 1.7,
-                    fontWeight: FontWeight.w400,
                   ),
                 ),
               ),
@@ -400,10 +382,8 @@ class _Polaroid extends StatelessWidget {
           const SizedBox(height: 9),
           Text(
             dateLabel,
-            style: TextStyle(
+            style: AppType.micro.copyWith(
               color: AppColors.inkMute,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
               letterSpacing: 0.8,
             ),
           ),
@@ -462,12 +442,7 @@ class _PhotoPlaceholder extends StatelessWidget {
                       const SizedBox(height: 10),
                       Text(
                         '사진 추가 (선택)',
-                        style: TextStyle(
-                          color: AppColors.inkSoft,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.1,
-                        ),
+                        style: AppType.body.copyWith(color: AppColors.inkSoft),
                       ),
                     ],
                   ),
@@ -551,10 +526,8 @@ class _MoodSection extends StatelessWidget {
           children: [
             Text(
               '당신의 기분은 현재 어떤 날씨인가요?',
-              style: TextStyle(
+              style: AppType.bodyLg.copyWith(
                 color: AppColors.ink,
-                fontSize: 14.5,
-                fontWeight: FontWeight.w700,
                 letterSpacing: -0.2,
               ),
             ),
@@ -600,10 +573,8 @@ class _PageCard extends StatelessWidget {
           children: [
             Text(
               date,
-              style: TextStyle(
+              style: AppType.caption.copyWith(
                 color: AppColors.inkMute,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
                 letterSpacing: 0.2,
               ),
             ),

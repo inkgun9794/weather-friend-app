@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:saju/saju.dart' as saju;
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/fortune/data/fortune_api.dart';
 import 'package:weather_friend/features/fortune/data/saju_profile.dart';
@@ -104,7 +105,7 @@ class SajuReferenceCards extends StatelessWidget {
       return _GlassCard(
         child: Text(
           '사주 계산에 실패했어요',
-          style: TextStyle(color: AppColors.inkMute, fontSize: 13),
+          style: AppType.body.copyWith(color: AppColors.inkMute),
         ),
       );
     }
@@ -124,12 +125,7 @@ class SajuReferenceCards extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 '참고 — 사주 자료',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.inkMute,
-                  letterSpacing: -0.1,
-                ),
+                style: AppType.caption.copyWith(color: AppColors.inkMute),
               ),
             ],
           ),
@@ -177,11 +173,7 @@ class _SajuPillarsCard extends StatelessWidget {
                   child: Text(
                     label,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.inkMute,
-                    ),
+                    style: AppType.micro.copyWith(color: AppColors.inkMute),
                   ),
                 ),
             ],
@@ -231,9 +223,7 @@ class _UnknownPillarCell extends StatelessWidget {
         children: [
           Text(
             '—',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
+            style: AppType.titleLg.copyWith(
               color: AppColors.inkMute,
               height: 1.0,
             ),
@@ -241,11 +231,7 @@ class _UnknownPillarCell extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             '모름',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: AppColors.inkSoft,
-            ),
+            style: AppType.micro2.copyWith(color: AppColors.inkSoft),
           ),
         ],
       ),
@@ -271,21 +257,12 @@ class _GanZhiCell extends StatelessWidget {
         children: [
           Text(
             stem.hanja,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: color,
-              height: 1.0,
-            ),
+            style: AppType.titleLg.copyWith(color: color, height: 1.0),
           ),
           const SizedBox(height: 2),
           Text(
             stem.korean,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: AppColors.inkSoft,
-            ),
+            style: AppType.micro2.copyWith(color: AppColors.inkSoft),
           ),
         ],
       ),
@@ -311,21 +288,12 @@ class _BranchCell extends StatelessWidget {
         children: [
           Text(
             branch.hanja,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: color,
-              height: 1.0,
-            ),
+            style: AppType.titleLg.copyWith(color: color, height: 1.0),
           ),
           const SizedBox(height: 2),
           Text(
             '${branch.korean}·${_zodiacKo(branch.zodiac)}',
-            style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w600,
-              color: AppColors.inkSoft,
-            ),
+            style: AppType.micro2.copyWith(color: AppColors.inkSoft),
           ),
         ],
       ),
@@ -391,11 +359,7 @@ class _ElementBar extends StatelessWidget {
           width: 36,
           child: Text(
             '${element.hanja} ${element.korean}',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
+            style: AppType.caption.copyWith(color: color),
           ),
         ),
         const SizedBox(width: 12),
@@ -428,11 +392,7 @@ class _ElementBar extends StatelessWidget {
           child: Text(
             '$count',
             textAlign: TextAlign.end,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: AppColors.inkSoft,
-            ),
+            style: AppType.caption.copyWith(color: AppColors.inkSoft),
           ),
         ),
       ],
@@ -527,12 +487,7 @@ class _ConciseSection extends StatelessWidget {
         if (showTitle) ...[
           Text(
             section.title,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: AppColors.inkMute,
-              letterSpacing: -0.1,
-            ),
+            style: AppType.label.copyWith(color: AppColors.inkMute),
           ),
           const SizedBox(height: 6),
         ],
@@ -613,12 +568,7 @@ class _Paragraph extends StatelessWidget {
   Widget build(BuildContext context) {
     return RichText(
       text: TextSpan(
-        style: TextStyle(
-          fontSize: 14.5,
-          height: 1.65,
-          color: AppColors.ink,
-          letterSpacing: -0.1,
-        ),
+        style: AppType.reading.copyWith(height: 1.65, color: AppColors.ink),
         children: _parseInline(text),
       ),
     );
@@ -701,16 +651,12 @@ class _LoadingState extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             '오늘의 운세를 준비하고 있어요...',
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.inkMute,
-              fontWeight: FontWeight.w500,
-            ),
+            style: AppType.body.copyWith(color: AppColors.inkMute),
           ),
           const SizedBox(height: 4),
           Text(
             '5~10초 정도 걸려요',
-            style: TextStyle(fontSize: 11, color: AppColors.inkFaint),
+            style: AppType.micro.copyWith(color: AppColors.inkFaint),
           ),
         ],
       ),
@@ -745,7 +691,7 @@ class _ErrorState extends StatelessWidget {
               Expanded(
                 child: Text(
                   message,
-                  style: TextStyle(fontSize: 13, color: AppColors.inkSoft),
+                  style: AppType.body.copyWith(color: AppColors.inkSoft),
                 ),
               ),
             ],
@@ -824,9 +770,7 @@ class _CardTitle extends StatelessWidget {
         Flexible(
           child: Text(
             title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
+            style: AppType.headline.copyWith(
               color: AppColors.ink,
               letterSpacing: -0.3,
             ),
@@ -836,11 +780,7 @@ class _CardTitle extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             subtitle!,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.inkMute,
-            ),
+            style: AppType.micro.copyWith(color: AppColors.inkMute),
           ),
         ],
       ],

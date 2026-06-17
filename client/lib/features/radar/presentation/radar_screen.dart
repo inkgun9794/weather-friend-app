@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/features/radar/data/radar_manifest.dart';
 import 'package:weather_friend/features/radar/data/user_location.dart';
 
@@ -158,12 +159,12 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
                             ),
                           ],
                         ),
-                      const SimpleAttributionWidget(
+                      SimpleAttributionWidget(
                         source: Text(
                           '© OpenStreetMap © CARTO',
-                          style: TextStyle(fontSize: 10),
+                          style: AppType.micro2,
                         ),
-                        backgroundColor: Color(0xCC000000),
+                        backgroundColor: const Color(0xCC000000),
                       ),
                     ],
                   ),
@@ -284,17 +285,12 @@ class _TimeSlider extends StatelessWidget {
             children: [
               Text(
                 _formatLabel(current),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: AppType.bodyLg,
               ),
               Text(
                 _kindLabel(current.kind),
-                style: TextStyle(
-                  fontSize: 12,
+                style: AppType.caption.copyWith(
                   color: _kindColor(current.kind),
-                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],

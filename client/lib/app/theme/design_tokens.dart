@@ -15,6 +15,9 @@ class AppColors {
   static final line = oklch(0.88, 0.008, 95);
   static final hairline = oklch(0.92, 0.006, 95);
   static final fortuneAccent = oklch(0.82, 0.13, 70);
+
+  /// 비 소식 강조용 옅은 하늘색 (옷추천 우산 타일 등).
+  static const rainTint = Color(0xFFE4EFFC);
 }
 
 class CharVisual {

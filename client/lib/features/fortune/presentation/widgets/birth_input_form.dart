@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/fortune/data/pending_fortune.dart';
 import 'package:weather_friend/features/fortune/data/saju_profile.dart';
@@ -255,11 +256,7 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
           controller: _nameCtrl,
           textInputAction: TextInputAction.done,
           maxLength: 20,
-          style: TextStyle(
-            color: style.fieldText,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          style: AppType.headline.copyWith(color: style.fieldText),
           decoration: InputDecoration(
             hintText: widget.mode == BirthInputMode.primary
                 ? '예: 나, 본인'
@@ -392,10 +389,7 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
                       const SizedBox(width: 10),
                       const Text(
                         '사주 분석 중...',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                        ),
+                        style: AppType.headline,
                       ),
                     ],
                   )
@@ -403,10 +397,7 @@ class _BirthInputFormState extends ConsumerState<BirthInputForm> {
                     widget.mode == BirthInputMode.primary
                         ? '오늘의 운세 보기'
                         : '운세 보기',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: AppType.headline,
                   ),
           ),
         ),
@@ -425,9 +416,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w700,
+      style: AppType.body.copyWith(
         color: style.labelColor,
         shadows: style.labelShadows,
       ),
@@ -473,9 +462,7 @@ class _ChoiceChip extends StatelessWidget {
               child: Text(
                 label,
                 maxLines: 1,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                style: AppType.bodyLg.copyWith(
                   color: selected ? style.selectedText : style.unselectedText,
                 ),
               ),
@@ -524,9 +511,7 @@ class _ToggleButton extends StatelessWidget {
             child: Text(
               label,
               maxLines: 1,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
+              style: AppType.headline.copyWith(
                 color: selected ? style.selectedText : style.unselectedText,
               ),
             ),
@@ -576,11 +561,7 @@ class _FieldButton extends StatelessWidget {
                   text,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: style.fieldText,
-                  ),
+                  style: AppType.headline.copyWith(color: style.fieldText),
                 ),
               ),
               Icon(Icons.chevron_right_rounded, color: style.icon, size: 22),

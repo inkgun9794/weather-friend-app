@@ -22,6 +22,9 @@ class HourlyWeather {
     this.feelsLikeC,
     this.humidity,
     this.weatherCode,
+    this.uvIndex,
+    this.pm10,
+    this.pm25,
   });
 
   final int hour;
@@ -34,6 +37,16 @@ class HourlyWeather {
   /// 원본 WMO weather code (Open-Meteo). 강도/세부 condition 매핑용.
   /// null이면 KMA 출처 등으로 코드 없음.
   final int? weatherCode;
+
+  /// 자외선 지수 (UV index). forecast hourly에서 옴. null이면 데이터 없음.
+  final double? uvIndex;
+
+  /// 미세먼지 PM10 (μg/m³). 별도 air-quality API에서 옴.
+  /// 호출 실패 시 null — 날씨는 정상 동작.
+  final int? pm10;
+
+  /// 초미세먼지 PM2.5 (μg/m³). air-quality API에서 옴. 실패 시 null.
+  final int? pm25;
 }
 
 class DailySummary {
@@ -218,7 +231,7 @@ class OpenMeteoClient {
       'latitude': lat.toString(),
       'longitude': lng.toString(),
       'hourly':
-          'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,weather_code',
+          'temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,weather_code,uv_index',
       'daily':
           'temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,sunrise,sunset',
       'timezone': 'Asia/Seoul',
@@ -226,7 +239,18 @@ class OpenMeteoClient {
       'forecast_days': daysCount.toString(),
     });
 
-    final resp = await _http.get(uri).timeout(const Duration(seconds: 30));
+    final now = nowKst();
+    final todayDate = _isoDate(now);
+
+    // 예보(필수)와 대기질(부가)을 동시에 호출 — 대기질은 별도 host라 개별 try/catch로
+    // 감싸서 실패해도 날씨 화면은 정상 동작. (실패 시 빈 맵 → PM 필드 null.)
+    final results = await Future.wait([
+      _http.get(uri).timeout(const Duration(seconds: 30)),
+      _fetchAirQuality(lat: lat, lng: lng, todayDate: todayDate),
+    ]);
+    final resp = results[0] as http.Response;
+    final airByHour = results[1] as Map<int, ({int? pm10, int? pm25})>;
+
     if (resp.statusCode != 200) {
       throw OpenMeteoException('HTTP ${resp.statusCode}: ${resp.body}');
     }
@@ -239,9 +263,7 @@ class OpenMeteoClient {
     final humidity = (hourly['relative_humidity_2m'] as List);
     final probs = (hourly['precipitation_probability'] as List);
     final codes = (hourly['weather_code'] as List);
-
-    final now = nowKst();
-    final todayDate = _isoDate(now);
+    final uvs = (hourly['uv_index'] as List?) ?? const [];
 
     // 날짜를 기준으로 오늘 24시간만 추린다.
     final today = <int, HourlyWeather>{};
@@ -250,6 +272,7 @@ class OpenMeteoClient {
       if (!timestamp.startsWith(todayDate)) continue;
       final parsed = DateTime.tryParse(timestamp);
       if (parsed == null) continue;
+      final air = airByHour[parsed.hour];
       today[parsed.hour] = _snapshot(
         parsed.hour,
         temps[i],
@@ -257,6 +280,9 @@ class OpenMeteoClient {
         humidity[i],
         probs[i],
         codes[i],
+        i < uvs.length ? uvs[i] : null,
+        air?.pm10,
+        air?.pm25,
       );
     }
 
@@ -387,6 +413,9 @@ class OpenMeteoClient {
     Object? humidity,
     Object? prob,
     Object? code,
+    Object? uv,
+    int? pm10,
+    int? pm25,
   ) {
     final codeInt = (code as num).toInt();
     return HourlyWeather(
@@ -397,7 +426,53 @@ class OpenMeteoClient {
       condition: _weatherCodeKo[codeInt] ?? '알 수 없음',
       precipitationProb: ((prob as num?) ?? 0).toInt(),
       weatherCode: codeInt,
+      uvIndex: (uv as num?)?.toDouble(),
+      pm10: pm10,
+      pm25: pm25,
     );
+  }
+
+  /// 대기질(미세먼지) 별도 API — `air-quality.open-meteo.com`. forecast와 다른 host.
+  /// 절대 throw하지 않는다: 어떤 실패(네트워크/타임아웃/HTTP/파싱)든 빈 맵 반환 →
+  /// 호출부에서 PM 필드만 null로 남고 날씨 화면은 정상.
+  Future<Map<int, ({int? pm10, int? pm25})>> _fetchAirQuality({
+    required double lat,
+    required double lng,
+    required String todayDate,
+  }) async {
+    try {
+      final uri = Uri.https('air-quality.open-meteo.com', '/v1/air-quality', {
+        'latitude': lat.toString(),
+        'longitude': lng.toString(),
+        'hourly': 'pm10,pm2_5',
+        'timezone': 'Asia/Seoul',
+        'forecast_days': '1',
+      });
+      final resp = await _http.get(uri).timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200) return const {};
+
+      final data = json.decode(resp.body) as Map<String, dynamic>;
+      final hourly = data['hourly'] as Map<String, dynamic>?;
+      if (hourly == null) return const {};
+      final times = (hourly['time'] as List?) ?? const [];
+      final pm10s = (hourly['pm10'] as List?) ?? const [];
+      final pm25s = (hourly['pm2_5'] as List?) ?? const [];
+
+      final byHour = <int, ({int? pm10, int? pm25})>{};
+      for (var i = 0; i < times.length; i++) {
+        final timestamp = times[i].toString();
+        if (!timestamp.startsWith(todayDate)) continue;
+        final parsed = DateTime.tryParse(timestamp);
+        if (parsed == null) continue;
+        final pm10 = i < pm10s.length ? (pm10s[i] as num?)?.round() : null;
+        final pm25 = i < pm25s.length ? (pm25s[i] as num?)?.round() : null;
+        byHour[parsed.hour] = (pm10: pm10, pm25: pm25);
+      }
+      return byHour;
+    } catch (_) {
+      // 대기질 실패는 무시 — 날씨가 우선.
+      return const {};
+    }
   }
 }
 

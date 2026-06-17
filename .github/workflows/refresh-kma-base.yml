@@ -55,6 +55,7 @@ jobs:
         env:
           KMA_OPENAPI_KEY: ${{ secrets.KMA_OPENAPI_KEY }}
           KMA_APIHUB_KEY: ${{ secrets.KMA_APIHUB_KEY }}
+          AIRKOREA_SERVICE_KEY: ${{ secrets.AIRKOREA_SERVICE_KEY }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: |
           uv run python refresh_kma.py \

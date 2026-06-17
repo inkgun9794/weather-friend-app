@@ -1,0 +1,56 @@
+<!-- @dsCard group="Foundations" name="Character Palettes" -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Character Palettes</title>
+<style>
+  @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+  :root{
+    --ink:oklch(0.22 0.018 250); --ink-mute:oklch(0.58 0.014 250); --ink-faint:oklch(0.74 0.010 250);
+    --paper:oklch(0.985 0.004 95); --hairline:oklch(0.92 0.006 95);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;padding:28px;background:var(--paper);color:var(--ink);
+    font-family:'Pretendard',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;}
+  h1{font-size:15px;font-weight:700;letter-spacing:-0.01em;margin:0 0 2px;}
+  .sub{font-size:12px;color:var(--ink-mute);margin:0 0 20px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
+  .card{border:1px solid var(--hairline);border-radius:14px;padding:14px;background:var(--paper);}
+  .ttl{font-size:13px;font-weight:700;}
+  .hue{font-size:10.5px;color:var(--ink-faint);font-family:ui-monospace,Menlo,monospace;margin-bottom:11px;}
+  .ramp{display:flex;gap:8px;}
+  .stop{flex:1;text-align:center;}
+  .blk{height:52px;border-radius:9px;border:1px solid var(--hairline);}
+  .lbl{font-size:10px;color:var(--ink-mute);margin-top:5px;}
+  .v{font-size:9px;color:var(--ink-faint);font-family:ui-monospace,Menlo,monospace;margin-top:1px;}
+</style>
+</head>
+<body>
+  <h1>Character Palettes</h1>
+  <p class="sub">CharVisual — 캐릭터별 색 (soft · base · deep) · 출처: design_tokens.dart</p>
+  <div class="grid">
+    <div class="card"><div class="ttl">jiyoung</div><div class="hue">hue 30°</div><div class="ramp">
+      <div class="stop"><div class="blk" style="background:oklch(0.94 0.04 30)"></div><div class="lbl">soft</div><div class="v">0.94·0.04</div></div>
+      <div class="stop"><div class="blk" style="background:oklch(0.74 0.13 30)"></div><div class="lbl">base</div><div class="v">0.74·0.13</div></div>
+      <div class="stop"><div class="blk" style="background:oklch(0.54 0.14 30)"></div><div class="lbl">deep</div><div class="v">0.54·0.14</div></div>
+    </div></div>
+    <div class="card"><div class="ttl">sohee</div><div class="hue">hue 330°</div><div class="ramp">
+      <div class="stop"><div class="blk" style="background:oklch(0.94 0.03 330)"></div><div class="lbl">soft</div><div class="v">0.94·0.03</div></div>
+      <div class="stop"><div class="blk" style="background:oklch(0.62 0.10 330)"></div><div class="lbl">base</div><div class="v">0.62·0.10</div></div>
+      <div class="stop"><div class="blk" style="background:oklch(0.42 0.12 330)"></div><div class="lbl">deep</div><div class="v">0.42·0.12</div></div>
+    </div></div>
+    <div class="card"><div class="ttl">jihoon</div><div class="hue">hue 240°</div><div class="ramp">
+      <div class="stop"><div class="blk" style="background:oklch(0.94 0.03 240)"></div><div class="lbl">soft</div><div class="v">0.94·0.03</div></div>
+      <div class="stop"><div class="blk" style="background:oklch(0.55 0.11 240)"></div><div class="lbl">base</div><div class="v">0.55·0.11</div></div>
+      <div class="stop"><div class="blk" style="background:oklch(0.38 0.12 240)"></div><div class="lbl">deep</div><div class="v">0.38·0.12</div></div>
+    </div></div>
+    <div class="card"><div class="ttl">siwon</div><div class="hue">hue 135°</div><div class="ramp">
+      <div class="stop"><div class="blk" style="background:oklch(0.95 0.05 135)"></div><div class="lbl">soft</div><div class="v">0.95·0.05</div></div>
+      <div class="stop"><div class="blk" style="background:oklch(0.78 0.14 135)"></div><div class="lbl">base</div><div class="v">0.78·0.14</div></div>
+      <div class="stop"><div class="blk" style="background:oklch(0.56 0.16 135)"></div><div class="lbl">deep</div><div class="v">0.56·0.16</div></div>
+    </div></div>
+  </div>
+</body>
+</html>

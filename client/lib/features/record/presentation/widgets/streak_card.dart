@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/record/domain/diary_entry.dart';
 import 'package:weather_friend/features/record/domain/diary_mood.dart';
@@ -70,10 +71,8 @@ class StreakCard extends StatelessWidget {
                 const SizedBox(width: 7),
                 Text(
                   '일기 챌린지',
-                  style: TextStyle(
+                  style: AppType.subhead.copyWith(
                     color: AppColors.ink,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
                     letterSpacing: -0.3,
                   ),
                 ),
@@ -115,12 +114,7 @@ class StreakCard extends StatelessWidget {
                   : (streak > 0
                         ? '$streak일 연속 중! 오늘도 이어가 보세요.'
                         : '오늘의 기분을 기록해 첫 칸을 채워보세요.'),
-              style: TextStyle(
-                color: AppColors.inkMute,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                letterSpacing: -0.1,
-              ),
+              style: AppType.caption.copyWith(color: AppColors.inkMute),
             ),
           ],
         ),
@@ -189,12 +183,7 @@ class _StreakPill extends StatelessWidget {
           const SizedBox(width: 3),
           Text(
             '연속 $streak일',
-            style: const TextStyle(
-              color: Color(0xFFB85420),
-              fontSize: 11.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.1,
-            ),
+            style: AppType.micro.copyWith(color: const Color(0xFFB85420)),
           ),
         ],
       ),

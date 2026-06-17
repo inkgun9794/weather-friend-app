@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/fortune/data/pending_fortune.dart';
 
@@ -170,11 +171,9 @@ class _NavItem extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     label,
-                    style: TextStyle(
+                    style: AppType.micro2.copyWith(
                       color: color,
-                      fontSize: 10.5,
                       fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                      letterSpacing: -0.1,
                     ),
                   ),
                 ],
@@ -246,12 +245,7 @@ class _SpeechBubbleState extends State<_SpeechBubble>
             ),
             child: Text(
               widget.text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.1,
-              ),
+              style: AppType.micro.copyWith(color: Colors.white),
             ),
           ),
           // 꼬리 삼각형

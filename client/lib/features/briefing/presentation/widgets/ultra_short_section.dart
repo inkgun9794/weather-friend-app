@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/briefing/data/open_meteo_client.dart';
 import 'package:weather_friend/features/briefing/data/weather_providers.dart';
@@ -78,11 +79,7 @@ class UltraShortSection extends ConsumerWidget {
                           const SizedBox(width: 6),
                           Text(
                             '초단기 6시간',
-                            style: TextStyle(
-                              color: sky.ink,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            ),
+                            style: AppType.subhead.copyWith(color: sky.ink),
                           ),
                           const Spacer(),
                           Icon(
@@ -95,9 +92,8 @@ class UltraShortSection extends ConsumerWidget {
                       const SizedBox(height: 4),
                       Text(
                         '비구름 이동 예측 보기 · 매 30분 갱신',
-                        style: TextStyle(
+                        style: AppType.caption.copyWith(
                           color: sky.ink.withValues(alpha: 0.7),
-                          fontSize: 12,
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -191,9 +187,8 @@ class _UltraSlot extends StatelessWidget {
         children: [
           Text(
             label,
-            style: TextStyle(
+            style: AppType.micro.copyWith(
               color: isNow ? sky.ink : sky.ink.withValues(alpha: 0.7),
-              fontSize: 11,
               fontWeight: isNow ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
@@ -207,11 +202,7 @@ class _UltraSlot extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             '${hour.temperatureC.round()}°',
-            style: TextStyle(
-              color: sky.ink,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppType.bodyLg.copyWith(color: sky.ink),
           ),
         ],
       ),

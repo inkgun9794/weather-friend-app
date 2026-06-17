@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 
 /// 기록 추가 방식 선택 결과.
@@ -37,10 +38,8 @@ Future<ImageSourceChoice?> showImageSourceSheet(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Text(
                   '오늘 기록 추가',
-                  style: TextStyle(
+                  style: AppType.caption.copyWith(
                     color: AppColors.inkSoft,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
                     letterSpacing: 0.3,
                   ),
                 ),
@@ -89,12 +88,7 @@ class _SourceTile extends StatelessWidget {
       leading: Icon(icon, color: AppColors.ink, size: 22),
       title: Text(
         label,
-        style: TextStyle(
-          color: AppColors.ink,
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-          letterSpacing: -0.1,
-        ),
+        style: AppType.subhead.copyWith(color: AppColors.ink),
       ),
       trailing: Icon(Icons.chevron_right_rounded, color: AppColors.inkFaint),
     );

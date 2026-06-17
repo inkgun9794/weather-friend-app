@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/fortune/data/fortune_api.dart';
 import 'package:weather_friend/features/fortune/data/fortune_score_history.dart';
@@ -42,7 +43,7 @@ class ScoreChartCard extends ConsumerWidget {
         ),
         error: (_, _) => Text(
           '점수를 불러올 수 없어요',
-          style: TextStyle(color: AppColors.inkMute, fontSize: 13),
+          style: AppType.body.copyWith(color: AppColors.inkMute),
         ),
         data: (fortune) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -77,11 +78,7 @@ class _ScoreDisplay extends StatelessWidget {
           children: [
             Text(
               '오늘의 점수',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.inkMute,
-              ),
+              style: AppType.body.copyWith(color: AppColors.inkMute),
             ),
             const SizedBox(height: 4),
             Container(
@@ -92,11 +89,7 @@ class _ScoreDisplay extends StatelessWidget {
               ),
               child: Text(
                 label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: color,
-                ),
+                style: AppType.label.copyWith(color: color),
               ),
             ),
           ],
@@ -108,9 +101,8 @@ class _ScoreDisplay extends StatelessWidget {
           children: [
             Text(
               '$score',
-              style: TextStyle(
+              style: AppType.hero.copyWith(
                 fontSize: 56,
-                fontWeight: FontWeight.w900,
                 color: color,
                 height: 1.0,
                 letterSpacing: -2,
@@ -118,9 +110,7 @@ class _ScoreDisplay extends StatelessWidget {
             ),
             Text(
               '점',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
+              style: AppType.title.copyWith(
                 color: color.withValues(alpha: 0.7),
               ),
             ),
@@ -164,7 +154,7 @@ class _MiniChart extends ConsumerWidget {
         alignment: Alignment.center,
         child: Text(
           '운세를 본 날부터 점수 흐름이 표시돼요',
-          style: TextStyle(fontSize: 12, color: AppColors.inkMute),
+          style: AppType.caption.copyWith(color: AppColors.inkMute),
         ),
       );
     }
@@ -174,11 +164,7 @@ class _MiniChart extends ConsumerWidget {
       children: [
         Text(
           '최근 $days일 점수 흐름',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.inkMute,
-          ),
+          style: AppType.caption.copyWith(color: AppColors.inkMute),
         ),
         const SizedBox(height: 10),
         SizedBox(
@@ -194,15 +180,11 @@ class _MiniChart extends ConsumerWidget {
           children: [
             Text(
               '${days - 1}일 전',
-              style: TextStyle(fontSize: 10, color: AppColors.inkFaint),
+              style: AppType.micro2.copyWith(color: AppColors.inkFaint),
             ),
             Text(
               '오늘',
-              style: TextStyle(
-                fontSize: 10,
-                color: AppColors.inkMute,
-                fontWeight: FontWeight.w600,
-              ),
+              style: AppType.micro2.copyWith(color: AppColors.inkMute),
             ),
           ],
         ),

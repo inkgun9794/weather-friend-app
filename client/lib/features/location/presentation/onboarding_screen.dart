@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart' as geocoding;
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/core/services/fcm_service.dart';
 import 'package:weather_friend/core/utils/oklch.dart';
@@ -176,10 +177,8 @@ class _PillButton extends StatelessWidget {
           child: Center(
             child: Text(
               label,
-              style: TextStyle(
+              style: AppType.headline.copyWith(
                 color: fg,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
                 letterSpacing: -0.01,
               ),
             ),
@@ -233,20 +232,17 @@ class _WelcomeStep extends StatelessWidget {
           const SizedBox(height: 28),
           Text(
             '날 씨  친 구',
-            style: TextStyle(
+            style: AppType.body.copyWith(
               color: subtle,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
               letterSpacing: 2.4,
             ),
           ),
           const SizedBox(height: 12),
           Text(
             '매일 아침,\n날씨 한 마디.',
-            style: TextStyle(
+            style: AppType.hero.copyWith(
               color: paperish,
               fontSize: 42,
-              fontWeight: FontWeight.w700,
               height: 1.15,
               letterSpacing: -1.2,
             ),
@@ -256,10 +252,8 @@ class _WelcomeStep extends StatelessWidget {
             width: 280,
             child: Text(
               '네 명의 친구 중 한 명이\n오늘 우산 챙길지 알려줄게요.',
-              style: TextStyle(
+              style: AppType.reading.copyWith(
                 color: subtle,
-                fontSize: 15,
-                height: 1.6,
                 letterSpacing: -0.15,
               ),
             ),
@@ -411,9 +405,7 @@ class _LocationStepState extends ConsumerState<_LocationStep> {
           const SizedBox(height: 8),
           Text(
             '어디 날씨를\n알려드릴까요?',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
+            style: AppType.display.copyWith(
               height: 1.25,
               letterSpacing: -0.7,
               color: AppColors.ink,
@@ -425,8 +417,7 @@ class _LocationStepState extends ConsumerState<_LocationStep> {
             child: Text(
               '위치를 한 번만 알려주시면, 가장 가까운 도시의 날씨를 매일 가져올게요. '
               '거부하시면 서울 날씨를 기본으로 보여드려요.',
-              style: TextStyle(
-                fontSize: 14,
+              style: AppType.reading.copyWith(
                 color: AppColors.inkSoft,
                 height: 1.55,
                 letterSpacing: -0.14,
@@ -506,9 +497,7 @@ class _LocationStepState extends ConsumerState<_LocationStep> {
                               const SizedBox(width: 8),
                               Text(
                                 _resultCity,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
+                                style: AppType.bodyLg.copyWith(
                                   color: AppColors.ink,
                                   letterSpacing: -0.14,
                                 ),
@@ -535,7 +524,7 @@ class _LocationStepState extends ConsumerState<_LocationStep> {
           const SizedBox(height: 14),
           Text(
             '나중에 설정에서 바꿀 수 있어요',
-            style: TextStyle(fontSize: 13, color: AppColors.inkMute),
+            style: AppType.body.copyWith(color: AppColors.inkMute),
           ),
         ],
       ),
@@ -612,9 +601,7 @@ class _NotificationStepState extends ConsumerState<_NotificationStep> {
           const SizedBox(height: 8),
           Text(
             '알림을 받으셔야\n날사친이 알려줄 수 있어요.',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
+            style: AppType.display.copyWith(
               height: 1.25,
               letterSpacing: -0.7,
               color: AppColors.ink,
@@ -623,8 +610,7 @@ class _NotificationStepState extends ConsumerState<_NotificationStep> {
           const SizedBox(height: 12),
           Text(
             '하루에 두 번, 정해진 시간에만 보내요. 광고는 절대 안 보내요.',
-            style: TextStyle(
-              fontSize: 14,
+            style: AppType.reading.copyWith(
               color: AppColors.inkSoft,
               height: 1.55,
               letterSpacing: -0.14,
@@ -674,11 +660,7 @@ class _NotificationStepState extends ConsumerState<_NotificationStep> {
             onPressed: widget.onNext,
             child: Text(
               '나중에 할래요',
-              style: TextStyle(
-                color: AppColors.inkSoft,
-                fontWeight: FontWeight.w500,
-                fontSize: 15,
-              ),
+              style: AppType.subhead.copyWith(color: AppColors.inkSoft),
             ),
           ),
         ],
@@ -736,28 +718,21 @@ class _NotifPreview extends StatelessWidget {
                   children: [
                     Text(
                       name,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                      style: AppType.body.copyWith(
                         color: AppColors.ink,
                         letterSpacing: -0.13,
                       ),
                     ),
                     Text(
                       time,
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        color: AppColors.inkMute,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: AppType.micro2.copyWith(color: AppColors.inkMute),
                     ),
                   ],
                 ),
                 const SizedBox(height: 3),
                 Text(
                   msg,
-                  style: TextStyle(
-                    fontSize: 13,
+                  style: AppType.body.copyWith(
                     color: AppColors.inkSoft,
                     height: 1.4,
                     letterSpacing: -0.13,
@@ -791,9 +766,7 @@ class _CharacterStep extends ConsumerWidget {
           const SizedBox(height: 8),
           Text(
             '어떤 날사친이 좋으세요?',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
+            style: AppType.display.copyWith(
               height: 1.25,
               letterSpacing: -0.7,
               color: AppColors.ink,
@@ -802,8 +775,7 @@ class _CharacterStep extends ConsumerWidget {
           const SizedBox(height: 10),
           Text(
             '캐릭터마다 말투가 달라요.',
-            style: TextStyle(
-              fontSize: 14,
+            style: AppType.reading.copyWith(
               color: AppColors.inkSoft,
               height: 1.55,
               letterSpacing: -0.14,
@@ -837,8 +809,7 @@ class _CharacterStep extends ConsumerWidget {
           const SizedBox(height: 14),
           Text(
             '언제든지 다른 친구로 바꿀 수 있어요',
-            style: TextStyle(
-              fontSize: 12,
+            style: AppType.caption.copyWith(
               color: AppColors.inkMute,
               letterSpacing: -0.12,
             ),
@@ -914,9 +885,7 @@ class _OnboardCharCard extends StatelessWidget {
                   const SizedBox(height: 10),
                   Text(
                     _tag(character.id),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
+                    style: AppType.micro.copyWith(
                       color: v.colorDeep,
                       letterSpacing: -0.11,
                     ),
@@ -925,9 +894,7 @@ class _OnboardCharCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     character.displayName.split(' ').last,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
+                    style: AppType.title.copyWith(
                       color: AppColors.ink,
                       letterSpacing: -0.36,
                     ),
@@ -947,8 +914,7 @@ class _OnboardCharCard extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
                       _quote(character.id),
-                      style: TextStyle(
-                        fontSize: 11.5,
+                      style: AppType.micro.copyWith(
                         color: AppColors.inkMute,
                         fontStyle: FontStyle.italic,
                         height: 1.45,

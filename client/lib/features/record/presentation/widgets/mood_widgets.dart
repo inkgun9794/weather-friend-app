@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/record/domain/diary_mood.dart';
 import 'package:weather_friend/features/record/presentation/diary_format.dart';
@@ -145,11 +146,9 @@ class _MoodTile extends StatelessWidget {
               fit: BoxFit.scaleDown,
               child: Text(
                 mood.label,
-                style: TextStyle(
+                style: AppType.micro2.copyWith(
                   color: selected ? AppColors.ink : AppColors.inkMute,
-                  fontSize: 10.5,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  letterSpacing: -0.1,
                 ),
               ),
             ),

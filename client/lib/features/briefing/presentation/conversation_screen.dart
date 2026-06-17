@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:weather_friend/app/router/main_shell.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/core/utils/kst.dart';
 import 'package:weather_friend/features/briefing/domain/briefing.dart';
@@ -11,6 +13,7 @@ import 'package:weather_friend/features/chat/domain/chat_message.dart';
 import 'package:weather_friend/features/chat/presentation/chat_controller.dart';
 import 'package:weather_friend/shared/widgets/audio_bubble.dart';
 import 'package:weather_friend/shared/widgets/character_portrait.dart';
+import 'package:weather_friend/shared/widgets/weather_bg.dart';
 
 const bool _enableOnDeviceChat = bool.fromEnvironment(
   'ENABLE_ON_DEVICE_CHAT',
@@ -54,67 +57,15 @@ class _MessagesDayBackground extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(kstHourProvider);
-    final currentHour = currentHourKst();
-    final endHour = currentHour < 6 ? 23 : currentHour.clamp(6, 23);
+    // 날씨·기록·운세 탭과 같은 시간대 하늘 배경(WeatherBg)으로 일관성 유지.
+    final hourAsync = ref.watch(kstHourProvider);
+    final currentHour = switch (hourAsync) {
+      AsyncData(:final value) => value,
+      _ => currentHourKst(),
+    };
 
-    return DecoratedBox(
-      decoration: BoxDecoration(gradient: _messageDayGradient(endHour)),
-      child: child,
-    );
+    return WeatherBg(hour: currentHour, child: child);
   }
-}
-
-LinearGradient _messageDayGradient(int endHour) {
-  const keyframes = <(int, Color)>[
-    (6, Color(0xFFF4E6DE)),
-    (11, Color(0xFFDCECF2)),
-    (16, Color(0xFFB9DDEC)),
-    (19, Color(0xFFD4AFB4)),
-    (21, Color(0xFF687493)),
-    (23, Color(0xFF202A43)),
-  ];
-
-  final effectiveEnd = endHour.clamp(6, 23);
-  if (effectiveEnd == 6) {
-    return const LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [Color(0xFFF4E6DE), Color(0xFFF0E9E3)],
-    );
-  }
-
-  final colors = <Color>[];
-  final stops = <double>[];
-  for (final keyframe in keyframes) {
-    if (keyframe.$1 > effectiveEnd) break;
-    colors.add(keyframe.$2);
-    stops.add((keyframe.$1 - 6) / (effectiveEnd - 6));
-  }
-
-  if (keyframes.every((keyframe) => keyframe.$1 != effectiveEnd)) {
-    colors.add(_messageSkyColorAtHour(effectiveEnd, keyframes));
-    stops.add(1);
-  }
-
-  return LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: colors,
-    stops: stops,
-  );
-}
-
-Color _messageSkyColorAtHour(int hour, List<(int, Color)> keyframes) {
-  for (var i = 1; i < keyframes.length; i++) {
-    final previous = keyframes[i - 1];
-    final next = keyframes[i];
-    if (hour <= next.$1) {
-      final progress = (hour - previous.$1) / (next.$1 - previous.$1);
-      return Color.lerp(previous.$2, next.$2, progress)!;
-    }
-  }
-  return keyframes.last.$2;
 }
 
 class _CharacterChatScreen extends ConsumerStatefulWidget {
@@ -207,6 +158,14 @@ class _CharacterChatScreenState extends ConsumerState<_CharacterChatScreen>
     final chat = ref.watch(chatControllerProvider);
     final character = Character.byId(chat.characterId);
     final visual = visualFor(chat.characterId);
+    // AppBar·빈 화면 텍스트는 하늘 위에 직접 떠 있으므로 시간대 잉크 색을 쓴다
+    // (밤엔 배경이 어두워져 고정 잉크색은 안 보인다).
+    final hourAsync = ref.watch(kstHourProvider);
+    final currentHour = switch (hourAsync) {
+      AsyncData(:final value) => value,
+      _ => currentHourKst(),
+    };
+    final sky = skyFor(currentHour);
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final composerBottom = keyboardOpen
         ? 8.0
@@ -240,18 +199,15 @@ class _CharacterChatScreenState extends ConsumerState<_CharacterChatScreen>
               children: [
                 Text(
                   character.displayName,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+                  style: AppType.headline.copyWith(
+                    color: sky.ink,
                     letterSpacing: 0,
                   ),
                 ),
                 Text(
                   chat.isGenerating ? '답장을 생각하는 중' : '기기 안에서 대화 중',
-                  style: TextStyle(
-                    color: AppColors.inkMute,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w500,
+                  style: AppType.micro2.copyWith(
+                    color: sky.inkSoft,
                     letterSpacing: 0,
                   ),
                 ),
@@ -262,10 +218,17 @@ class _CharacterChatScreenState extends ConsumerState<_CharacterChatScreen>
         actions: [
           IconButton(
             tooltip: '대화 지우기',
+            color: sky.ink,
             onPressed: chat.messages.isEmpty
                 ? null
                 : () => _confirmClear(character),
             icon: const Icon(Icons.delete_outline),
+          ),
+          IconButton(
+            tooltip: '설정',
+            color: sky.ink,
+            onPressed: () => context.push('/settings'),
+            icon: const Icon(Icons.menu_rounded),
           ),
           const SizedBox(width: 4),
         ],
@@ -274,7 +237,7 @@ class _CharacterChatScreenState extends ConsumerState<_CharacterChatScreen>
         children: [
           Expanded(
             child: chat.messages.isEmpty
-                ? _EmptyChat(character: character, visual: visual)
+                ? _EmptyChat(character: character, sky: sky)
                 : ListView.builder(
                     controller: _scrollController,
                     keyboardDismissBehavior:
@@ -304,12 +267,14 @@ class _CharacterChatScreenState extends ConsumerState<_CharacterChatScreen>
             _ReplyCountdown(
               seconds: chat.secondsUntilReply!,
               color: visual.colorDeep,
+              sky: sky,
               onGenerateNow: () =>
                   ref.read(chatControllerProvider.notifier).generateNow(),
             ),
           if (chat.errorMessage != null)
             _ChatError(
               message: chat.errorMessage!,
+              sky: sky,
               onRetry: () => ref.read(chatControllerProvider.notifier).retry(),
             ),
           _ChatComposer(
@@ -327,10 +292,10 @@ class _CharacterChatScreenState extends ConsumerState<_CharacterChatScreen>
 }
 
 class _EmptyChat extends StatelessWidget {
-  const _EmptyChat({required this.character, required this.visual});
+  const _EmptyChat({required this.character, required this.sky});
 
   final Character character;
-  final CharVisual visual;
+  final SkyPalette sky;
 
   @override
   Widget build(BuildContext context) {
@@ -348,21 +313,14 @@ class _EmptyChat extends StatelessWidget {
             const SizedBox(height: 18),
             Text(
               '${character.displayName}에게 말을 걸어봐',
-              style: TextStyle(
-                color: AppColors.ink,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0,
-              ),
+              style: AppType.title.copyWith(color: sky.ink, letterSpacing: 0),
             ),
             const SizedBox(height: 8),
             Text(
               '여러 번 나눠 보내도 괜찮아.\n마지막 말부터 잠시 기다렸다가 답장할게.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppColors.inkMute,
-                fontSize: 13,
-                height: 1.5,
+              style: AppType.body.copyWith(
+                color: sky.inkSoft,
                 letterSpacing: 0,
               ),
             ),
@@ -408,9 +366,8 @@ class _ChatBubble extends StatelessWidget {
         children: [
           Text(
             message.text,
-            style: TextStyle(
+            style: AppType.reading.copyWith(
               color: isUser ? Colors.white : AppColors.ink,
-              fontSize: 14,
               height: 1.45,
               letterSpacing: 0,
             ),
@@ -504,11 +461,13 @@ class _ReplyCountdown extends StatelessWidget {
   const _ReplyCountdown({
     required this.seconds,
     required this.color,
+    required this.sky,
     required this.onGenerateNow,
   });
 
   final int seconds;
   final Color color;
+  final SkyPalette sky;
   final VoidCallback onGenerateNow;
 
   @override
@@ -517,15 +476,13 @@ class _ReplyCountdown extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 5, 10, 2),
       child: Row(
         children: [
-          Icon(Icons.schedule, size: 15, color: AppColors.inkMute),
+          Icon(Icons.schedule, size: 15, color: sky.inkSoft),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
               '이어 말하는 걸 기다리는 중 · $seconds초',
-              style: TextStyle(
-                color: AppColors.inkMute,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w500,
+              style: AppType.micro.copyWith(
+                color: sky.inkSoft,
                 letterSpacing: 0,
               ),
             ),
@@ -542,9 +499,14 @@ class _ReplyCountdown extends StatelessWidget {
 }
 
 class _ChatError extends StatelessWidget {
-  const _ChatError({required this.message, required this.onRetry});
+  const _ChatError({
+    required this.message,
+    required this.sky,
+    required this.onRetry,
+  });
 
   final String message;
+  final SkyPalette sky;
   final VoidCallback onRetry;
 
   @override
@@ -556,9 +518,8 @@ class _ChatError extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: TextStyle(
-                color: AppColors.inkMute,
-                fontSize: 11.5,
+              style: AppType.micro.copyWith(
+                color: sky.inkSoft,
                 letterSpacing: 0,
               ),
             ),
@@ -696,6 +657,8 @@ class _BriefingConversationScreenState
     final asyncBriefings = ref.watch(todayBriefingsProvider);
     final history = ref.watch(briefingHistoryProvider);
     final hour = currentHourKst();
+    // 상단 아이콘·빈 화면·날짜 구분선은 하늘 위에 직접 떠 있으므로 시간대 잉크 색.
+    final sky = skyFor(hour);
     final activeDate = todayKstIso();
     // 00~04시는 아직 어제 사이클 — 어제 브리핑(6~21시)은 모두 지났으니 전부 보여준다.
     // 05시부터는 현재 시각까지만 누적 표시.
@@ -720,29 +683,52 @@ class _BriefingConversationScreenState
       backgroundColor: Colors.transparent,
       body: SafeArea(
         bottom: false,
-        child: asyncBriefings.isLoading && visibleHistory.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : visibleHistory.isEmpty
-            ? Center(
-                child: Text(
-                  asyncBriefings.hasError ? '메시지를 불러오지 못했어요' : '아직 메시지가 없어요',
-                  style: TextStyle(color: AppColors.inkMute, fontSize: 14),
-                ),
-              )
-            : RefreshIndicator(
-                onRefresh: () =>
-                    ref.read(todayBriefingsProvider.notifier).refresh(),
-                child: ListView(
-                  controller: _scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset),
-                  children: [
-                    if (widget.showChatNotice)
-                      _UnsupportedChatNotice(availability: widget.availability),
-                    ..._historyWidgets(visibleHistory, activeDate: activeDate),
-                  ],
-                ),
+        child: Column(
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                tooltip: '설정',
+                onPressed: () => context.push('/settings'),
+                icon: Icon(Icons.menu_rounded, color: sky.ink),
               ),
+            ),
+            Expanded(
+              child: asyncBriefings.isLoading && visibleHistory.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : visibleHistory.isEmpty
+                  ? Center(
+                      child: Text(
+                        asyncBriefings.hasError
+                            ? '메시지를 불러오지 못했어요'
+                            : '아직 메시지가 없어요',
+                        style: AppType.bodyLg.copyWith(color: sky.inkSoft),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: () =>
+                          ref.read(todayBriefingsProvider.notifier).refresh(),
+                      child: ListView(
+                        controller: _scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset),
+                        children: [
+                          if (widget.showChatNotice)
+                            _UnsupportedChatNotice(
+                              availability: widget.availability,
+                              sky: sky,
+                            ),
+                          ..._historyWidgets(
+                            visibleHistory,
+                            activeDate: activeDate,
+                            sky: sky,
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -751,6 +737,7 @@ class _BriefingConversationScreenState
 List<Widget> _historyWidgets(
   List<Briefing> history, {
   required String activeDate,
+  required SkyPalette sky,
 }) {
   final widgets = <Widget>[];
   for (var i = 0; i < history.length; i++) {
@@ -760,7 +747,11 @@ List<Widget> _historyWidgets(
 
     if (startsNewDay) {
       widgets.add(
-        _MessageDateDivider(date: briefing.date, activeDate: activeDate),
+        _MessageDateDivider(
+          date: briefing.date,
+          activeDate: activeDate,
+          sky: sky,
+        ),
       );
     }
     widgets.add(
@@ -776,10 +767,15 @@ List<Widget> _historyWidgets(
 }
 
 class _MessageDateDivider extends StatelessWidget {
-  const _MessageDateDivider({required this.date, required this.activeDate});
+  const _MessageDateDivider({
+    required this.date,
+    required this.activeDate,
+    required this.sky,
+  });
 
   final String date;
   final String activeDate;
+  final SkyPalette sky;
 
   @override
   Widget build(BuildContext context) {
@@ -795,12 +791,7 @@ class _MessageDateDivider extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
             child: Text(
               _dateLabel(date, activeDate),
-              style: TextStyle(
-                color: AppColors.inkMute,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.1,
-              ),
+              style: AppType.micro.copyWith(color: sky.inkSoft),
             ),
           ),
         ),
@@ -827,9 +818,10 @@ String _dateLabel(String date, String activeDate) {
 }
 
 class _UnsupportedChatNotice extends StatelessWidget {
-  const _UnsupportedChatNotice({required this.availability});
+  const _UnsupportedChatNotice({required this.availability, required this.sky});
 
   final FoundationModelAvailability? availability;
+  final SkyPalette sky;
 
   @override
   Widget build(BuildContext context) {
@@ -848,15 +840,13 @@ class _UnsupportedChatNotice extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.lock_outline, size: 17, color: AppColors.inkMute),
+          Icon(Icons.lock_outline, size: 17, color: sky.inkSoft),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: TextStyle(
-                color: AppColors.inkMute,
-                fontSize: 12,
-                height: 1.45,
+              style: AppType.caption.copyWith(
+                color: sky.inkSoft,
                 letterSpacing: 0,
               ),
             ),
@@ -909,12 +899,7 @@ class _MessageBubble extends StatelessWidget {
         children: [
           Text(
             briefing.transcript,
-            style: TextStyle(
-              color: AppColors.ink,
-              fontSize: 14,
-              height: 1.5,
-              letterSpacing: -0.1,
-            ),
+            style: AppType.reading.copyWith(color: AppColors.ink, height: 1.5),
           ),
           if (briefing.audioUrl != null) ...[
             const SizedBox(height: 10),
@@ -931,12 +916,7 @@ class _MessageBubble extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           _timeLabel(hour),
-          style: TextStyle(
-            color: outsideTextColor,
-            fontSize: 10.5,
-            fontWeight: FontWeight.w500,
-            letterSpacing: -0.1,
-          ),
+          style: AppType.micro2.copyWith(color: outsideTextColor),
         ),
       ],
     );
@@ -967,11 +947,8 @@ class _MessageBubble extends StatelessWidget {
               children: [
                 Text(
                   character.displayName.split(' ').last,
-                  style: TextStyle(
+                  style: AppType.caption.copyWith(
                     color: hour >= 19 ? Colors.white : AppColors.ink,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.1,
                   ),
                 ),
                 const SizedBox(height: 4),

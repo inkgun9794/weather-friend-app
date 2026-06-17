@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/core/services/audio_player_service.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
@@ -44,6 +45,7 @@ class AudioBubble extends ConsumerWidget {
     required this.audioUrl,
     this.duration,
     this.tone = AudioBubbleTone.light,
+    this.neutral = false,
     super.key,
   });
 
@@ -51,6 +53,9 @@ class AudioBubble extends ConsumerWidget {
   final String audioUrl;
   final String? duration;
   final AudioBubbleTone tone;
+
+  /// true면 캐릭터 톤 색을 빼고 중립 회색으로 — 날씨탭 브리핑 카드용.
+  final bool neutral;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -74,11 +79,26 @@ class AudioBubble extends ConsumerWidget {
       }
     });
 
-    final bg = isDark ? AppColors.ink : v.colorSoft;
-    final barPlayed = isDark ? const Color(0xFFFAFAFC) : v.colorDeep;
-    final barIdle = isDark
-        ? const Color(0xFFFFFFFF).withValues(alpha: 0.28)
-        : v.colorDeep.withValues(alpha: 0.28);
+    final Color bg;
+    final Color barPlayed;
+    final Color barIdle;
+    final Color playColor;
+    if (neutral) {
+      bg = AppColors.ink.withValues(alpha: 0.06);
+      barPlayed = AppColors.ink;
+      barIdle = AppColors.ink.withValues(alpha: 0.22);
+      playColor = AppColors.ink;
+    } else if (isDark) {
+      bg = AppColors.ink;
+      barPlayed = const Color(0xFFFAFAFC);
+      barIdle = const Color(0xFFFFFFFF).withValues(alpha: 0.28);
+      playColor = v.color;
+    } else {
+      bg = v.colorSoft;
+      barPlayed = v.colorDeep;
+      barIdle = v.colorDeep.withValues(alpha: 0.28);
+      playColor = v.color;
+    }
     final durationColor = isDark ? const Color(0xFFBDBEC8) : AppColors.inkMute;
 
     return ConstrainedBox(
@@ -96,7 +116,7 @@ class AudioBubble extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _PlayButton(
-                  color: v.color,
+                  color: playColor,
                   playing: isActuallyPlaying,
                   onTap: () async {
                     final service = ref.read(audioPlayerServiceProvider);
@@ -129,9 +149,7 @@ class AudioBubble extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Text(
                   _formatDuration(displayDuration),
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w500,
+                  style: AppType.micro.copyWith(
                     color: durationColor,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),

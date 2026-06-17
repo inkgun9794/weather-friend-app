@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +14,33 @@ import 'package:weather_friend/features/briefing/data/open_meteo_client.dart'
         WeekDay;
 import 'package:weather_friend/features/briefing/data/weather_source.dart';
 import 'package:weather_friend/features/location/data/city_catalog.dart';
+
+/// 기상청 공식 체감온도 계산 (입력: 기온℃, 습도%, 풍속 m/s).
+/// - 추울 때(≤10℃ & 바람≥1.3m/s): 풍속냉각(JAG/TI) 식.
+/// - 더울 때(≥25℃): 2022 개정 열지수(Stull 습구온도 기반) 식.
+/// - 그 외: 기온 ≈ 체감.
+double _kmaFeelsLikeC(double tempC, int? humidity, double? windMs) {
+  if (windMs != null && tempC <= 10 && windMs >= 1.3) {
+    final v = math.pow(windMs * 3.6, 0.16).toDouble(); // m/s → km/h
+    return 13.12 + 0.6215 * tempC - 11.37 * v + 0.3965 * v * tempC;
+  }
+  if (humidity != null && tempC >= 25) {
+    final rh = humidity.toDouble();
+    final tw =
+        tempC * math.atan(0.151977 * math.sqrt(rh + 8.313659)) +
+        math.atan(tempC + rh) -
+        math.atan(rh - 1.676331) +
+        0.00391838 * math.pow(rh, 1.5).toDouble() * math.atan(0.023101 * rh) -
+        4.686035;
+    return -0.2442 +
+        0.55399 * tw +
+        0.45535 * tempC -
+        0.0022 * tw * tw +
+        0.00278 * tw * tempC +
+        3.0;
+  }
+  return tempC;
+}
 
 /// Firestore의 KMA 캐시를 읽어 [WeatherBundle]로 변환하는 [WeatherSource].
 ///
@@ -148,6 +177,12 @@ class _KmaMapper {
           // 초단기는 강수확률(POP) 대신 강수형태(PTY)·강수량(RN1).
           // 카드 표시 단순화 — PTY > 0이면 100, 아니면 0.
           precipitationProb: ((h['pty'] as num?)?.toInt() ?? 0) > 0 ? 100 : 0,
+          humidity: (h['reh'] as num?)?.toInt(),
+          feelsLikeC: _kmaFeelsLikeC(
+            tmp,
+            (h['reh'] as num?)?.toInt(),
+            (h['wsd'] as num?)?.toDouble(),
+          ),
         ),
       );
     }
@@ -196,6 +231,12 @@ class _KmaMapper {
         temperatureC: tmp,
         condition: _kmaCondition(h['sky'] as int?, h['pty'] as int?),
         precipitationProb: (h['pop'] as num?)?.toInt() ?? 0,
+        humidity: (h['reh'] as num?)?.toInt(),
+        feelsLikeC: _kmaFeelsLikeC(
+          tmp,
+          (h['reh'] as num?)?.toInt(),
+          (h['wsd'] as num?)?.toDouble(),
+        ),
       );
     }
 
@@ -215,6 +256,13 @@ class _KmaMapper {
         condition: _kmaCondition(h['sky'] as int?, h['pty'] as int?),
         // 초단기엔 POP 없음 — 단기 값 유지.
         precipitationProb: existing?.precipitationProb ?? 0,
+        // 초단기 습도(REH)가 있으면 우선, 없으면 단기 값 유지.
+        humidity: (h['reh'] as num?)?.toInt() ?? existing?.humidity,
+        feelsLikeC: _kmaFeelsLikeC(
+          tmp,
+          (h['reh'] as num?)?.toInt() ?? existing?.humidity,
+          (h['wsd'] as num?)?.toDouble(),
+        ),
       );
     }
     return result;

@@ -1,4 +1,3 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -129,18 +128,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(BriefingScreen), findsOneWidget);
-    expect(find.text('오늘은 어제보다 3도 높습니다.'), findsOneWidget);
-    expect(find.textContaining('오늘 날씨 ·'), findsNothing);
 
-    final styleToggle = find.byKey(const Key('timeline-style-toggle'));
-    expect(styleToggle, findsOneWidget);
-    expect(find.byTooltip('실사 하늘 배경으로 전환'), findsOneWidget);
-
-    await tester.tap(styleToggle);
-    await tester.pump();
-
-    expect(find.byTooltip('그림 배경으로 전환'), findsOneWidget);
-    expect(find.byKey(const Key('timeline-photo-panorama')), findsOneWidget);
-    expect(prefs.getString('hour_strip_style'), 'gradient');
+    // 깔끔한 시간별 스트립 — 현재 시각(12시) 슬롯은 "지금"으로 강조된다.
+    expect(find.text('지금'), findsOneWidget);
+    // 현재 날씨 큰 기온(18°)이 노출된다.
+    expect(find.text('18°'), findsWidgets);
   });
 }

@@ -55,6 +55,23 @@ bool umbrellaNeeded({String? condition, int? precipitationProb}) {
   return (precipitationProb ?? 0) >= 60;
 }
 
+/// 우산에 얹는 시간대 배지 — 비가 낮(해)에 오는지 밤(달)에 오는지.
+/// 낮/밤 경계는 앱의 하늘 팔레트(design_tokens의 dusk/night)와 동일한 17시:
+/// 17시 이후·새벽(<4시)은 '밤'(달), 그 사이는 '낮'(해)으로 본다.
+enum RainPhase {
+  /// 비 없음 — 우산을 표시하지 않는다.
+  none,
+
+  /// 낮(새벽~오후)에만 비 — 우산 + 해.
+  day,
+
+  /// 늦은 오후·저녁·밤에만 비 — 우산 + 달.
+  night,
+
+  /// 낮·밤 내내 비 — 우산만 (해·달 없이).
+  allDay,
+}
+
 /// 화면에 그릴 최종 셀 목록 — 비 소식이 있으면 우산이 마지막에 붙는다.
 List<OutfitItem> outfitWearFor(OutfitGuide guide, {bool rainy = false}) {
   return [...guide.wear, if (rainy) kUmbrellaItem];

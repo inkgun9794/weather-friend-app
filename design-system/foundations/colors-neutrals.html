@@ -1,0 +1,45 @@
+<!-- @dsCard group="Foundations" name="Neutrals · Ink & Paper" -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neutrals — Ink &amp; Paper</title>
+<style>
+  @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+  :root{
+    --ink:oklch(0.22 0.018 250); --ink-soft:oklch(0.38 0.014 250);
+    --ink-mute:oklch(0.58 0.014 250); --ink-faint:oklch(0.74 0.010 250);
+    --paper:oklch(0.985 0.004 95); --paper2:oklch(0.965 0.006 95); --paper3:oklch(0.93 0.008 95);
+    --line:oklch(0.88 0.008 95); --hairline:oklch(0.92 0.006 95);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;padding:28px;background:var(--paper);color:var(--ink);
+    font-family:'Pretendard',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;}
+  h1{font-size:15px;font-weight:700;letter-spacing:-0.01em;margin:0 0 2px;}
+  .sub{font-size:12px;color:var(--ink-mute);margin:0 0 20px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px;}
+  .sw{border:1px solid var(--hairline);border-radius:12px;overflow:hidden;background:var(--paper);}
+  .chip{height:60px;}
+  .meta{padding:9px 11px;}
+  .nm{font-size:12.5px;font-weight:600;}
+  .val{font-size:10px;color:var(--ink-mute);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:3px;}
+  .role{font-size:10.5px;color:var(--ink-faint);margin-top:3px;}
+</style>
+</head>
+<body>
+  <h1>Neutrals · Ink &amp; Paper</h1>
+  <p class="sub">AppColors — OKLCH 중립 스케일 · 출처: client/lib/app/theme/design_tokens.dart</p>
+  <div class="grid">
+    <div class="sw"><div class="chip" style="background:oklch(0.22 0.018 250)"></div><div class="meta"><div class="nm">ink</div><div class="val">oklch(0.22 0.018 250)</div><div class="role">본문 텍스트</div></div></div>
+    <div class="sw"><div class="chip" style="background:oklch(0.38 0.014 250)"></div><div class="meta"><div class="nm">inkSoft</div><div class="val">oklch(0.38 0.014 250)</div><div class="role">보조 텍스트</div></div></div>
+    <div class="sw"><div class="chip" style="background:oklch(0.58 0.014 250)"></div><div class="meta"><div class="nm">inkMute</div><div class="val">oklch(0.58 0.014 250)</div><div class="role">캡션 · 메타</div></div></div>
+    <div class="sw"><div class="chip" style="background:oklch(0.74 0.010 250)"></div><div class="meta"><div class="nm">inkFaint</div><div class="val">oklch(0.74 0.010 250)</div><div class="role">비활성 · 플레이스홀더</div></div></div>
+    <div class="sw"><div class="chip" style="background:oklch(0.985 0.004 95)"></div><div class="meta"><div class="nm">paper</div><div class="val">oklch(0.985 0.004 95)</div><div class="role">기본 배경</div></div></div>
+    <div class="sw"><div class="chip" style="background:oklch(0.965 0.006 95)"></div><div class="meta"><div class="nm">paper2</div><div class="val">oklch(0.965 0.006 95)</div><div class="role">카드 배경</div></div></div>
+    <div class="sw"><div class="chip" style="background:oklch(0.93 0.008 95)"></div><div class="meta"><div class="nm">paper3</div><div class="val">oklch(0.93 0.008 95)</div><div class="role">더 깊은 면</div></div></div>
+    <div class="sw"><div class="chip" style="background:oklch(0.88 0.008 95)"></div><div class="meta"><div class="nm">line</div><div class="val">oklch(0.88 0.008 95)</div><div class="role">구분선</div></div></div>
+    <div class="sw"><div class="chip" style="background:oklch(0.92 0.006 95)"></div><div class="meta"><div class="nm">hairline</div><div class="val">oklch(0.92 0.006 95)</div><div class="role">얇은 경계</div></div></div>
+  </div>
+</body>
+</html>

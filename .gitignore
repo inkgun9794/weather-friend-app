@@ -56,3 +56,7 @@ worker/.cache/
 worker/*.mp3
 client/assets/maps/*.bak
 client/assets/maps/*.bak
+
+# 로컬 백업·내보내기 (git-tracked 콘텐츠와 중복 — 커밋 제외)
+*.BACKUP.dart
+/design-system.zip

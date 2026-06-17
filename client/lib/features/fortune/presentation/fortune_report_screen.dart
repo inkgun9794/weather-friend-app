@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:weather_friend/app/theme/app_type.dart';
 import 'package:weather_friend/app/theme/design_tokens.dart';
 import 'package:weather_friend/features/fortune/data/fortune_report.dart';
 
@@ -21,12 +22,7 @@ class FortuneReportScreen extends ConsumerWidget {
         scrolledUnderElevation: 0,
         title: Text(
           '오늘 본 운세 리포트',
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-            color: AppColors.ink,
-            letterSpacing: -0.3,
-          ),
+          style: AppType.title.copyWith(color: AppColors.ink, letterSpacing: -0.3),
         ),
         iconTheme: IconThemeData(color: AppColors.ink),
       ),
@@ -45,7 +41,7 @@ class FortuneReportScreen extends ConsumerWidget {
                 padding: const EdgeInsets.all(24),
                 child: Text(
                   '오늘 본 운세가 없어요',
-                  style: TextStyle(fontSize: 14, color: AppColors.inkMute),
+                  style: AppType.bodyLg.copyWith(color: AppColors.inkMute),
                 ),
               ),
             );
@@ -109,9 +105,7 @@ class _ReportTile extends StatelessWidget {
                       children: [
                         Text(
                           p.name,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
+                          style: AppType.headline.copyWith(
                             color: AppColors.ink,
                             letterSpacing: -0.3,
                           ),
@@ -128,9 +122,7 @@ class _ReportTile extends StatelessWidget {
                           ),
                           child: Text(
                             p.relation.label,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
+                            style: AppType.micro2.copyWith(
                               color: AppColors.inkSoft,
                             ),
                           ),
@@ -138,8 +130,7 @@ class _ReportTile extends StatelessWidget {
                         const Spacer(),
                         Text(
                           '$viewedTime 봄',
-                          style: TextStyle(
-                            fontSize: 11,
+                          style: AppType.micro.copyWith(
                             color: AppColors.inkFaint,
                           ),
                         ),
@@ -148,11 +139,7 @@ class _ReportTile extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       birthLine,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.inkMute,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: AppType.caption.copyWith(color: AppColors.inkMute),
                     ),
                   ],
                 ),
