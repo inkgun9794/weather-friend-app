@@ -112,6 +112,9 @@ Map<String, dynamic> _hourToJson(HourlyWeather value) {
     'precipitation_prob': value.precipitationProb,
     'humidity': value.humidity,
     'weather_code': value.weatherCode,
+    'uv_index': value.uvIndex,
+    'pm10': value.pm10,
+    'pm25': value.pm25,
   };
 }
 
@@ -124,6 +127,9 @@ HourlyWeather _hourFromJson(Map<String, dynamic> json) {
     precipitationProb: (json['precipitation_prob'] as num).toInt(),
     humidity: (json['humidity'] as num?)?.toInt(),
     weatherCode: (json['weather_code'] as num?)?.toInt(),
+    uvIndex: (json['uv_index'] as num?)?.toDouble(),
+    pm10: (json['pm10'] as num?)?.toInt(),
+    pm25: (json['pm25'] as num?)?.toInt(),
   );
 }
 

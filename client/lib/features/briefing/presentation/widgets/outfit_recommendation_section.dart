@@ -85,12 +85,13 @@ class _WearCell extends StatelessWidget {
                 child: Image.asset(item.asset, fit: BoxFit.contain),
               ),
               if (badgeGlyph != null)
+                // 우산 위가 아니라 우상단 모서리에 작게 — 우산과 덜 겹치게.
                 Positioned(
-                  top: -2,
-                  right: -2,
+                  top: -5,
+                  right: -6,
                   child: SizedBox(
-                    width: 18,
-                    height: 18,
+                    width: 14,
+                    height: 14,
                     child: Image.asset(
                       weatherGlyphAsset(badgeGlyph),
                       fit: BoxFit.contain,

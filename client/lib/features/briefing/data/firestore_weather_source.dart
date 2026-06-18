@@ -265,6 +265,26 @@ class _KmaMapper {
         ),
       );
     }
+
+    // 3) 다음날 0시 = strip의 "24시" 한 칸 (자정까지 이어 보이도록).
+    //    초단기(t1h)가 내일 0시를 커버하면 우선, 없으면 단기(tmp).
+    final tomorrowStr = _tomorrowYYYYMMDD();
+    for (final h in [...ultraHours, ...shortHours]) {
+      if (result.containsKey(24)) break;
+      if (h['fcst_date'] != tomorrowStr) continue;
+      if (_parseHour(h['fcst_time'] as String) != 0) continue;
+      final tmp = ((h['t1h'] ?? h['tmp']) as num?)?.toDouble();
+      if (tmp == null) continue;
+      final reh = (h['reh'] as num?)?.toInt();
+      result[24] = HourlyWeather(
+        hour: 24,
+        temperatureC: tmp,
+        condition: _kmaCondition(h['sky'] as int?, h['pty'] as int?),
+        precipitationProb: (h['pop'] as num?)?.toInt() ?? 0,
+        humidity: reh,
+        feelsLikeC: _kmaFeelsLikeC(tmp, reh, (h['wsd'] as num?)?.toDouble()),
+      );
+    }
     return result;
   }
 
@@ -443,6 +463,8 @@ class _KmaMapper {
   // ─── 날짜 helpers ───
 
   static String _todayYYYYMMDD() => _yyyymmdd(DateTime.now());
+  static String _tomorrowYYYYMMDD() =>
+      _yyyymmdd(DateTime.now().add(const Duration(days: 1)));
 
   static String _yyyymmdd(DateTime d) {
     final y = d.year.toString().padLeft(4, '0');

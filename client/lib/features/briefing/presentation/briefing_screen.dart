@@ -136,6 +136,24 @@ String _hourLabel(int hour) {
   return '오후 ${hour - 12}';
 }
 
+/// 시간별 스트립 라벨 — 0~5시 새벽 / 6~11시 오전 / 12~23시 오후.
+/// 24시(내일 0시)는 0으로 접어 '새벽 0시'로 표기.
+String _stripHourLabel(int hour) {
+  final h = hour % 24;
+  if (h <= 5) return '새벽 $h시';
+  if (h <= 11) return '오전 $h시';
+  if (h == 12) return '오후 12시';
+  return '오후 ${h - 12}시';
+}
+
+/// 시:분 + am/pm (예: 5:34am, 7:51pm).
+String _ampmTime(DateTime t) {
+  final period = t.hour < 12 ? 'am' : 'pm';
+  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+  final m = t.minute.toString().padLeft(2, '0');
+  return '$h:$m$period';
+}
+
 WeatherCondition _conditionFromString(String s) {
   if (s.contains('비') || s.contains('소나기')) return WeatherCondition.rain;
   if (s.contains('눈')) return WeatherCondition.snow;
@@ -306,31 +324,32 @@ class _CurrentWeatherState extends ConsumerState<_CurrentWeather>
             style: AppType.caption.copyWith(color: widget.sky.inkSoft),
           ),
           const SizedBox(height: AppSpace.xl),
-          Image.asset(
-            weatherGlyphAsset(glyph),
-            width: 96,
-            height: 96,
-            filterQuality: FilterQuality.medium,
-          ),
-          const SizedBox(height: AppSpace.sm),
-          _floatingTempBand(display, temp),
-          const SizedBox(height: AppSpace.xs),
-          Text(
+          _floatingHero(
+            display,
+            glyph,
+            temp,
             feels != null ? '$cond · 체감 $feels°' : cond,
-            textAlign: TextAlign.center,
-            style: AppType.subhead.copyWith(
-              color: widget.sky.inkSoft,
-              fontWeight: FontWeight.w600,
-            ),
+            sunrise,
+            sunset,
+            now,
           ),
         ],
       ),
     );
   }
 
-  /// 가운데 큰 기온을 중심으로 습도·자외선·미세먼지 칩이 양옆에서 둥둥
-  /// 떠다닌다. 데이터가 있는 지표만 [_floatSlots] 순서대로 자리를 잡는다.
-  Widget _floatingTempBand(CurrentWeatherDisplay display, int? temp) {
+  /// 날씨 아이콘(해)·기온·컨디션을 가운데 세로로 쌓고, 그 둘레 — 특히 해 아이콘
+  /// 라인 — 에서 습도·자외선·미세먼지 칩이 바깥 가장자리로 둥둥 떠다닌다.
+  /// 칩은 가운데 콘텐츠(특히 큰 기온)와 거리를 두도록 멀찍이 배치한다.
+  Widget _floatingHero(
+    CurrentWeatherDisplay display,
+    WeatherGlyph glyph,
+    int? temp,
+    String condLine,
+    DateTime? sunrise,
+    DateTime? sunset,
+    DateTime now,
+  ) {
     final humidity = display.humidity;
     final uvIdx = ref.watch(uvIndexProvider).value?.round();
     // 미세먼지 등급: 키가 있으면 AirKorea 공식 등급/측정값이 우선,
@@ -338,28 +357,57 @@ class _CurrentWeatherState extends ConsumerState<_CurrentWeather>
     final aq = ref.watch(airQualityProvider).value;
     final pmGrade = aq?.pm10Grade ?? pm10GradeKo(aq?.pm10 ?? display.pm10);
 
-    final chips = <_FloatingMetricData>[
+    // 일출 전이면 '일출'+일출시각, 지나면 '일몰'+일몰시각 (자외선 아래 칸).
+    _FloatingMetricData? sun;
+    if (sunrise != null && now.isBefore(sunrise)) {
+      sun = _FloatingMetricData(
+        icon: Icons.wb_twilight_rounded,
+        color: const Color(0xFFEF8C3B),
+        value: _ampmTime(sunrise),
+        label: '일출',
+      );
+    } else if (sunset != null) {
+      sun = _FloatingMetricData(
+        icon: Icons.wb_twilight_rounded,
+        color: const Color(0xFFEF8C3B),
+        value: _ampmTime(sunset),
+        label: '일몰',
+      );
+    }
+
+    // 지표마다 고정 자리(데이터 있는 것만) — 일부 누락돼도 위치가 안 밀리게.
+    final entries = <(_FloatingMetricData, _FloatSlot)>[
       if (humidity != null)
-        _FloatingMetricData(
-          icon: Icons.water_drop_rounded,
-          color: const Color(0xFF55A3E0),
-          value: '$humidity%',
-          label: '습도',
+        (
+          _FloatingMetricData(
+            icon: Icons.water_drop_rounded,
+            color: const Color(0xFF55A3E0),
+            value: '$humidity%',
+            label: '습도',
+          ),
+          _slotHumidity,
         ),
       if (uvIdx != null)
-        _FloatingMetricData(
-          icon: Icons.wb_sunny_rounded,
-          color: const Color(0xFFF6B33D),
-          value: '$uvIdx · ${uvGradeKo(uvIdx.toDouble())}',
-          label: '자외선',
+        (
+          _FloatingMetricData(
+            icon: Icons.wb_sunny_rounded,
+            color: const Color(0xFFF6B33D),
+            value: '$uvIdx · ${uvGradeKo(uvIdx.toDouble())}',
+            label: '자외선',
+          ),
+          _slotUv,
         ),
       if (pmGrade != null)
-        _FloatingMetricData(
-          icon: Icons.blur_on_rounded,
-          color: const Color(0xFF7E9B6B),
-          value: pmGrade,
-          label: '미세먼지',
+        (
+          _FloatingMetricData(
+            icon: Icons.blur_on_rounded,
+            color: const Color(0xFF7E9B6B),
+            value: pmGrade,
+            label: '미세먼지',
+          ),
+          _slotPm,
         ),
+      if (sun != null) (sun, _slotSun),
     ];
 
     // 태블릿 등 넓은 화면에서 칩이 가장자리로 너무 벌어지지 않도록 폭 제한.
@@ -367,28 +415,49 @@ class _CurrentWeatherState extends ConsumerState<_CurrentWeather>
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 360),
         child: SizedBox(
-          height: 162,
+          height: 214,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
               Center(
-                child: Text(
-                  temp != null ? '$temp°' : '—',
-                  style: AppType.hero.copyWith(
-                    color: widget.sky.ink,
-                    fontSize: 72,
-                    fontWeight: FontWeight.w300,
-                    height: 1.0,
-                    letterSpacing: -2.0,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      weatherGlyphAsset(glyph),
+                      width: 96,
+                      height: 96,
+                      filterQuality: FilterQuality.medium,
+                    ),
+                    const SizedBox(height: AppSpace.sm),
+                    Text(
+                      temp != null ? '$temp°' : '—',
+                      style: AppType.hero.copyWith(
+                        color: widget.sky.ink,
+                        fontSize: 72,
+                        fontWeight: FontWeight.w300,
+                        height: 1.0,
+                        letterSpacing: -2.0,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpace.xs),
+                    Text(
+                      condLine,
+                      textAlign: TextAlign.center,
+                      style: AppType.subhead.copyWith(
+                        color: widget.sky.inkSoft,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              for (var i = 0; i < chips.length && i < _floatSlots.length; i++)
+              for (final e in entries)
                 _FloatingMetricChip(
-                  data: chips[i],
+                  data: e.$1,
                   controller: _floatController,
-                  slot: _floatSlots[i],
+                  slot: e.$2,
                 ),
             ],
           ),
@@ -423,13 +492,12 @@ class _FloatSlot {
   final double phase;
 }
 
-/// 온도 양옆의 불규칙한 자리들 — 칩은 데이터 순서대로 여기에 배정된다.
-/// 큰 기온(가운데)을 피하도록 좌우 가장자리 쪽으로, 높이는 제각각.
-const _floatSlots = <_FloatSlot>[
-  _FloatSlot(Alignment(-0.96, -0.72), 5, 0), // 습도 — 좌상
-  _FloatSlot(Alignment(0.98, -0.66), 4, 1.9), // 자외선 — 우상
-  _FloatSlot(Alignment(-0.66, 0.86), 6, 3.6), // 미세먼지 — 좌하
-];
+/// 떠다니는 지표 칩의 고정 자리 — 해 아이콘 양옆(위) + 바깥 아래로 2x2.
+/// 가운데 큰 기온을 피하도록 좌우 가장자리 쪽, 높이는 제각각.
+const _slotHumidity = _FloatSlot(Alignment(-0.96, -0.65), 5, 0); // 좌상(해 라인)
+const _slotUv = _FloatSlot(Alignment(0.97, -0.58), 4, 1.9); // 우상(해 라인)
+const _slotPm = _FloatSlot(Alignment(-0.9, 0.45), 6, 3.6); // 좌하(바깥)
+const _slotSun = _FloatSlot(Alignment(0.95, 0.45), 5, 2.3); // 우하 — 자외선 아래
 
 /// 글래스 느낌의 둥근 지표 칩 — 아이콘+값+라벨. 컨트롤러에 맞춰 위아래로
 /// 부드럽게 떠다니고(±8px) 아주 살짝 기운다.
@@ -466,11 +534,20 @@ class _FloatingMetricChip extends StatelessWidget {
   }
 
   Widget _bubble() {
-    // 그림자는 clip 밖(바깥 DecoratedBox)에, 반투명 유리는 ClipOval+BackdropFilter로.
-    // 앱의 _GlassCard와 같은 결(blur + white 0.55) — 뒤 하늘이 비쳐 보인다.
-    return DecoratedBox(
+    // 반투명 흰 원 — 뒤 하늘이 은은히 비친다. 실시간 blur(BackdropFilter)는
+    // 떠다니는 애니메이션·오버스크롤 중 매 프레임 배경을 다시 샘플링해 깜빡임을
+    // 유발하므로 쓰지 않는다(움직이지 않는 _GlassCard에선 계속 사용).
+    return Container(
+      width: 62,
+      height: 62,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.62),
         shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.75),
+          width: 0.8,
+        ),
         boxShadow: [
           BoxShadow(
             color: AppColors.ink.withValues(alpha: 0.12),
@@ -479,51 +556,33 @@ class _FloatingMetricChip extends StatelessWidget {
           ),
         ],
       ),
-      child: ClipOval(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            width: 62,
-            height: 62,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.55),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.7),
-                width: 0.8,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(data.icon, size: 17, color: data.color),
+          const SizedBox(height: 1),
+          SizedBox(
+            width: 52,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                data.value,
+                style: AppType.subhead.copyWith(
+                  color: AppColors.ink,
+                  fontWeight: FontWeight.w700,
+                  height: 1.05,
+                ),
               ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(data.icon, size: 17, color: data.color),
-                const SizedBox(height: 1),
-                SizedBox(
-                  width: 52,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      data.value,
-                      style: AppType.subhead.copyWith(
-                        color: AppColors.ink,
-                        fontWeight: FontWeight.w700,
-                        height: 1.05,
-                      ),
-                    ),
-                  ),
-                ),
-                Text(
-                  data.label,
-                  style: AppType.micro2.copyWith(
-                    color: AppColors.inkMute,
-                    height: 1.1,
-                  ),
-                ),
-              ],
+          ),
+          Text(
+            data.label,
+            style: AppType.micro2.copyWith(
+              color: AppColors.inkMute,
+              height: 1.1,
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -542,7 +601,7 @@ class _HourlyStrip extends ConsumerStatefulWidget {
 }
 
 class _HourlyStripState extends ConsumerState<_HourlyStrip> {
-  static const double _slotWidth = 44;
+  static const double _slotWidth = 56;
   static const double _gap = AppSpace.lg;
 
   final _controller = ScrollController();
@@ -567,9 +626,10 @@ class _HourlyStripState extends ConsumerState<_HourlyStrip> {
       _ => (null, null),
     };
 
-    // 하루 전체 0시~23시 — 데이터(예보 또는 브리핑 스냅샷)가 있는 시간만.
+    // 오늘 0시 ~ 24시(=내일 0시) — 데이터(예보 또는 브리핑 스냅샷)가 있는 시간만.
+    // 자정까지 이어 보이도록 24시 한 칸을 끝에 둔다 (매퍼가 result[24]에 채움).
     final hours = <int>[
-      for (var h = 0; h < 24; h++)
+      for (var h = 0; h <= 24; h++)
         if (hourly[h] != null || widget.briefings[h] != null) h,
     ];
     if (hours.isEmpty) return const SizedBox.shrink();
@@ -664,19 +724,23 @@ class _HourSlot extends StatelessWidget {
       isSunrise: _isEventHour(hour, sunrise),
       isSunset: _isEventHour(hour, sunset),
     );
-    // 하루 전체라 24시간제로 — 오전/오후 모호함 없이 '0시'~'23시'.
-    final label = isNow ? '지금' : '$hour시';
+    // 새벽/오전/오후 라벨 — '0시~24시'보다 직관적. '지금'은 그대로.
+    final label = isNow ? '지금' : _stripHourLabel(hour);
 
     final slot = SizedBox(
-      width: 44,
+      width: 56,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            label,
-            style: AppType.micro.copyWith(
-              color: isNow ? AppColors.ink : AppColors.inkMute,
-              fontWeight: isNow ? FontWeight.w800 : FontWeight.w600,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              maxLines: 1,
+              style: AppType.micro.copyWith(
+                color: isNow ? AppColors.ink : AppColors.inkMute,
+                fontWeight: isNow ? FontWeight.w800 : FontWeight.w600,
+              ),
             ),
           ),
           const SizedBox(height: AppSpace.sm),
@@ -714,6 +778,7 @@ RainPhase _rainPhaseToday(
   var hasNight = false;
   for (final h in hours) {
     if (h.hour < fromHour) continue;
+    if (h.hour > 23) continue; // strip의 '24시'(내일 0시)는 오늘 우산 판정 제외.
     if (!umbrellaNeeded(
       condition: h.condition,
       precipitationProb: h.precipitationProb,

@@ -22,6 +22,7 @@ class WeatherFriendApp extends ConsumerWidget {
             themeMode: ThemeMode.system,
             routerConfig: ref.watch(appRouterProvider),
             debugShowCheckedModeBanner: false,
+            scrollBehavior: const _AppScrollBehavior(),
             // DatePicker가 한글 표시되려면 MaterialLocalizations(ko) 필요.
             localizationsDelegates: const [
               GlobalMaterialLocalizations.delegate,
@@ -35,4 +36,19 @@ class WeatherFriendApp extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// 안드로이드 12+ stretch 오버스크롤은 화면을 레이어로 떠서 늘이는데, 그동안
+/// BackdropFilter(글래스 카드·칩)가 진짜 배경을 못 읽어 최상단에서 잠깐 딤처럼
+/// 보인다. 오버스크롤 인디케이터를 없애 가장자리에서 그냥 멈추게 한다.
+/// (iOS 바운스는 physics 기반이라 영향 없음.)
+class _AppScrollBehavior extends MaterialScrollBehavior {
+  const _AppScrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) => child;
 }
