@@ -146,12 +146,31 @@ String _stripHourLabel(int hour) {
   return '오후 ${h - 12}시';
 }
 
-/// 시:분 + am/pm (예: 5:34am, 7:51pm).
+/// 시:분 + 오전/오후 (예: 오전 5:34, 오후 7:51). 한국어 표기.
 String _ampmTime(DateTime t) {
-  final period = t.hour < 12 ? 'am' : 'pm';
+  final period = t.hour < 12 ? '오전' : '오후';
   final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
   final m = t.minute.toString().padLeft(2, '0');
-  return '$h:$m$period';
+  return '$period $h:$m';
+}
+
+// 지표 상태 색 — 칩 아이콘·값 글자에 입혀 한눈에 들어오게.
+Color _humidityColor(int h) {
+  if (h >= 70) return const Color(0xFF3E8FD0); // 습함 → 파랑
+  if (h <= 20) return const Color(0xFFE15B52); // 건조 → 빨강
+  return AppColors.ink; // 보통 → 기본
+}
+
+Color _pmColor(String grade) => switch (grade) {
+  '좋음' => const Color(0xFF5FA85C), // 초록
+  '보통' => const Color(0xFFEE8A3C), // 주황
+  _ => const Color(0xFFE15B52), // 나쁨·매우나쁨 → 빨강
+};
+
+Color _uvColor(int idx) {
+  if (idx >= 8) return const Color(0xFFE15B52); // 매우높음·위험 → 빨강
+  if (idx >= 6) return const Color(0xFFEE8A3C); // 높음 → 주황
+  return const Color(0xFF5FA85C); // 보통 이하 → 초록
 }
 
 WeatherCondition _conditionFromString(String s) {
@@ -381,7 +400,7 @@ class _CurrentWeatherState extends ConsumerState<_CurrentWeather>
         (
           _FloatingMetricData(
             icon: Icons.water_drop_rounded,
-            color: const Color(0xFF55A3E0),
+            color: _humidityColor(humidity),
             value: '$humidity%',
             label: '습도',
           ),
@@ -391,7 +410,7 @@ class _CurrentWeatherState extends ConsumerState<_CurrentWeather>
         (
           _FloatingMetricData(
             icon: Icons.wb_sunny_rounded,
-            color: const Color(0xFFF6B33D),
+            color: _uvColor(uvIdx),
             value: '$uvIdx · ${uvGradeKo(uvIdx.toDouble())}',
             label: '자외선',
           ),
@@ -401,7 +420,7 @@ class _CurrentWeatherState extends ConsumerState<_CurrentWeather>
         (
           _FloatingMetricData(
             icon: Icons.blur_on_rounded,
-            color: const Color(0xFF7E9B6B),
+            color: _pmColor(pmGrade),
             value: pmGrade,
             label: '미세먼지',
           ),
@@ -538,8 +557,8 @@ class _FloatingMetricChip extends StatelessWidget {
     // 떠다니는 애니메이션·오버스크롤 중 매 프레임 배경을 다시 샘플링해 깜빡임을
     // 유발하므로 쓰지 않는다(움직이지 않는 _GlassCard에선 계속 사용).
     return Container(
-      width: 62,
-      height: 62,
+      width: 54,
+      height: 54,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.62),
@@ -550,25 +569,25 @@ class _FloatingMetricChip extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.ink.withValues(alpha: 0.12),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
+            color: AppColors.ink.withValues(alpha: 0.10),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(data.icon, size: 17, color: data.color),
+          Icon(data.icon, size: 15, color: data.color),
           const SizedBox(height: 1),
           SizedBox(
-            width: 52,
+            width: 44,
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
                 data.value,
-                style: AppType.subhead.copyWith(
-                  color: AppColors.ink,
+                style: AppType.caption.copyWith(
+                  color: data.color,
                   fontWeight: FontWeight.w700,
                   height: 1.05,
                 ),
