@@ -17,7 +17,7 @@ class FortuneReport {
 
   final SajuProfile profile;
   final String fortuneText;
-  final int score; // 0~100
+  final int score; // 현재 산식은 20~100
   final DateTime viewedAt;
   final String promptVersion;
 

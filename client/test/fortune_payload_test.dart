@@ -25,7 +25,7 @@ void main() {
       date: DateTime(2026, 6, 8),
     );
 
-    expect(payload['promptVersion'], 'concise-weather-v5');
+    expect(payload['promptVersion'], 'concise-weather-v10');
     expect(payload['pillars'], isA<Map<String, dynamic>>());
     expect(payload['elementCounts'], isA<Map<String, dynamic>>());
     expect(payload['tenGodCounts'], isA<Map<String, dynamic>>());

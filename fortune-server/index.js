@@ -2,7 +2,7 @@ const functions = require('@google-cloud/functions-framework');
 
 const GEMINI_MODEL = 'gemini-2.5-flash';
 const MAX_RETRIES = 3;
-const PROMPT_VERSION = 'concise-weather-v5';
+const PROMPT_VERSION = 'concise-weather-v10';
 
 functions.http('fortune', async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
@@ -130,11 +130,11 @@ ${hasDetailedFlow
 
 [내부 판단 순서 - 생각에만 사용하고 출력하지 않는다]
 1. 원국의 일간, 오행 분포, 신강신약과 용신·희신으로 기본 균형을 잡는다.
-2. 세부 운 흐름이 제공된 경우에만 대운을 장기 배경, 세운을 연간 방향, 월운을 당월 분위기, 일운을 오늘의 직접 자극으로 본다.
+2. 세부 운 흐름이 제공된 경우에도 오늘의 판단은 일운을 중심으로 보고, 대운·세운·월운은 장기/연간/월간 배경으로만 참고한다.
 3. 각 운의 십성, 오행의 도움·주의 역할, 원국과의 합·충·형·해·파를 함께 비교한다.
 4. 도움 요인과 주의 요인을 모두 반영해 오늘의 흐름과 실천 행동을 도출한다.
 5. 근거 없는 일반론을 만들지 말고, 제공된 명리 분석값과 현재 운의 흐름에 근거한다.
-6. 오늘의 점수는 이미 ${score}점으로 산출되어 있다(0~100, 50이 평이). 이 점수가 나타내는
+6. 오늘의 점수는 이미 ${score}점으로 산출되어 있다(20~100, 50이 평이). 이 점수가 나타내는
    흐름과 본문의 톤·내용을 어긋나지 않게 맞춘다.
    - 70점 이상: 가볍게 긍정적이고 활기 있는 톤
    - 40~69점: 담담하고 무난한 톤
@@ -150,7 +150,7 @@ ${hasDetailedFlow
 
 [출력 형식 - 제목과 순서를 정확히 지킨다]
 ## 오늘의 운세
-원국과 대운·세운·월운·일운을 종합한 오늘의 흐름을 2~3문장, 100자 이내로 작성한다.
+일운을 중심으로 오늘의 흐름을 2~3문장, 100자 이내로 작성한다. 대운·세운·월운은 필요할 때만 배경으로 참고한다.
 
 ## 챙길 점
 오늘의 주의 요인에서 도출한 실제 행동 한 가지를 1~2문장, 60자 이내로 작성한다.
@@ -167,59 +167,65 @@ function stripScoreLine(raw) {
   return raw.replace(/SCORE\s*:\s*\d{1,3}\s*$/i, '').trim();
 }
 
-const FLOW_WEIGHTS = { majorLuck: 0.15, year: 0.2, month: 0.25, day: 0.4 };
 const NATAL_INTENSITY = { 일주: 1.5, 월주: 1.2, 년주: 0.8, 시주: 0.8 };
 const RELATION_DELTA = { 합: 0.6, 충: -0.6, 형: -0.5, 해: -0.4, 파: -0.3 };
-// 분포 보정 노브 — 50k일 시뮬레이션으로 평균≈50, 5개 밴드 모두 도달하도록 맞춤.
-const RELATION_SCALE = 0.15; // 관계가 역할(용신/기신)보다 과하게 점수를 흔들지 않게 축소
-const SCORE_SPREAD = 40; // normalized([-1.5,1.5]) → 점수 폭. 클수록 상·하위 밴드 도달 쉬움
+const RELATION_SCORE_SCALE = 8;
+const MIN_DAILY_SCORE = 20;
+const ROLE_PAIR_BASE_SCORE = {
+  '도움|도움': 100,
+  '중립|도움': 94,
+  '도움|중립': 92,
+  '주의|도움': 88,
+  '도움|주의': 82,
+  '중립|중립': 50,
+  '주의|중립': 42,
+  '중립|주의': 40,
+  '주의|주의': 28,
+};
 
-function roleSign(role) {
-  if (role === '도움') return 1;
-  if (role === '주의') return -1;
-  return 0;
+function normalizedRole(role) {
+  return role === '도움' || role === '주의' ? role : '중립';
 }
 
-// 한 운(대운/세운/월운/일운) 기둥이 오늘 점수에 더하는 기여도. 범위 [-1.5, +1.5].
-// 천간·지지가 용신·희신에 도움이면 +, 기신이면 -. 원국과의 합은 가점, 충·형·해·파는
-// 어느 원국 기둥과 부딪히는지(일주가 가장 큼)에 따라 강도를 달리해 감점한다.
-function flowContribution(flow) {
-  if (!flow || typeof flow !== 'object') return 0;
-  let c = roleSign(flow.stemRole) * 0.45 + roleSign(flow.branchRole) * 0.55;
-
+function relationScoreDelta(flow) {
   const relations = Array.isArray(flow.relationsToNatal)
     ? flow.relationsToNatal
     : [];
+  let deltaScore = 0;
   for (const relation of relations) {
     const natal = ['일주', '월주', '년주', '시주'].find((p) =>
       relation.includes(p),
     );
     const intensity = NATAL_INTENSITY[natal] ?? 1.0;
     for (const [kind, delta] of Object.entries(RELATION_DELTA)) {
-      if (relation.includes(kind)) c += delta * intensity * RELATION_SCALE;
+      if (relation.includes(kind)) {
+        deltaScore += delta * intensity * RELATION_SCORE_SCALE;
+      }
     }
   }
-
-  return Math.max(-1.5, Math.min(1.5, c));
+  return deltaScore;
 }
 
-// 원국·현재 운 흐름으로 오늘의 0~100 점수를 결정론적으로 산출한다.
-// 프롬프트가 명세하던 비중(대운15/세운20/월운25/일운40)을 실제 가중합으로 적용하고,
-// 존재하는 운만으로 정규화한다. 신강신약 점수는 매일 불변이라 의도적으로 쓰지 않는다.
+function clampScore(score) {
+  return Math.max(MIN_DAILY_SCORE, Math.min(100, Math.round(score)));
+}
+
+function dailyScore(flow) {
+  if (!flow || typeof flow !== 'object') return 50;
+  const stemRole = normalizedRole(flow.stemRole);
+  const branchRole = normalizedRole(flow.branchRole);
+  const base = ROLE_PAIR_BASE_SCORE[`${stemRole}|${branchRole}`];
+  return clampScore(base + relationScoreDelta(flow));
+}
+
+// 오늘의 20~100 점수를 결정론적으로 산출한다.
+// "오늘" 점수이므로 일운만 사용한다. 대운·세운·월운은 본문 생성용 배경으로만 전달한다.
+// 신강신약 점수는 매일 불변이라 의도적으로 쓰지 않는다.
 function computeFortuneScore(body) {
   const flow = (body && body.currentFlow) || {};
-  let weighted = 0;
-  let totalWeight = 0;
-  for (const [key, weight] of Object.entries(FLOW_WEIGHTS)) {
-    if (flow[key]) {
-      weighted += flowContribution(flow[key]) * weight;
-      totalWeight += weight;
-    }
-  }
-  if (totalWeight === 0) return 50; // 운 흐름 미제공(레거시) → 평이
+  if (!flow.day) return 50; // 일운 미제공(레거시) → 평이
 
-  const normalized = weighted / totalWeight; // ≈ [-1.5, +1.5]
-  return Math.max(0, Math.min(100, Math.round(50 + normalized * SCORE_SPREAD)));
+  return dailyScore(flow.day);
 }
 
 module.exports = { buildPrompt, stripScoreLine, computeFortuneScore };

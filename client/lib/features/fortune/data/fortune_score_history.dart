@@ -9,7 +9,7 @@ class ScoreEntry {
   const ScoreEntry({required this.date, required this.score});
 
   final DateTime date;
-  final int score; // 0~100
+  final int score; // 현재 산식은 20~100
 
   Map<String, dynamic> toJson() => {
         'date': date.toIso8601String(),

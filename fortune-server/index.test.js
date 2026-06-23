@@ -78,6 +78,7 @@ test('prompt requires natal chart and current luck flow as its basis', () => {
   assert.match(prompt, /이번 달 월운/);
   assert.match(prompt, /오늘 일운/);
   assert.match(prompt, /합·충·형·해·파/);
+  assert.match(prompt, /오늘의 판단은 일운을 중심/);
 });
 
 test('client-provided response instructions are not included', () => {
@@ -142,6 +143,58 @@ test('computeFortuneScore rises with helpful roles and a combination', () => {
   assert.ok(score <= 100);
 });
 
+test('computeFortuneScore can reach 100 from the day pillar alone', () => {
+  const score = computeFortuneScore({
+    currentFlow: {
+      majorLuck: flowPillar('주의', '주의'),
+      year: flowPillar('주의', '주의'),
+      month: flowPillar('주의', '주의'),
+      day: flowPillar('도움', '도움'),
+    },
+  });
+
+  assert.equal(score, 100);
+});
+
+test('computeFortuneScore keeps cautionary days above zero', () => {
+  const score = computeFortuneScore({
+    currentFlow: {
+      majorLuck: flowPillar('도움', '도움'),
+      year: flowPillar('도움', '도움'),
+      month: flowPillar('도움', '도움'),
+      day: flowPillar('주의', '주의'),
+    },
+  });
+
+  assert.equal(score, 28);
+});
+
+test('computeFortuneScore floors severe cautionary relation stacks', () => {
+  const score = computeFortuneScore({
+    currentFlow: {
+      day: flowPillar('주의', '주의', [
+        '일주 지지 충',
+        '월주 지지 형',
+        '년주 지지 해',
+      ]),
+    },
+  });
+
+  assert.equal(score, 20);
+});
+
+test('computeFortuneScore has granular high-score bands', () => {
+  const scoreForDay = (day) => computeFortuneScore({ currentFlow: { day } });
+
+  assert.equal(scoreForDay(flowPillar('도움', '도움')), 100);
+  assert.equal(scoreForDay(flowPillar('도움', '도움', ['년주 지지 파'])), 98);
+  assert.equal(scoreForDay(flowPillar('도움', '도움', ['년주 지지 형'])), 97);
+  assert.equal(scoreForDay(flowPillar('도움', '도움', ['일주 지지 충'])), 93);
+  assert.equal(scoreForDay(flowPillar('중립', '도움')), 94);
+  assert.equal(scoreForDay(flowPillar('도움', '중립')), 92);
+  assert.equal(scoreForDay(flowPillar('주의', '도움')), 88);
+});
+
 test('computeFortuneScore drops with cautionary roles and a clash on the day pillar', () => {
   const score = computeFortuneScore({
     currentFlow: {
@@ -172,7 +225,7 @@ test('computeFortuneScore normalizes when the major-luck pillar is missing', () 
   assert.ok(score >= 70, `expected >= 70, got ${score}`);
 });
 
-test('computeFortuneScore weights the day pillar most heavily', () => {
+test('computeFortuneScore uses the day pillar as the daily score source', () => {
   const helpfulDay = computeFortuneScore({
     currentFlow: {
       majorLuck: flowPillar('중립', '중립'),
@@ -189,8 +242,34 @@ test('computeFortuneScore weights the day pillar most heavily', () => {
       day: flowPillar('중립', '중립'),
     },
   });
-  // 일운 40% > 대운 15% → 같은 도움이라도 일운 쪽이 점수를 더 끌어올린다.
+  // 오늘 점수는 일운 기준이다. 대운만 좋아서는 당일 점수가 오르지 않는다.
   assert.ok(helpfulDay > helpfulMajorLuck);
+  assert.equal(helpfulMajorLuck, 50);
+});
+
+test('computeFortuneScore ignores cautionary background for a helpful day score', () => {
+  const score = computeFortuneScore({
+    currentFlow: {
+      majorLuck: flowPillar('주의', '주의'),
+      year: flowPillar('주의', '주의'),
+      month: flowPillar('주의', '주의'),
+      day: flowPillar('도움', '도움'),
+    },
+  });
+
+  assert.equal(score, 100);
+});
+
+test('computeFortuneScore returns neutral when only background flow is provided', () => {
+  const score = computeFortuneScore({
+    currentFlow: {
+      majorLuck: flowPillar('도움', '도움'),
+      year: flowPillar('도움', '도움'),
+      month: flowPillar('도움', '도움'),
+    },
+  });
+
+  assert.equal(score, 50);
 });
 
 // ── stripScoreLine: 모델이 남긴 SCORE 줄 방어 제거 ───────────────────
