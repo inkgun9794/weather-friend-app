@@ -11,7 +11,7 @@ import 'package:weather_friend/features/fortune/data/saju_profile.dart';
 /// Cloud Run (Seoul region) Gemini proxy URL.
 const _kFortuneEndpoint =
     'https://weather-friend-llm-89382148867.asia-northeast3.run.app';
-const fortunePromptVersion = 'concise-weather-v10';
+const fortunePromptVersion = 'concise-weather-v11';
 
 /// LLM 응답 — 운세 텍스트 + 점수 (현재 산식은 20~100).
 class FortuneResult {

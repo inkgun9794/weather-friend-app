@@ -62,7 +62,7 @@ test('concise prompt requests only the three visible fortune sections', () => {
 test('prompt injects the precomputed score and no longer asks the model to score', () => {
   const prompt = buildPrompt(payload, 73);
 
-  assert.match(prompt, /73점으로 산출/); // 코드가 산출한 점수를 주입
+  assert.match(prompt, /오늘의 점수\(73점/); // 코드가 산출한 점수를 주입
   assert.match(prompt, /톤/); // 점수대별 톤 가이드
   assert.doesNotMatch(prompt, /SCORE\s*:/i); // 모델에 SCORE 출력 요구 안 함
   assert.doesNotMatch(prompt, /대운 15%/); // 가중치 산식은 코드로 이동
