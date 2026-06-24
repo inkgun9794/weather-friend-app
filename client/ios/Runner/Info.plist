@@ -79,5 +79,22 @@
 	</array>
 	<key>FirebaseAppDelegateProxyEnabled</key>
 	<true/>
+	<!-- ITS 교통 CCTV 실시간 스트림은 평문 HTTP(cctvsec.ktict.co.kr)로 온다.
+	     나머지 트래픽(Firestore·Open-Meteo·ITS API)은 모두 HTTPS이므로
+	     ATS 예외는 이 스트림 도메인에만 둔다. 라이브 응답의 cctvurl 호스트가
+	     다르면 여기에 도메인을 추가할 것. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>cctvsec.ktict.co.kr</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 </dict>
 </plist>

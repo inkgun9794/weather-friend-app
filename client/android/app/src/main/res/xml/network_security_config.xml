@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ITS 교통 CCTV 실시간 스트림은 평문 HTTP(cctvsec.ktict.co.kr)로 제공된다.
+     앱의 나머지 트래픽(Firestore·Open-Meteo·ITS API)은 모두 HTTPS이므로
+     cleartext는 이 스트림 도메인에만 허용한다. 라이브 응답의 cctvurl 호스트가
+     다르면 여기에 <domain>을 추가할 것. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">cctvsec.ktict.co.kr</domain>
+    </domain-config>
+</network-security-config>

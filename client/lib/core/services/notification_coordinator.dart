@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:weather_friend/app/router/app_router.dart';
 import 'package:weather_friend/core/services/audio_player_service.dart';
 import 'package:weather_friend/core/services/fcm_service.dart';
 import 'package:weather_friend/core/services/notification_service.dart';
@@ -136,10 +135,6 @@ class _NotificationCoordinatorState
       );
       if (audioUrl != null) await _playAudio(audioUrl);
       return;
-    }
-    // 기록 리마인더 본문 탭 → 기록 화면으로 이동.
-    if (response.payload == recordReminderPayload) {
-      ref.read(appRouterProvider).go('/record');
     }
   }
 

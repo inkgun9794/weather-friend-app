@@ -19,14 +19,6 @@ const _playbackChannelName = '음성 브리핑 재생';
 const _playbackChannelDescription = '알림에서 시작한 음성 브리핑 재생 상태';
 const _playbackNotificationId = 7001;
 
-// 기록(다이어리) 리마인더 — 오후 7시까지 미작성 시 로컬 알림.
-const _recordReminderChannelId = 'record_reminder';
-const _recordReminderChannelName = '기록 리마인더';
-const _recordReminderChannelDescription = '오후 7시까지 기록을 안 했을 때 알림';
-
-/// 기록 리마인더 알림 본문 탭 → 기록 화면 라우팅 식별용 페이로드.
-const recordReminderPayload = 'weather-friend://record';
-
 const audioBriefingCategoryId = 'audio_briefing';
 const playAudioActionId = 'play_audio';
 const stopAudioActionId = 'stop_audio';
@@ -297,15 +289,6 @@ class NotificationService {
           importance: Importance.high,
         ),
       );
-      await android?.createNotificationChannel(
-        const AndroidNotificationChannel(
-          _recordReminderChannelId,
-          _recordReminderChannelName,
-          description: _recordReminderChannelDescription,
-          importance: Importance.high,
-        ),
-      );
-
       _initialized = true;
     } finally {
       _initializing = null;
@@ -455,36 +438,6 @@ class NotificationService {
         iOS: DarwinNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-    );
-  }
-
-  /// 기록 리마인더 일회성 예약 — 본문 탭 시 [recordReminderPayload]로 라우팅.
-  /// 오후 7시 ±수 분이면 충분하므로 inexact(절전 친화) 스케줄.
-  Future<void> scheduleRecordReminder({
-    required int id,
-    required String title,
-    required String body,
-    required DateTime scheduledAt,
-  }) async {
-    await init();
-    await _plugin.cancel(id: id);
-    await _plugin.zonedSchedule(
-      id: id,
-      title: title,
-      body: body,
-      scheduledDate: tz.TZDateTime.from(scheduledAt, tz.local),
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          _recordReminderChannelId,
-          _recordReminderChannelName,
-          channelDescription: _recordReminderChannelDescription,
-          importance: Importance.high,
-          priority: Priority.high,
-        ),
-        iOS: DarwinNotificationDetails(),
-      ),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      payload: recordReminderPayload,
     );
   }
 

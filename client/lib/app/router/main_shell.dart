@@ -11,10 +11,10 @@ import 'package:weather_friend/features/fortune/data/pending_fortune.dart';
 /// 마지막 컨텐츠 아래 여백을 잡아주면 가려지지 않음.
 const double kGlassNavBarHeight = 58;
 
-/// 운세 탭 인덱스 — pending fortune 풍선 위치 판단용.
-/// 탭 순서: 날씨(0) · 기록(1) · 메세지(2) · 운세(3).
-const int _kFortuneTabIndex = 3;
+/// 탭 순서: 날씨(0) · 라이브(1) · 메세지(2) · 운세(3).
+const int kLiveTabIndex = 1;
 const int _kMessagesTabIndex = 2;
+const int _kFortuneTabIndex = 3;
 
 final messageTabSelectionProvider =
     NotifierProvider<MessageTabSelectionNotifier, int>(
@@ -28,6 +28,19 @@ class MessageTabSelectionNotifier extends Notifier<int> {
   void select() => state++;
 }
 
+/// 현재 보이는 탭 인덱스 — MainShell이 navigationShell.currentIndex로 동기화한다.
+/// 라이브 탭이 화면 밖이면 CCTV 영상을 멈추기 위해 LiveScreen이 구독한다.
+final activeTabIndexProvider = NotifierProvider<ActiveTabIndexNotifier, int>(
+  ActiveTabIndexNotifier.new,
+);
+
+class ActiveTabIndexNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void set(int index) => state = index;
+}
+
 class MainShell extends ConsumerWidget {
   const MainShell({super.key, required this.navigationShell});
 
@@ -35,6 +48,13 @@ class MainShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final shellIndex = navigationShell.currentIndex;
+    // 활성 탭을 provider에 미러링한다(build 중 직접 수정 금지 → 프레임 후 반영).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (ref.read(activeTabIndexProvider) != shellIndex) {
+        ref.read(activeTabIndexProvider.notifier).set(shellIndex);
+      }
+    });
     return Scaffold(
       extendBody: true,
       body: navigationShell,
@@ -102,11 +122,11 @@ class _GlassNavBar extends ConsumerWidget {
                     onTap: () => onTap(0),
                   ),
                   _NavItem(
-                    icon: Icons.auto_stories_outlined,
-                    iconActive: Icons.auto_stories,
-                    label: '기록',
-                    active: currentIndex == 1,
-                    onTap: () => onTap(1),
+                    icon: Icons.videocam_outlined,
+                    iconActive: Icons.videocam,
+                    label: '라이브',
+                    active: currentIndex == kLiveTabIndex,
+                    onTap: () => onTap(kLiveTabIndex),
                   ),
                   _NavItem(
                     icon: Icons.chat_bubble_outline,
