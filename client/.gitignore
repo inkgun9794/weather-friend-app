@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# 빌드타임 시크릿 — 커밋 금지
+dart_defines.json
