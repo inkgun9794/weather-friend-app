@@ -37,7 +37,7 @@ jobs:
       # TODO: 모든 action을 commit SHA로 핀(pin) — Dependabot이 자동 PR 생성하면 SHA로 전환
       # 현재는 빠른 셋업을 위해 메이저 버전 태그 사용
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
