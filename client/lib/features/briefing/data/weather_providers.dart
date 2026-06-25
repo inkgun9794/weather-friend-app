@@ -10,6 +10,7 @@ import 'package:weather_friend/features/location/data/selected_city_provider.dar
 
 class WeatherBundleNotifier extends AsyncNotifier<WeatherBundle> {
   bool _refreshing = false;
+  DateTime? _lastFetchedAt;
 
   @override
   Future<WeatherBundle> build() async {
@@ -34,6 +35,16 @@ class WeatherBundleNotifier extends AsyncNotifier<WeatherBundle> {
   Future<void> refresh() async {
     final city = ref.read(selectedCityProvider);
     await _refresh(cityId: city.cityId, date: todayKstIso(), silent: false);
+  }
+
+  /// 앱 resume 시 호출용. 마지막 성공 fetch가 [minAge]보다 오래됐을 때만 갱신해
+  /// 잠깐 앱을 나갔다 돌아온 경우의 헛 호출을 막는다. 아직 한 번도 못 받았으면(null) 갱신.
+  Future<void> refreshIfStale({
+    Duration minAge = const Duration(minutes: 15),
+  }) async {
+    final last = _lastFetchedAt;
+    if (last != null && DateTime.now().difference(last) < minAge) return;
+    await refresh();
   }
 
   Future<void> _refresh({
@@ -69,6 +80,7 @@ class WeatherBundleNotifier extends AsyncNotifier<WeatherBundle> {
     await ref
         .read(weatherCacheProvider)
         .write(cityId: cityId, date: date, bundle: bundle);
+    _lastFetchedAt = DateTime.now();
     return bundle;
   }
 }

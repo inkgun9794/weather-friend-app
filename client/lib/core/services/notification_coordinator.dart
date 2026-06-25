@@ -11,6 +11,7 @@ import 'package:weather_friend/core/services/fcm_service.dart';
 import 'package:weather_friend/core/services/notification_service.dart';
 import 'package:weather_friend/core/utils/kst.dart';
 import 'package:weather_friend/features/briefing/data/briefing_repository.dart';
+import 'package:weather_friend/features/briefing/data/weather_providers.dart';
 import 'package:weather_friend/features/briefing/presentation/briefing_providers.dart';
 import 'package:weather_friend/features/character/domain/character.dart';
 import 'package:weather_friend/features/location/data/onboarding_provider.dart';
@@ -96,6 +97,8 @@ class _NotificationCoordinatorState
       _refresh();
       // resume 시에도 브리핑 다시 fetch (background에서 도착한 메시지 반영).
       ref.invalidate(todayBriefingsProvider);
+      // 날씨도 갱신 — 단, 마지막 fetch가 15분 넘게 지났을 때만(잠깐 전환은 skip).
+      ref.read(weatherBundleProvider.notifier).refreshIfStale();
     }
   }
 
