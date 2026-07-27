@@ -77,6 +77,33 @@ List<OutfitItem> outfitWearFor(OutfitGuide guide, {bool rainy = false}) {
   return [...guide.wear, if (rainy) kUmbrellaItem];
 }
 
+/// 홈 위젯용 옷 아이콘 키 목록 — 체감온도 추천 옷에서 앞쪽 [max]개.
+/// 우산이 필요한 날이면 **항상 우산을 포함**한다(마지막 슬롯을 차지하고,
+/// 그만큼 옷은 [max]-1개로 줄인다). 키는 네이티브 이미지 이름과 맞추기 위해
+/// 파일명에서 확장자를 떼고 하이픈을 언더스코어로 바꾼 형태.
+List<String> outfitIconKeysFor({
+  required int feelsLike,
+  String? condition,
+  int? precipitationProb,
+  int max = 3,
+}) {
+  final guide = outfitGuideFor(feelsLike);
+  final rainy = umbrellaNeeded(
+    condition: condition,
+    precipitationProb: precipitationProb,
+  );
+  final items = <OutfitItem>[
+    ...guide.wear.take(rainy ? max - 1 : max),
+    if (rainy) kUmbrellaItem,
+  ];
+  return items.map((it) => outfitIconKey(it.asset)).toList();
+}
+
+/// 'assets/clothes/trench-coat.png' → 'trench_coat'
+/// (네이티브 drawable/이미지 이름은 `oc_<key>` 규칙.)
+String outfitIconKey(String asset) =>
+    asset.split('/').last.replaceAll('.png', '').replaceAll('-', '_').toLowerCase();
+
 String outfitMessageForCharacter(CharacterId characterId, OutfitGuide guide) {
   return switch ((guide.key, characterId)) {
     ('minus5', CharacterId.jiyoung) => '오늘은 정말 추워. 롱패딩 단단히 입고 목도리랑 장갑까지 꼭 챙겨.',

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:weather_friend/features/settings/presentation/add_widget_tile.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -20,6 +21,7 @@ class SettingsScreen extends StatelessWidget {
             title: const Text('알림'),
             onTap: () => context.push('/schedule'),
           ),
+          const AddWidgetTile(),
           const Divider(height: 32),
           const _DataAttribution(),
         ],

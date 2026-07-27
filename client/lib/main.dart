@@ -9,6 +9,7 @@ import 'package:weather_friend/app/app.dart';
 import 'package:weather_friend/core/services/fcm_service.dart';
 import 'package:weather_friend/core/services/notification_service.dart';
 import 'package:weather_friend/core/services/shared_prefs_provider.dart';
+import 'package:weather_friend/core/services/weather_widget_background.dart';
 import 'package:weather_friend/features/location/data/city_catalog.dart';
 import 'package:weather_friend/firebase_options.dart';
 
@@ -63,6 +64,16 @@ Future<void> main() async {
   unawaited(
     fcm.init().catchError((Object error, StackTrace stackTrace) {
       debugPrint('FcmService warm-up failed: $error');
+    }),
+  );
+
+  // 앱을 안 열어도 위젯이 주기적으로 최신 날씨를 받도록 백그라운드 태스크 등록.
+  unawaited(
+    initWeatherWidgetBackgroundRefresh().catchError((
+      Object error,
+      StackTrace stackTrace,
+    ) {
+      debugPrint('Weather widget bg refresh registration failed: $error');
     }),
   );
 }

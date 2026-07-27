@@ -5,12 +5,15 @@ import 'package:weather_friend/app/router/app_router.dart';
 import 'package:weather_friend/app/theme/app_theme.dart';
 import 'package:weather_friend/core/services/location_coordinator.dart';
 import 'package:weather_friend/core/services/notification_coordinator.dart';
+import 'package:weather_friend/core/services/weather_widget_sync.dart';
 
 class WeatherFriendApp extends ConsumerWidget {
   const WeatherFriendApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Keep the home-screen widgets in sync with the latest weather.
+    ref.watch(weatherWidgetSyncProvider);
     return LocationCoordinator(
       child: NotificationCoordinator(
         child: MaterialApp.router(
