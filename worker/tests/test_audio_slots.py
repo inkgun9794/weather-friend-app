@@ -2,12 +2,35 @@ import os
 import unittest
 from unittest.mock import patch
 
+import httpx
+
 from adapters.tts_typecast import TypecastClient
 from domain.briefing import SEMANTIC_INSTRUCTIONS, BriefingType, is_audio_slot
-from usecases.generate_briefing import _typecast_api_key_env_for_hour
+from usecases.generate_briefing import (
+    _is_typecast_auth_error,
+    _typecast_api_key_env_for_hour,
+)
 
 
 class AudioSlotPolicyTest(unittest.TestCase):
+    def test_only_auth_statuses_are_permanent_credential_failures(self) -> None:
+        request = httpx.Request(
+            "POST", "https://api.typecast.ai/v1/text-to-speech"
+        )
+
+        for status in (401, 403):
+            response = httpx.Response(status, request=request)
+            error = httpx.HTTPStatusError(
+                "auth failed", request=request, response=response
+            )
+            self.assertTrue(_is_typecast_auth_error(error))
+
+        response = httpx.Response(429, request=request)
+        error = httpx.HTTPStatusError(
+            "rate limited", request=request, response=response
+        )
+        self.assertFalse(_is_typecast_auth_error(error))
+
     def test_morning_and_evening_are_audio_slots(self) -> None:
         self.assertTrue(is_audio_slot(6))
         self.assertTrue(is_audio_slot(21))

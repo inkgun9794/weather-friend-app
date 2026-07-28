@@ -13,6 +13,8 @@ import asyncio
 import logging
 from pathlib import Path
 
+import httpx
+
 from adapters.ai_gemini import GeminiScriptGenerator
 from adapters.pages_publisher import PagesPublisher
 from adapters.push_fcm import FcmPushClient
@@ -35,6 +37,14 @@ log = logging.getLogger(__name__)
 GEMINI_CONCURRENCY = 8
 # Typecast Free 플랜은 동시 호출에서 429가 발생하므로 계정별 요청을 직렬화.
 TYPECAST_CONCURRENCY = 1
+
+
+def _is_typecast_auth_error(exc: BaseException) -> bool:
+    """Return True only for permanent Typecast credential failures."""
+    return (
+        isinstance(exc, httpx.HTTPStatusError)
+        and exc.response.status_code in (401, 403)
+    )
 
 
 def _typecast_api_key_env_for_hour(hour: int) -> str:
@@ -102,16 +112,34 @@ async def _generate_one(
         tts_text = normalize_voice_script_for_tts(voice_script or message_script)
         if voice_script:
             voice_script = tts_text
-        async with typecast_sem:
-            synth = await typecast.synthesize(tts_text, character.voice_actor_id)
-        audio_url = publisher.save_audio(
-            city=city,
-            date=today.date,
-            hour=hour,
-            character_id=character.id,
-            audio_bytes=synth.audio_bytes,
-            extension=synth.extension,
-        )
+        try:
+            async with typecast_sem:
+                synth = await typecast.synthesize(
+                    tts_text, character.voice_actor_id
+                )
+            audio_url = publisher.save_audio(
+                city=city,
+                date=today.date,
+                hour=hour,
+                character_id=character.id,
+                audio_bytes=synth.audio_bytes,
+                extension=synth.extension,
+            )
+        except httpx.HTTPStatusError as exc:
+            if not _is_typecast_auth_error(exc):
+                raise
+            # An expired/revoked key cannot recover within this run. Persist the
+            # text briefing so fill-today does not retry the same slot forever
+            # and emit a GitHub Actions failure notification every 15 minutes.
+            log.error(
+                "Typecast 인증 실패(%d) — %s %02d시 %s 음성을 생략하고 "
+                "텍스트 브리핑을 저장합니다. GitHub secret %s를 갱신하세요.",
+                exc.response.status_code,
+                city,
+                hour,
+                character.id,
+                _typecast_api_key_env_for_hour(hour),
+            )
 
     # 3) Firestore에 메타 저장. CASUAL은 weather_snapshot=None.
     weather_snapshot: dict | None = None
